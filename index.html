@@ -54,6 +54,15 @@
     line-height: 1.6;
   }
 
+  /* Shader background canvas — sits above the CSS gradient fallback, below content */
+  #shader-bg {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+  }
+  #shader-bg canvas { display: block; width: 100% !important; height: 100% !important; }
+
   body::before {
     content: '';
     position: fixed;
@@ -61,7 +70,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: -1;
+    z-index: -2;
     background: linear-gradient(
       135deg,
       #050508 0%,
@@ -82,7 +91,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: -1;
+    z-index: -2;
     background:
       radial-gradient(circle at 20% 50%, rgba(96, 96, 128, 0.15) 0%, transparent 50%),
       radial-gradient(circle at 80% 80%, rgba(141, 125, 202, 0.12) 0%, transparent 50%);
@@ -490,18 +499,127 @@
   }
 
   /* ── CRISIS ANALOGUES ── */
-  #crises {
+  #case-studies {
     padding: 7rem 2.5rem;
     background: var(--bg2);
     position: relative;
     contain: paint;
   }
-  #crises::before {
+  #case-studies::before {
     content: '';
     position: absolute; top: 0; left: 50%; transform: translateX(-50%);
     width: 600px; height: 1px;
     background: linear-gradient(90deg, transparent, var(--accent), transparent);
     opacity: 0.35;
+  }
+
+  /* ── CASE STUDIES + SOURCES (new structure) ── */
+  .eyebrow {
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 0.9rem;
+  }
+  .sec-title {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(2.2rem, 4.5vw, 3.2rem); font-weight: 800;
+    letter-spacing: -0.02em; line-height: 1.05;
+    margin-bottom: 2.75rem; color: var(--text);
+  }
+  .case-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.1rem; width: 100%; }
+  .case-card {
+    display: flex; flex-direction: column;
+    padding: 1.9rem 1.6rem;
+    background: rgba(8,12,22,0.85);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px; text-decoration: none; color: inherit;
+    transition: transform 0.25s, border-color 0.25s, background 0.25s, box-shadow 0.25s;
+  }
+  .case-card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(14,165,233,0.4);
+    background: rgba(14,165,233,0.05);
+    box-shadow: 0 14px 40px -18px rgba(14,165,233,0.45);
+  }
+  .case-year {
+    font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 0.7rem;
+  }
+  .case-name {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.18rem; font-weight: 700; letter-spacing: -0.01em;
+    color: var(--text); margin-bottom: 0.6rem;
+  }
+  .case-desc {
+    font-size: 0.85rem; font-weight: 300; line-height: 1.6;
+    color: var(--text2); margin-bottom: 1.1rem; flex: 1;
+  }
+  .case-tags { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1.1rem; }
+  .case-tag {
+    font-size: 0.64rem; font-weight: 600; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--text2);
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 999px; padding: 0.22rem 0.6rem;
+  }
+  .case-link-label {
+    font-size: 0.78rem; font-weight: 600; color: var(--accent);
+    margin-top: auto; transition: letter-spacing 0.2s;
+  }
+  .case-link-label::after { content: ' ↗'; }
+  .case-card:hover .case-link-label { letter-spacing: 0.02em; }
+
+  #sources .sources-grid {
+    display: grid; grid-template-columns: 1.3fr 1fr; gap: 1.6rem; align-items: start;
+  }
+  .source-row {
+    display: grid; grid-template-columns: auto 1fr auto auto;
+    align-items: center; gap: 0.9rem;
+    padding: 1rem 1.1rem;
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 12px;
+    text-decoration: none; color: inherit; margin-bottom: 0.7rem;
+    transition: border-color 0.2s, background 0.2s, transform 0.2s;
+  }
+  .source-row:hover {
+    border-color: rgba(14,165,233,0.4); background: rgba(14,165,233,0.04); transform: translateX(3px);
+  }
+  .source-bullet {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 10px rgba(14,165,233,0.6);
+  }
+  .source-name { font-size: 0.92rem; font-weight: 600; color: var(--text); }
+  .source-type {
+    font-size: 0.66rem; font-weight: 600; letter-spacing: 0.05em;
+    text-transform: uppercase; color: var(--text2); text-align: right;
+  }
+  .source-arrow { color: var(--accent); font-size: 0.95rem; }
+
+  .bias-card {
+    padding: 1.75rem 1.6rem;
+    background: rgba(8,12,22,0.85);
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 14px;
+  }
+  .bias-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.05rem; font-weight: 700; color: var(--text); margin-bottom: 1.4rem;
+  }
+  .bias-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 1rem; margin-bottom: 1.1rem;
+  }
+  .bias-row:last-child { margin-bottom: 0; }
+  .bias-label { font-size: 0.8rem; color: var(--text2); }
+  .bias-meter { display: flex; gap: 0.3rem; flex-shrink: 0; }
+  .bias-dot { width: 9px; height: 9px; border-radius: 50%; background: rgba(255,255,255,0.12); }
+  .bias-dot.active { background: var(--accent); box-shadow: 0 0 8px rgba(14,165,233,0.5); }
+
+  /* Light-mode overrides for new sections */
+  body.light .case-card, body.light .bias-card { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.10); }
+  body.light .case-name, body.light .source-name, body.light .bias-title { color: #1a1a1a; }
+  body.light .case-desc, body.light .bias-label, body.light .source-type { color: rgba(0,0,0,0.55); }
+  body.light .case-tag { border-color: rgba(0,0,0,0.15); color: rgba(0,0,0,0.5); }
+  body.light .source-row { border-color: rgba(0,0,0,0.10); }
+  body.light .bias-dot { background: rgba(0,0,0,0.10); }
+
+  @media (max-width: 860px) {
+    .case-grid { grid-template-columns: 1fr; }
+    #sources .sources-grid { grid-template-columns: 1fr; }
   }
 
   .crisis-title {
@@ -1016,7 +1134,7 @@
   /* Section-specific tints — alternate warm/cool for variety */
   body.light #hero       { background: linear-gradient(180deg, #fdf6ed 0%, #fbe9d8 100%); }
   body.light #cards      { background: linear-gradient(180deg, #fbe9d8 0%, #f6e3f0 100%); }
-  body.light #crises     { background: #fdf2e7; }
+  body.light #case-studies     { background: #fdf2e7; }
   body.light #sources    { background: linear-gradient(180deg, #f6e3f0 0%, #eaf3fb 100%); }
   body.light #pricing    { background: #fff8ee; }
   body.light #globe-coverage { background: linear-gradient(180deg, #eaf3fb 0%, #fbe9d8 100%); }
@@ -1034,7 +1152,7 @@
       rgba(240,138,93,0.18) 0%, rgba(255,107,107,0.08) 40%, transparent 70%);
   }
   body.light #cards::before,
-  body.light #crises::before,
+  body.light #case-studies::before,
   body.light #pricing::before {
     background: linear-gradient(90deg, transparent, var(--peach), transparent);
     opacity: 0.55;
@@ -1071,7 +1189,7 @@
   body.light .enter-terminal:hover { box-shadow: 0 0 32px rgba(240,138,93,0.55); }
   /* Section label color rotates by section in light mode */
   body.light #cards .section-label,
-  body.light #crises .section-label  { color: var(--peach); }
+  body.light #case-studies .section-label  { color: var(--peach); }
   body.light #sources .section-label { color: var(--sky); }
   body.light #pricing .section-label { color: var(--mint); }
   body.light #contact .section-label { color: var(--coral); }
@@ -1281,6 +1399,24 @@
   .modal-input {
     caret-color: var(--accent);
   }
+  /* Remove the browser autofill background tint on auth inputs */
+  .modal-input:-webkit-autofill,
+  .modal-input:-webkit-autofill:hover,
+  .modal-input:-webkit-autofill:focus,
+  .modal-input:-webkit-autofill:active {
+    -webkit-text-fill-color: #fff;
+    -webkit-box-shadow: 0 0 0 1000px rgba(255,255,255,0.05) inset;
+    box-shadow: 0 0 0 1000px rgba(255,255,255,0.05) inset;
+    transition: background-color 9999s ease-in-out 0s;
+    caret-color: var(--accent);
+  }
+  body.light .modal-input:-webkit-autofill,
+  body.light .modal-input:-webkit-autofill:hover,
+  body.light .modal-input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #1a1a1a;
+    -webkit-box-shadow: 0 0 0 1000px rgba(0,0,0,0.04) inset;
+    box-shadow: 0 0 0 1000px rgba(0,0,0,0.04) inset;
+  }
 
   .modal-row {
     display: flex; justify-content: flex-end;
@@ -1351,6 +1487,9 @@
 </head>
 <body>
 
+<!-- Animated ShaderGradient background (falls back to CSS gradient if it fails to load) -->
+<div id="shader-bg" aria-hidden="true"></div>
+
 <!-- NAV -->
 <div class="nav-wrap">
   <nav>
@@ -1367,7 +1506,7 @@
     </a>
     <ul class="nav-links">
       <li><a href="chat.html" title="Open AI Chat Terminal">Terminal</a></li>
-      <li><a href="#crises">Crisis Analogues</a></li>
+      <li><a href="#case-studies">Crisis Analogues</a></li>
       <li><a href="#pricing">Pricing</a></li>
       <li><a href="#sources">Sources</a></li>
       <li><a href="#contact">Contact</a></li>
@@ -1387,7 +1526,7 @@
 <div class="nav-mobile-overlay" id="nav-mobile">
   <button class="nav-mobile-close" onclick="document.getElementById('nav-mobile').classList.remove('open')">✕</button>
   <a href="chat.html" onclick="document.getElementById('nav-mobile').classList.remove('open')">Terminal</a>
-  <a href="#crises" onclick="document.getElementById('nav-mobile').classList.remove('open')">Crisis Analogues</a>
+  <a href="#case-studies" onclick="document.getElementById('nav-mobile').classList.remove('open')">Crisis Analogues</a>
   <a href="#pricing" onclick="document.getElementById('nav-mobile').classList.remove('open')">Pricing</a>
   <a href="#sources" onclick="document.getElementById('nav-mobile').classList.remove('open')">Sources</a>
   <a href="#contact" onclick="document.getElementById('nav-mobile').classList.remove('open')">Contact</a>
@@ -1480,133 +1619,39 @@
 </section>
 
 <!-- SECTION 2: CRISIS ANALOGUES -->
-<section id="crises">
-  <!-- "Historical Engine" label replaced with primary CTA to terminal -->
-  <div class="terminal-btn-wrap reveal">
-    <a href="chat.html" class="enter-terminal">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="4 17 10 11 4 5"/>
-        <line x1="12" y1="19" x2="20" y2="19"/>
-      </svg>
-      Enter Terminal
-    </a>
-  </div>
-  <h2 class="section-title crisis-title reveal">Crisis Analogues</h2>
-
-  <div class="crisis-grid">
-    <div class="crisis-card reveal reveal-delay-1">
-      <div class="crisis-meta">1929 — USA</div>
-      <div class="crisis-name">Great Depression</div>
-      <div class="crisis-desc">Deflationary spiral triggered by credit contraction, trade protection, and bank failures.</div>
-      <div class="crisis-tags">
-        <span class="crisis-tag">Deflation</span>
-        <span class="crisis-tag">Banking</span>
-        <span class="crisis-tag">Trade War</span>
-      </div>
-    </div>
-
-    <div class="crisis-card reveal reveal-delay-2">
-      <div class="crisis-meta">1973–79 — Global</div>
-      <div class="crisis-name">Stagflation Era</div>
-      <div class="crisis-desc">Oil supply shock combined with loose monetary policy produced simultaneous high inflation and unemployment.</div>
-      <div class="crisis-tags">
-        <span class="crisis-tag">Inflation</span>
-        <span class="crisis-tag">Energy</span>
-        <span class="crisis-tag">Policy Error</span>
-      </div>
-    </div>
-
-    <div class="crisis-card reveal reveal-delay-3">
-      <div class="crisis-meta">1997 — Asia-Pacific</div>
-      <div class="crisis-name"><a href="https://en.wikipedia.org/wiki/1997_Asian_financial_crisis" target="_blank" rel="noopener">Asian Financial Crisis ↗</a></div>
-      <div class="crisis-desc">Currency peg collapse, hot money outflows, and IMF austerity. Template for EM contagion dynamics.</div>
-      <div class="crisis-tags">
-        <span class="crisis-tag">EM Contagion</span>
-        <span class="crisis-tag">Currency</span>
-      </div>
-    </div>
-
-    <div class="crisis-card reveal reveal-delay-1">
-      <div class="crisis-meta">2008 — Global</div>
-      <div class="crisis-name"><a href="https://en.wikipedia.org/wiki/Financial_crisis_of_2007%E2%80%9310" target="_blank" rel="noopener">Global Financial Crisis ↗</a></div>
-      <div class="crisis-desc">Credit instrument mispricing, leverage unwind, and global transmission through interbank markets.</div>
-      <div class="crisis-tags">
-        <span class="crisis-tag">Credit</span>
-        <span class="crisis-tag">Systemic</span>
-        <span class="crisis-tag">QE</span>
-      </div>
-    </div>
-
-    <div class="crisis-card reveal reveal-delay-2">
-      <div class="crisis-meta">2011 — Europe</div>
-      <div class="crisis-name"><a href="https://en.wikipedia.org/wiki/European_debt_crisis" target="_blank" rel="noopener">Eurozone Debt Crisis ↗</a></div>
-      <div class="crisis-desc">Sovereign spread blowout in periphery nations. Draghi "whatever it takes" as the policy turning point.</div>
-      <div class="crisis-tags">
-        <span class="crisis-tag">Sovereign Debt</span>
-        <span class="crisis-tag">ECB</span>
-      </div>
-    </div>
-
-    <div class="crisis-card reveal reveal-delay-3">
-      <div class="crisis-meta">2020 — Global</div>
-      <div class="crisis-name"><a href="https://en.wikipedia.org/wiki/COVID-19_pandemic" target="_blank" rel="noopener">COVID Economic Shock ↗</a></div>
-      <div class="crisis-desc">Simultaneous demand and supply collapse with unprecedented fiscal and monetary response.</div>
-      <div class="crisis-tags">
-        <span class="crisis-tag">Supply Shock</span>
-        <span class="crisis-tag">Fiscal</span>
-      </div>
-    </div>
+<!-- CASE STUDIES -->
+<section id="case-studies">
+  <div class="eyebrow reveal">Historical Engine</div>
+  <div class="sec-title reveal">Crisis Analogues</div>
+  <div class="case-grid">
+    <a class="case-card reveal" href="https://www.britannica.com/event/Great-Depression" target="_blank" rel="noopener"><div class="case-year">1929 — USA</div><div class="case-name">Great Depression</div><div class="case-desc">Deflationary spiral triggered by credit contraction, trade protection, and bank failures.</div><div class="case-tags"><span class="case-tag">Deflation</span><span class="case-tag">Banking</span><span class="case-tag">Trade War</span></div><div class="case-link-label">Read article</div></a>
+    <a class="case-card reveal" href="https://www.britannica.com/money/stagflation" target="_blank" rel="noopener"><div class="case-year">1973–79 — Global</div><div class="case-name">Stagflation Era</div><div class="case-desc">Oil supply shock combined with loose monetary policy produced simultaneous high inflation and unemployment.</div><div class="case-tags"><span class="case-tag">Inflation</span><span class="case-tag">Energy</span><span class="case-tag">Policy Error</span></div><div class="case-link-label">Read article</div></a>
+    <a class="case-card reveal" href="https://www.imf.org/external/np/exr/ib/2000/062300.htm" target="_blank" rel="noopener"><div class="case-year">1997 — Asia-Pacific</div><div class="case-name">Asian Financial Crisis</div><div class="case-desc">Currency peg collapse, hot money outflows, and IMF austerity. Template for EM contagion dynamics.</div><div class="case-tags"><span class="case-tag">EM Contagion</span><span class="case-tag">Currency</span></div><div class="case-link-label">Read IMF paper</div></a>
+    <a class="case-card reveal" href="https://www.britannica.com/money/financial-crisis-of-2007-2008" target="_blank" rel="noopener"><div class="case-year">2008 — Global</div><div class="case-name">Global Financial Crisis</div><div class="case-desc">Credit instrument mispricing, leverage unwind, and global transmission through interbank markets.</div><div class="case-tags"><span class="case-tag">Credit</span><span class="case-tag">Systemic</span><span class="case-tag">QE</span></div><div class="case-link-label">Read article</div></a>
+    <a class="case-card reveal" href="https://www.bbc.com/news/business-13798000" target="_blank" rel="noopener"><div class="case-year">2011 — Europe</div><div class="case-name">Eurozone Debt Crisis</div><div class="case-desc">Sovereign spread blowout in periphery nations. Draghi "whatever it takes" as the policy turning point.</div><div class="case-tags"><span class="case-tag">Sovereign Debt</span><span class="case-tag">ECB</span></div><div class="case-link-label">Read BBC report</div></a>
+    <a class="case-card reveal" href="https://www.imf.org/en/Publications/WEO/Issues/2020/09/30/world-economic-outlook-october-2020" target="_blank" rel="noopener"><div class="case-year">2020 — Global</div><div class="case-name">COVID Economic Shock</div><div class="case-desc">Simultaneous demand and supply collapse with unprecedented fiscal and monetary response.</div><div class="case-tags"><span class="case-tag">Supply Shock</span><span class="case-tag">Fiscal</span></div><div class="case-link-label">Read IMF outlook</div></a>
   </div>
 </section>
 
-<!-- SECTION 3: SOURCES -->
+<!-- SOURCES -->
 <section id="sources">
-  <div class="section-label reveal">Data Provenance</div>
-  <h2 class="section-title reveal reveal-delay-1">Our Sources</h2>
-  <p class="section-sub reveal reveal-delay-2">EconIntel synthesises structured signals from the world's most authoritative economic data streams.</p>
-
-  <div class="sources-grid reveal reveal-delay-2">
-    <a href="https://bbc.com/news/business" target="_blank" class="source-card">
-      <div class="source-card-num">01</div>
-      <div>
-        <div class="source-card-name">BBC World Service</div>
-        <div class="source-card-sub">Global news & economic reporting</div>
-      </div>
-    </a>
-    <a href="https://thehindu.com/business/" target="_blank" class="source-card">
-      <div class="source-card-num">02</div>
-      <div>
-        <div class="source-card-name">The Hindu</div>
-        <div class="source-card-sub">South Asian markets & policy</div>
-      </div>
-    </a>
-    <a href="https://aljazeera.com/economy/" target="_blank" class="source-card">
-      <div class="source-card-num">03</div>
-      <div>
-        <div class="source-card-name">Al Jazeera</div>
-        <div class="source-card-sub">MENA region economics & geopolitics</div>
-      </div>
-    </a>
-    <div class="source-card">
-      <div class="source-card-num">04</div>
-      <div>
-        <div class="source-card-name"><a href="https://imf.org" target="_blank">IMF</a> · <a href="https://worldbank.org" target="_blank">World Bank</a> · <a href="https://oecd.org" target="_blank">OECD</a></div>
-        <div class="source-card-sub">Multilateral institutional data</div>
-      </div>
+  <div class="eyebrow reveal">Intelligence Sources</div>
+  <div class="sec-title reveal">Multi-Source Synthesis</div>
+  <div class="sources-grid">
+    <div class="reveal">
+      <a class="source-row" href="https://www.bbc.com/news/business" target="_blank" rel="noopener"><div class="source-bullet"></div><div class="source-name">BBC World Service</div><div class="source-type">Western Media</div><div class="source-arrow">↗</div></a>
+      <a class="source-row" href="https://www.thehindu.com/business/" target="_blank" rel="noopener"><div class="source-bullet"></div><div class="source-name">The Hindu</div><div class="source-type">South Asian</div><div class="source-arrow">↗</div></a>
+      <a class="source-row" href="https://www.aljazeera.com/economy/" target="_blank" rel="noopener"><div class="source-bullet"></div><div class="source-name">Al Jazeera</div><div class="source-type">Non-Western Global</div><div class="source-arrow">↗</div></a>
+      <a class="source-row" href="https://www.imf.org/en/Publications" target="_blank" rel="noopener"><div class="source-bullet"></div><div class="source-name">IMF · World Bank · OECD</div><div class="source-type">Institutional Primary</div><div class="source-arrow">↗</div></a>
+      <a class="source-row" href="https://www.federalreserve.gov/newsevents/pressreleases.htm" target="_blank" rel="noopener"><div class="source-bullet"></div><div class="source-name">Central Bank Statements</div><div class="source-type">Policy Primary</div><div class="source-arrow">↗</div></a>
+      <a class="source-row" href="https://finance.yahoo.com/topic/earnings/" target="_blank" rel="noopener"><div class="source-bullet"></div><div class="source-name">CEO / CFO Conference Calls</div><div class="source-type">Executive Sentiment</div><div class="source-arrow">↗</div></a>
     </div>
-    <a href="https://federalreserve.gov" target="_blank" class="source-card">
-      <div class="source-card-num">05</div>
-      <div>
-        <div class="source-card-name">Central Bank Statements</div>
-        <div class="source-card-sub">Monetary policy communiqués</div>
-      </div>
-    </a>
-    <div class="source-card">
-      <div class="source-card-num">06</div>
-      <div>
-        <div class="source-card-name">CEO / CFO Conference Calls</div>
-        <div class="source-card-sub">Forward guidance & sentiment signals</div>
-      </div>
+    <div class="bias-card reveal">
+      <div class="bias-title">Bias Filtration Protocol</div>
+      <div class="bias-row"><span class="bias-label">Western narrative isolation</span><div class="bias-meter"><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot"></div></div></div>
+      <div class="bias-row"><span class="bias-label">Non-Western perspective</span><div class="bias-meter"><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div></div></div>
+      <div class="bias-row"><span class="bias-label">Primary source preference</span><div class="bias-meter"><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div></div></div>
+      <div class="bias-row"><span class="bias-label">Editorial framing separation</span><div class="bias-meter"><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot"></div></div></div>
     </div>
   </div>
 </section>
@@ -1771,7 +1816,7 @@
     <div>
       <div class="footer-col-heading">Platform</div>
       <ul class="footer-links">
-        <li><a href="#crises">Crisis Analogues</a></li>
+        <li><a href="#case-studies">Crisis Analogues</a></li>
         <li><a href="#sources">Data Sources</a></li>
         <li><a href="#pricing">Pricing</a></li>
         <li><a href="#contact">API Access</a></li>
@@ -2229,6 +2274,53 @@ if (!currentCSRFToken) {
   currentCSRFToken = sessionStorage.getItem('econintel:csrf');
   currentUser = JSON.parse(sessionStorage.getItem('econintel:user') || 'null');
 }
+</script>
+
+<!-- ShaderGradient background: loaded from CDN, mounted into #shader-bg.
+     Wrapped in try/catch so any failure leaves the CSS gradient fallback intact. -->
+<script type="module">
+  try {
+    const React = (await import('https://esm.sh/react@18.3.1')).default;
+    const { createRoot } = await import('https://esm.sh/react-dom@18.3.1/client');
+    const { ShaderGradientCanvas, ShaderGradient } = await import(
+      'https://esm.sh/@shadergradient/react@2.4.20?deps=react@18.3.1,react-dom@18.3.1'
+    );
+    const h = React.createElement;
+    const mount = document.getElementById('shader-bg');
+    if (mount && ShaderGradientCanvas && ShaderGradient) {
+      createRoot(mount).render(
+        h(ShaderGradientCanvas, {
+          style: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%' },
+          pixelDensity: 1,
+          fov: 40,
+        },
+          h(ShaderGradient, {
+            control: 'props',
+            animate: 'on',
+            uSpeed: 0.2,            // slow, calm flow (~0.5x of default)
+            brightness: 1.0,
+            cAzimuthAngle: 180,
+            cDistance: 3.9,
+            cPolarAngle: 115,
+            cameraZoom: 1,
+            color1: '#5606ff',
+            color2: '#3d40fe',
+            color3: '#000000',
+            positionX: -0.5,
+            positionY: 0.1,
+            positionZ: 0,
+            reflection: 0.1,
+            rotationX: 0,
+            rotationY: 0,
+            rotationZ: 235,
+            type: 'waterPlane',
+          })
+        )
+      );
+    }
+  } catch (err) {
+    console.warn('[shader] ShaderGradient failed to load — using CSS gradient fallback.', err);
+  }
 </script>
 
 </body>
