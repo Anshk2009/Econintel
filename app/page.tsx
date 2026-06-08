@@ -20,7 +20,7 @@ export default function Home() {
         fov={45}
       >
         <ShaderGradient
-          control="query"
+          control="props"
           brightness={1.1}
           cAzimuthAngle={180}
           cDistance={3.9}
