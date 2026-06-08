@@ -10,8 +10,6 @@
 <!-- Gilbert (display font for the greeting). Fallback chain: Outfit (similar
      geometric/heavy feel from Google Fonts) → Syne → system sans. -->
 <link href="https://fonts.cdnfonts.com/css/gilbert" rel="stylesheet" />
-<!-- Three.js CDN -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -35,51 +33,18 @@
     --sidebar-w: 260px;
   }
 
-  /* ── ANIMATED GRADIENT BACKGROUND ── */
-  @keyframes gradientShift {
-    0% {
-      background-position: 0% 50%;
-    }
-    50% {
-      background-position: 100% 50%;
-    }
-    100% {
-      background-position: 0% 50%;
-    }
-  }
-
   html, body {
     height: 100%;
     background: var(--bg-main);
     color: var(--text);
     font-family: 'DM Sans', sans-serif;
     overflow: hidden;
-    position: relative;
-  }
-
-  /* Animated background removed on chat — flat solid dark only */
-  html::before {
-    content: '';
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: -1;
-    background: var(--bg-main);
-    pointer-events: none;
-  }
-
-  html::after {
-    content: none;
   }
 
   .app {
     display: flex;
     height: 100vh;
     overflow: hidden;
-    position: relative;
-    z-index: 1;
   }
 
   /* ── SIDEBAR ── */
@@ -754,8 +719,8 @@
   }
   .msg.assistant {
     align-self: flex-start;
-    background: rgba(14, 165, 233, 0.12);
-    border-left: 2px solid rgba(14, 165, 233, 0.5);
+    background: var(--peach-tint);
+    border-left: 2px solid var(--peach);
     color: var(--text);
     max-width: 100%;
     border-radius: 14px;
@@ -770,104 +735,6 @@
     border: 1px solid rgba(248,113,113,0.25);
   }
   body.light .msg.user { background: var(--bg-input); border-color: rgba(0,0,0,0.08); }
-
-  /* ── BOUNCING DOTS ANIMATION ── */
-  @keyframes bounce {
-    0%, 80%, 100% { transform: translateY(0); opacity: 1; }
-    40% { transform: translateY(-8px); opacity: 0.7; }
-  }
-  .bouncing-dots {
-    display: inline-flex;
-    gap: 4px;
-  }
-  .bouncing-dots span {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: currentColor;
-    animation: bounce 1.4s infinite;
-  }
-  .bouncing-dots span:nth-child(2) { animation-delay: 0.2s; }
-  .bouncing-dots span:nth-child(3) { animation-delay: 0.4s; }
-
-  /* ── SKELETON SCREENS ── */
-  @keyframes shimmer {
-    0% { background-position: -1000px 0; }
-    100% { background-position: 1000px 0; }
-  }
-  .skeleton {
-    background: linear-gradient(90deg, rgba(255,255,255,0.1) 25%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0.1) 75%);
-    background-size: 1000px 100%;
-    animation: shimmer 2s infinite;
-    border-radius: 8px;
-    height: 16px;
-    margin: 0.5rem 0;
-  }
-  .skeleton-line-short { width: 60%; }
-  .skeleton-line { width: 100%; }
-
-  /* ── MOBILE RESPONSIVE ── */
-  @media (max-width: 768px) {
-    :root { --sidebar-w: 260px; }
-
-    .sidebar.mobile-hidden {
-      position: fixed;
-      left: -260px;
-      top: 0;
-      height: 100vh;
-      z-index: 1000;
-      transition: left 0.3s ease;
-    }
-    .sidebar.mobile-hidden.open { left: 0; }
-
-    .mobile-menu-toggle {
-      display: flex;
-      background: none;
-      border: none;
-      color: var(--text);
-      cursor: pointer;
-      padding: 0.5rem;
-      font-size: 1.5rem;
-    }
-
-    .app.mobile-menu-open {
-      overflow: hidden;
-    }
-
-    .app.mobile-menu-open::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.5);
-      z-index: 999;
-    }
-
-    .messages { max-width: 100%; padding: 0 1rem; }
-    .msg.user { max-width: 85%; }
-  }
-
-  @media (max-width: 640px) {
-    :root { --sidebar-w: 260px; }
-
-    .chat-content {
-      padding-top: 3.5rem !important;
-    }
-
-    .input-area {
-      padding: 0.75rem !important;
-    }
-  }
-
-  /* ── LINKS ── */
-  a {
-    color: var(--accent);
-    text-decoration: none;
-    border-bottom: 1px solid var(--accent);
-    transition: opacity 0.2s;
-  }
-  a:hover {
-    opacity: 0.8;
-  }
 </style>
 </head>
 <body>
@@ -876,8 +743,6 @@
 <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeMobileSidebar()"></div>
 
 <div class="app">
-  <!-- Three.js Canvas Background -->
-  <canvas id="shader-gradient-canvas" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; display: block;"></canvas>
 
   <!-- ── SIDEBAR ── -->
   <aside class="sidebar" id="sidebar">
@@ -906,12 +771,6 @@
     </button>
 
     <nav class="sidebar-nav">
-      <a href="index.html" class="nav-item" onclick="closeMobileSidebar()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-        </svg>
-        <span class="nav-item-label">Home</span>
-      </a>
       <button class="nav-item">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -1213,16 +1072,6 @@ function handleKey(e) {
   }
 }
 
-// ── RATE LIMITING ──
-// AI chat: max 20 messages per hour per session
-const chatTimestamps=[];
-function checkChatLimit(){
-  const now=Date.now();
-  const recent=chatTimestamps.filter(t=>now-t<3600000);
-  if(recent.length>=20) return 'Rate limit: 20 messages/hour. Take a breather.';
-  chatTimestamps.push(now); return null;
-}
-
 // ── CHAT: BACKEND CALL ──
 // Calls /functions/chat (EdgeOne edge function) which proxies OpenRouter.
 // CONFIG is provided globally by config.js (window.CONFIG)
@@ -1253,21 +1102,12 @@ async function sendMessage() {
   const input = document.getElementById('prompt-input');
   const text = input.value.trim();
   if (!text) return;
-
-  // Check chat rate limit
-  const limitMsg = checkChatLimit();
-  if (limitMsg) {
-    addMessage('assistant', limitMsg, { error: true });
-    return;
-  }
-
   input.value = ''; input.style.height = 'auto';
 
   addMessage('user', text);
   history.push({ role: 'user', content: text });
 
-  const thinkingEl = addMessage('assistant', '', { thinking: true });
-  thinkingEl.innerHTML = 'Thinking<span class="bouncing-dots"><span></span><span></span><span></span></span>';
+  const thinkingEl = addMessage('assistant', 'Thinking…', { thinking: true });
 
   try {
     // Phase 6: Get CSRF token from sessionStorage
@@ -1618,9 +1458,6 @@ function openAccountModal(which) {
         <input class="acct-input" id="si-name" required placeholder="Jane Analyst" autocomplete="name"/>
         <label class="acct-label">Email</label>
         <input class="acct-input" id="si-email" type="email" required placeholder="jane@firm.com" autocomplete="email"/>
-        <div style="text-align: right; margin-top: 0.5rem; margin-bottom: 1rem;">
-          <a href="#" style="font-size: 0.75rem; color: #0ea5e9; text-decoration: none;">Forgot password?</a>
-        </div>
         <button class="acct-btn acct-btn-full" type="submit">Continue</button>
         <p class="acct-foot">No password needed for the prototype. Your details stay in this browser.</p>
       </form>`;
@@ -1740,34 +1577,6 @@ window.addEventListener('load', () => {
   }, 300); // Small delay to ensure auth is set up
 });
 
-// ── MOBILE MENU ──
-function openMobileSidebar() {
-  const sidebar = document.getElementById('sidebar');
-  const app = document.querySelector('.app');
-  sidebar.classList.add('mobile-hidden', 'open');
-  app.classList.add('mobile-menu-open');
-}
-
-function closeMobileSidebar() {
-  const sidebar = document.getElementById('sidebar');
-  const app = document.querySelector('.app');
-  sidebar.classList.remove('open');
-  app.classList.remove('mobile-menu-open');
-  setTimeout(() => {
-    sidebar.classList.remove('mobile-hidden');
-  }, 300);
-}
-
-// Close menu when clicking outside
-document.addEventListener('click', (e) => {
-  const sidebar = document.getElementById('sidebar');
-  const hamburger = document.querySelector('.hamburger');
-  if (sidebar && sidebar.classList.contains('mobile-hidden') &&
-      !sidebar.contains(e.target) && !hamburger.contains(e.target)) {
-    closeMobileSidebar();
-  }
-});
-
 // ── THEME TOGGLE ──
 function toggleTheme() {
   const isLight = document.body.classList.toggle('light');
@@ -1775,101 +1584,6 @@ function toggleTheme() {
 }
 (function initTheme() {
   if (localStorage.getItem('theme') === 'light') document.body.classList.add('light');
-})();
-
-// ── THREE.JS SHADER GRADIENT (ANIMATED) ──
-(function initShaderGradient() {
-  const canvas = document.getElementById('shader-gradient-canvas');
-  if (!canvas || !window.THREE) return;
-
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setClearColor(0x000000, 1);
-  camera.position.set(-0.5, 0.1, 3.9);
-  camera.lookAt(0, 0, 0);
-
-  const vertexShader = `
-    varying vec2 vUv;
-    varying vec3 vPos;
-    uniform float uTime;
-
-    void main() {
-      vUv = uv;
-      vec3 pos = position;
-      pos.z += sin(uTime * 0.3 + pos.x * 2.0) * 0.2;
-      pos.y += cos(uTime * 0.25 + pos.y * 1.5) * 0.15;
-      vPos = pos;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
-    }
-  `;
-
-  const fragmentShader = `
-    varying vec2 vUv;
-    varying vec3 vPos;
-    uniform float uTime;
-
-    void main() {
-      // Base colors: #5606ff -> #3d40fe -> #000000
-      vec3 color1 = vec3(0.337, 0.024, 1.0);      // #5606ff
-      vec3 color2 = vec3(0.239, 0.251, 0.996);    // #3d40fe
-      vec3 color3 = vec3(0.0, 0.0, 0.0);          // #000000
-
-      // Animated time-based mixing
-      float t = sin(uTime * 0.4 + vUv.x * 3.0) * 0.5 + 0.5;
-      float s = cos(uTime * 0.3 + vUv.y * 2.5) * 0.5 + 0.5;
-
-      // Mix colors with animation
-      vec3 mixed = mix(color1, color2, t);
-      mixed = mix(mixed, color3, s * 0.6);
-
-      // Add wave distortion
-      float wave = sin(vUv.x * 5.0 - uTime * 0.8) * 0.1;
-      wave += cos(vUv.y * 4.0 - uTime * 0.6) * 0.08;
-
-      mixed += vec3(wave * 0.3);
-
-      // Brightness boost
-      mixed *= 1.1;
-
-      gl_FragColor = vec4(mixed, 1.0);
-    }
-  `;
-
-  const material = new THREE.ShaderMaterial({
-    vertexShader,
-    fragmentShader,
-    uniforms: {
-      uTime: { value: 0 },
-      uFrequency: { value: 5.5 },
-      uAmplitude: { value: 0.3 }
-    },
-    side: THREE.DoubleSide
-  });
-
-  const geometry = new THREE.PlaneGeometry(8, 6, 64, 64);
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.position.z = -1;
-  scene.add(mesh);
-
-  let time = 0;
-  function animate() {
-    requestAnimationFrame(animate);
-    time += 0.016;
-    material.uniforms.uTime.value = time;
-    renderer.render(scene, camera);
-  }
-
-  window.addEventListener('resize', () => {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-    renderer.setSize(w, h);
-  });
-
-  animate();
 })();
 </script>
 
