@@ -1,0 +1,1877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EconIntel — Chat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&family=Outfit:wght@500;700;900&display=swap" rel="stylesheet" />
+<!-- Gilbert (display font for the greeting). Fallback chain: Outfit (similar
+     geometric/heavy feel from Google Fonts) → Syne → system sans. -->
+<link href="https://fonts.cdnfonts.com/css/gilbert" rel="stylesheet" />
+<!-- Three.js CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-sidebar: #171717;
+    --bg-main: #0d0d0d;
+    --bg-input: #2a2a2a;
+    --accent: #0ea5e9;
+    --accent2: #6366f1;
+    /* Peach palette — adds warmth in terminal, anchors greeting, accents assistant bubbles */
+    --peach:       #ffb088;
+    --peach-soft:  #ffd7b0;
+    --peach-deep:  #f08a5d;
+    --peach-glow:  rgba(255,176,136,0.35);
+    --peach-tint:  rgba(255,176,136,0.08);
+    --gold:        #ffc850;
+    --text: #ececec;
+    --text2: #8a8a8a;
+    --border: rgba(255,255,255,0.07);
+    --hover: rgba(255,255,255,0.06);
+    --sidebar-w: 260px;
+  }
+
+  /* ── ANIMATED GRADIENT BACKGROUND ── */
+  @keyframes gradientShift {
+    0% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg-main);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Animated background removed on chat — flat solid dark only */
+  html::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: -1;
+    background: var(--bg-main);
+    pointer-events: none;
+  }
+
+  html::after {
+    content: none;
+  }
+
+  .app {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: var(--sidebar-w);
+    background: var(--bg-sidebar);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    padding: 0.75rem 0.5rem;
+    overflow: hidden;
+    transition: width 0.25s ease;
+  }
+  .sidebar.collapsed { width: 64px; }
+
+  .sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.3rem 0.5rem 0.6rem;
+    gap: 0.5rem;
+  }
+
+  .sidebar-logo {
+    display: flex; align-items: center; gap: 0.55rem;
+    font-family: 'Syne', sans-serif;
+    font-weight: 800; font-size: 0.95rem;
+    letter-spacing: -0.02em;
+    color: #fff; text-decoration: none;
+    white-space: nowrap; overflow: hidden;
+    flex: 1; min-width: 0;
+  }
+  .sidebar-logo-icon {
+    width: 30px; height: 30px; border-radius: 8px;
+    background: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .sidebar-logo-icon svg { width: 15px; height: 15px; color: #000; }
+  .sidebar-logo-text { overflow: hidden; white-space: nowrap; }
+  .sidebar.collapsed .sidebar-logo-text { display: none; }
+
+  .sidebar-toggle {
+    background: none; border: none; cursor: pointer;
+    color: var(--text2); padding: 0.4rem;
+    border-radius: 8px; display: flex; align-items: center;
+    transition: background 0.15s, color 0.15s;
+    flex-shrink: 0;
+  }
+  .sidebar-toggle:hover { background: var(--hover); color: #fff; }
+  .sidebar-toggle svg { width: 18px; height: 18px; }
+
+  .new-chat-btn {
+    display: flex; align-items: center; gap: 0.75rem;
+    background: var(--hover); border: none; cursor: pointer;
+    color: var(--text); padding: 0.65rem 0.75rem;
+    border-radius: 10px; font-family: 'DM Sans', sans-serif;
+    font-size: 0.875rem; font-weight: 500;
+    width: 100%; text-align: left;
+    transition: background 0.15s;
+    margin-bottom: 0.25rem;
+    white-space: nowrap; overflow: hidden;
+  }
+  .new-chat-btn:hover { background: rgba(255,255,255,0.1); }
+  .new-chat-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+  .sidebar.collapsed .new-chat-btn-label { display: none; }
+
+  .sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    margin-bottom: 0.75rem;
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: 0.6rem 0.75rem;
+    border-radius: 10px;
+    color: var(--text2); text-decoration: none;
+    font-size: 0.875rem; font-weight: 400;
+    cursor: pointer; border: none; background: none;
+    width: 100%; text-align: left;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap; overflow: hidden;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .nav-item:hover { background: var(--hover); color: #fff; }
+  .nav-item svg { width: 17px; height: 17px; flex-shrink: 0; }
+  .sidebar.collapsed .nav-item-label { display: none; }
+
+  .sidebar-divider {
+    height: 1px; background: var(--border);
+    margin: 0.5rem 0.25rem;
+  }
+
+  .recents-label {
+    font-size: 0.72rem; font-weight: 600;
+    letter-spacing: 0.07em; text-transform: uppercase;
+    color: var(--text2);
+    padding: 0.5rem 0.75rem 0.4rem;
+    white-space: nowrap;
+  }
+  .sidebar.collapsed .recents-label { display: none; }
+
+  .recents-empty {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem; color: rgba(255,255,255,0.2);
+    font-style: italic;
+  }
+  .sidebar.collapsed .recents-empty { display: none; }
+
+  /* ── MAIN ── */
+  .chat-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ── HEADER ── */
+  .chat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1.25rem;
+    flex-shrink: 0;
+  }
+
+  .header-title {
+    display: flex; align-items: center; gap: 0.4rem;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700; font-size: 1rem;
+    color: #fff; cursor: pointer;
+    padding: 0.4rem 0.6rem;
+    border-radius: 8px;
+    transition: background 0.15s;
+  }
+  .header-title:hover { background: var(--hover); }
+  .header-title svg { width: 14px; height: 14px; color: var(--text2); }
+
+  .header-right {
+    display: flex; align-items: center; gap: 0.6rem;
+  }
+
+  .header-nav-btn {
+    display: flex; align-items: center; gap: 0.4rem;
+    background: none; border: 1px solid rgba(255,255,255,0.15);
+    color: #fff; padding: 0.45rem 0.9rem;
+    border-radius: 8px; font-size: 0.82rem; font-weight: 500;
+    cursor: pointer; font-family: 'DM Sans', sans-serif;
+    transition: background 0.15s, border-color 0.15s;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+  .header-nav-btn:hover { background: var(--hover); border-color: rgba(255,255,255,0.3); }
+  .header-nav-btn svg { width: 13px; height: 13px; color: var(--accent); }
+
+  .upgrade-btn {
+    display: flex; align-items: center; gap: 0.4rem;
+    background: none; border: 1px solid rgba(255,255,255,0.15);
+    color: #fff; padding: 0.45rem 0.9rem;
+    border-radius: 8px; font-size: 0.82rem; font-weight: 500;
+    cursor: pointer; font-family: 'DM Sans', sans-serif;
+    transition: background 0.15s, border-color 0.15s;
+    white-space: nowrap;
+  }
+  .upgrade-btn:hover { background: var(--hover); border-color: rgba(255,255,255,0.3); }
+  .upgrade-btn svg { width: 13px; height: 13px; color: var(--accent); }
+
+  .user-avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), #6366f1);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.72rem; font-weight: 700;
+    color: #fff; cursor: pointer; flex-shrink: 0;
+    letter-spacing: 0.02em;
+    transition: opacity 0.15s;
+  }
+  .user-avatar:hover { opacity: 0.85; }
+
+  /* ── ACCOUNT MENU (animated, New 01-inspired) ──
+     Smooth slide+fade open; each item staggers in; hover slides a left
+     indicator and shifts the icon right; subtle cyan accent throughout. */
+  .account-wrap { position: relative; }
+  .user-avatar {
+    transition: transform 0.2s, box-shadow 0.25s;
+  }
+  .user-avatar:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 3px rgba(14,165,233,0.18);
+  }
+  .account-menu {
+    position: absolute; top: calc(100% + 10px); right: 0;
+    min-width: 264px;
+    background:
+      radial-gradient(circle at 0% 0%, rgba(14,165,233,0.10), transparent 55%),
+      #0d1620;
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 16px;
+    padding: 6px;
+    box-shadow:
+      0 20px 50px rgba(0,0,0,0.65),
+      0 0 0 1px rgba(255,255,255,0.02) inset;
+    opacity: 0;
+    transform: translateY(-8px) scale(0.97);
+    transform-origin: top right;
+    pointer-events: none;
+    transition:
+      opacity 0.18s ease,
+      transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+    z-index: 250;
+    overflow: hidden;
+  }
+  .account-menu.open {
+    opacity: 1;
+    transform: none;
+    pointer-events: all;
+  }
+  /* Top accent line that draws in on open */
+  .account-menu::before {
+    content: '';
+    position: absolute; top: 0; left: 0;
+    height: 1px; width: 0;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    transition: width 0.4s ease 0.05s;
+  }
+  .account-menu.open::before { width: 100%; }
+
+  .account-header {
+    display: flex; align-items: center; gap: 11px;
+    padding: 14px 12px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    margin-bottom: 6px;
+    position: relative;
+  }
+  .account-header-avatar {
+    width: 38px; height: 38px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent) 0%, #6366f1 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Syne', sans-serif;
+    font-size: 13px; font-weight: 800; color: #fff;
+    flex-shrink: 0;
+    box-shadow: 0 4px 14px rgba(14,165,233,0.35);
+    position: relative;
+  }
+  /* tiny pulsing presence dot */
+  .account-header-avatar::after {
+    content: '';
+    position: absolute; right: -1px; bottom: -1px;
+    width: 11px; height: 11px; border-radius: 50%;
+    background: #4cefb3;
+    border: 2px solid #0d1620;
+    animation: presence-pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes presence-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(76,239,179,0.5); }
+    50%      { box-shadow: 0 0 0 5px rgba(76,239,179,0); }
+  }
+  .account-header-info { overflow: hidden; min-width: 0; }
+  .account-header-name {
+    font-family: 'Syne', sans-serif;
+    font-size: 14px; font-weight: 700;
+    color: #fff; letter-spacing: -0.01em;
+    line-height: 1.2;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .account-header-email {
+    font-size: 11.5px; color: rgba(255,255,255,0.45);
+    margin-top: 3px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* Items: stagger entry, slide hover indicator, animated icons */
+  .account-menu-item {
+    display: flex; align-items: center; gap: 11px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    color: rgba(255,255,255,0.68);
+    text-decoration: none;
+    font-size: 13.5px; font-weight: 500;
+    cursor: pointer; border: none; background: none;
+    width: 100%; text-align: left;
+    font-family: 'DM Sans', sans-serif;
+    position: relative;
+    overflow: hidden;
+    opacity: 0;
+    transform: translateX(-6px);
+    transition: color 0.18s, background 0.18s;
+  }
+  .account-menu.open .account-menu-item {
+    animation: dd-item-in 0.32s cubic-bezier(0.22, 0.68, 0, 1.05) forwards;
+  }
+  .account-menu.open .account-menu-item:nth-child(2) { animation-delay: 0.04s; }
+  .account-menu.open .account-menu-item:nth-child(3) { animation-delay: 0.08s; }
+  .account-menu.open .account-menu-item:nth-child(4) { animation-delay: 0.12s; }
+  .account-menu.open .account-menu-item:nth-child(5) { animation-delay: 0.16s; }
+  .account-menu.open .account-menu-item:nth-child(7) { animation-delay: 0.22s; }
+  @keyframes dd-item-in {
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  /* Sliding left indicator */
+  .account-menu-item::before {
+    content: '';
+    position: absolute; left: 0; top: 50%;
+    transform: translateY(-50%);
+    width: 3px; height: 0;
+    background: var(--accent);
+    border-radius: 0 3px 3px 0;
+    transition: height 0.22s ease;
+  }
+  .account-menu-item:hover::before { height: 60%; }
+  .account-menu-item:hover {
+    background: rgba(14,165,233,0.08);
+    color: #fff;
+  }
+  .account-menu-item svg {
+    width: 16px; height: 16px;
+    color: rgba(255,255,255,0.4);
+    flex-shrink: 0;
+    transition: transform 0.22s ease, color 0.18s;
+  }
+  .account-menu-item:hover svg {
+    color: var(--accent);
+    transform: translateX(2px) scale(1.08);
+  }
+
+  .account-menu-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    margin: 6px 4px;
+  }
+
+  .account-menu-item.danger { color: rgba(248,113,113,0.82); }
+  .account-menu-item.danger svg { color: rgba(248,113,113,0.6); }
+  .account-menu-item.danger:hover {
+    background: rgba(239,68,68,0.09);
+    color: #fca5a5;
+  }
+  .account-menu-item.danger:hover::before { background: #f87171; }
+  .account-menu-item.danger:hover svg { color: #f87171; transform: translateX(2px) scale(1.08); }
+
+  /* Light theme */
+  body.light .account-menu {
+    background:
+      radial-gradient(circle at 0% 0%, rgba(14,165,233,0.10), transparent 55%),
+      #fbfaf5;
+    border-color: rgba(0,0,0,0.08);
+    box-shadow:
+      0 18px 50px rgba(0,0,0,0.14),
+      0 0 0 1px rgba(0,0,0,0.02) inset;
+  }
+  body.light .account-header { border-color: rgba(0,0,0,0.07); }
+  body.light .account-header-name { color: #0d0d12; }
+  body.light .account-header-email { color: rgba(0,0,0,0.45); }
+  body.light .account-header-avatar::after { border-color: #fbfaf5; }
+  body.light .account-menu-item { color: rgba(0,0,0,0.65); }
+  body.light .account-menu-item:hover { background: rgba(14,165,233,0.08); color: #000; }
+  body.light .account-menu-item svg { color: rgba(0,0,0,0.4); }
+  body.light .account-menu-divider {
+    background: linear-gradient(90deg, transparent, rgba(0,0,0,0.1), transparent);
+  }
+
+  /* ── CENTER CONTENT ── */
+  .chat-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1.5rem 6rem;
+    overflow-y: auto;
+  }
+
+  .chat-greeting {
+    /* Gilbert is a heavy display sans; Outfit/Syne are the graceful fallbacks
+       in case the CDN font hasn't loaded by paint. */
+    font-family: 'Gilbert', 'Outfit', 'Syne', sans-serif;
+    font-size: clamp(2.2rem, 5vw, 3.8rem);
+    font-weight: 900;
+    color: #fff;
+    text-align: center;
+    margin-bottom: 2.25rem;
+    letter-spacing: -0.04em;
+    line-height: 1.05;
+    text-wrap: balance;
+  }
+  .chat-greeting em {
+    font-style: normal;
+    color: var(--text);
+  }
+  @keyframes peach-shimmer {
+    0%, 100% { background-position: 0% center; }
+    50%      { background-position: 100% center; }
+  }
+  .chat-greeting-sub {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 400;
+    color: var(--text2);
+    text-align: center;
+    margin-top: -1.25rem;
+    margin-bottom: 2.25rem;
+    letter-spacing: 0.01em;
+  }
+
+  /* ── PROMPT INPUT ── */
+  .prompt-wrap {
+    width: 100%;
+    max-width: 720px;
+  }
+
+  .prompt-box {
+    background: var(--bg-input);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    padding: 0.85rem 0.85rem 0.85rem 1.1rem;
+    display: flex;
+    align-items: flex-end;
+    gap: 0.6rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .prompt-box:focus-within {
+    border-color: rgba(255,255,255,0.22);
+    box-shadow: 0 0 0 3px rgba(14,165,233,0.08);
+  }
+
+  .prompt-attach {
+    background: none; border: none; cursor: pointer;
+    color: var(--text2); padding: 0.3rem;
+    border-radius: 7px; display: flex;
+    transition: background 0.15s, color 0.15s;
+    flex-shrink: 0; align-self: flex-end; margin-bottom: 2px;
+  }
+  .prompt-attach:hover { background: rgba(255,255,255,0.08); color: #fff; }
+  .prompt-attach svg { width: 18px; height: 18px; }
+
+  .prompt-input {
+    flex: 1;
+    background: none; border: none; outline: none;
+    color: #fff; font-family: 'DM Sans', sans-serif;
+    font-size: 0.95rem; font-weight: 400;
+    resize: none; line-height: 1.6;
+    min-height: 24px; max-height: 200px;
+    overflow-y: auto;
+    padding: 0.15rem 0;
+  }
+  .prompt-input::placeholder { color: var(--text2); }
+
+  .prompt-actions {
+    display: flex; align-items: center; gap: 0.35rem;
+    flex-shrink: 0; align-self: flex-end;
+  }
+
+  .prompt-icon-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--text2); padding: 0.35rem;
+    border-radius: 8px; display: flex; align-items: center;
+    transition: background 0.15s, color 0.15s;
+  }
+  .prompt-icon-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
+  .prompt-icon-btn svg { width: 18px; height: 18px; }
+
+  .prompt-send {
+    background: #fff; border: none; cursor: pointer;
+    color: #000; width: 32px; height: 32px;
+    border-radius: 8px; display: flex;
+    align-items: center; justify-content: center;
+    transition: background 0.15s, opacity 0.15s;
+    flex-shrink: 0;
+  }
+  .prompt-send:hover { background: var(--accent); }
+  .prompt-send svg { width: 15px; height: 15px; }
+
+  /* ── CONVERSATION AREA (hidden initially, shown when messages exist) ── */
+  .messages { display: none; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 640px) {
+    .sidebar { display: none; }
+    .upgrade-btn span { display: none; }
+    .header-nav-btn span { display: none; }
+  }
+
+  /* ── LIGHT MODE (warm peach-cream palette) ── */
+  body.light {
+    --bg-sidebar: #f3dccc;   /* dusty peach */
+    --bg-main:    #fdf6ed;   /* cream */
+    --bg-input:   #f7e7d6;   /* light peach */
+    --text:       #2a1810;
+    --text2:      #7d5945;   /* warm taupe */
+    --border:     rgba(120,60,30,0.10);
+    --hover:      rgba(255,176,136,0.18);
+    --peach-tint: rgba(240,138,93,0.10);
+    --peach-glow: rgba(240,138,93,0.30);
+  }
+  body.light .msg.assistant {
+    background: var(--peach-tint);
+    border-left-color: var(--peach-deep);
+    color: var(--text);
+  }
+  body.light .chat-greeting { color: #2a1810; }
+  body.light .chat-greeting em {
+    color: var(--text);
+  }
+  body.light .sidebar { background: var(--bg-sidebar); }
+  body.light .sidebar-logo { color: #111; }
+  body.light .sidebar-toggle { color: rgba(0,0,0,0.45); }
+  body.light .sidebar-toggle:hover { color: #000; background: rgba(0,0,0,0.07); }
+  body.light .new-chat-btn { background: rgba(0,0,0,0.06); color: var(--text); }
+  body.light .new-chat-btn:hover { background: rgba(0,0,0,0.1); }
+  body.light .nav-item { color: rgba(0,0,0,0.5); }
+  body.light .nav-item:hover { background: rgba(0,0,0,0.07); color: #000; }
+  body.light .sidebar-divider { background: rgba(0,0,0,0.1); }
+  body.light .recents-label { color: rgba(0,0,0,0.45); }
+  body.light .recents-empty { color: rgba(0,0,0,0.28); }
+
+  /* ── RECENT CHATS STYLING ── */
+  .recents-empty {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .recents-empty.has-recents {
+    gap: 0.6rem;
+  }
+  .recent-chat-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.7rem 0.6rem;
+    background: rgba(255,255,255,0.04);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border-left: 2px solid var(--accent);
+  }
+  .recent-chat-item:hover {
+    background: rgba(255,255,255,0.08);
+  }
+  .recent-preview {
+    font-size: 0.8rem;
+    color: var(--text);
+    line-height: 1.3;
+  }
+  .recent-date {
+    font-size: 0.7rem;
+    color: var(--text2);
+  }
+  body.light .recent-chat-item {
+    background: rgba(0,0,0,0.05);
+    border-left-color: var(--peach-deep);
+  }
+  body.light .recent-chat-item:hover {
+    background: rgba(0,0,0,0.08);
+  }
+
+  body.light .chat-main { background: var(--bg-main); }
+  body.light .chat-header { background: var(--bg-main); }
+  body.light .header-title { color: #111; }
+  body.light .header-title:hover { background: rgba(0,0,0,0.05); }
+  body.light .header-title svg { color: rgba(0,0,0,0.4); }
+  body.light .header-nav-btn { color: #111; border-color: rgba(0,0,0,0.15); }
+  body.light .header-nav-btn:hover { background: rgba(0,0,0,0.06); }
+  body.light .header-nav-btn svg { color: var(--peach-deep); }
+  body.light .upgrade-btn { color: #111; border-color: rgba(0,0,0,0.15); }
+  body.light .upgrade-btn:hover { background: rgba(0,0,0,0.06); }
+  body.light .chat-greeting { color: #0d0d12; }
+  body.light .prompt-box { background: var(--bg-input); border-color: rgba(0,0,0,0.1); }
+  body.light .prompt-box:focus-within { border-color: rgba(14,165,233,0.4); box-shadow: 0 0 0 3px rgba(14,165,233,0.07); }
+  body.light .prompt-input { color: #0d0d12; }
+  body.light .prompt-input::placeholder { color: rgba(0,0,0,0.3); }
+  body.light .prompt-attach { color: rgba(0,0,0,0.45); }
+  body.light .prompt-attach:hover { color: #000; background: rgba(0,0,0,0.07); }
+  body.light .prompt-icon-btn { color: rgba(0,0,0,0.45); }
+  body.light .prompt-icon-btn:hover { color: #000; background: rgba(0,0,0,0.07); }
+  body.light .prompt-send { background: #111; color: #fff; }
+  body.light .prompt-send:hover { background: var(--accent); }
+
+  /* ── CINEMATIC THEME TOGGLE (bottom-right fixed) ── */
+  .theme-toggle {
+    position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 300;
+    width: 42px; height: 42px; border-radius: 50%;
+    background: rgba(8,8,14,0.78);
+    border: 1px solid rgba(255,255,255,0.13);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    cursor: pointer; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,0.65);
+    transition: background 0.3s, color 0.3s, border-color 0.3s;
+    animation: cglow-dark 3s ease-in-out infinite;
+  }
+  @keyframes cglow-dark {
+    0%,100% { box-shadow: 0 0 14px rgba(14,165,233,0.22), 0 0 28px rgba(14,165,233,0.08); }
+    50%      { box-shadow: 0 0 24px rgba(14,165,233,0.38), 0 0 48px rgba(14,165,233,0.13); }
+  }
+  .theme-toggle:hover { background: rgba(14,14,22,0.92); color: #fff; border-color: rgba(255,255,255,0.22); }
+  .theme-toggle svg { width: 17px; height: 17px; transition: transform 0.4s; }
+  .theme-toggle:hover svg { transform: rotate(20deg); }
+  .theme-icon-moon { display: block; }
+  .theme-icon-sun  { display: none; }
+  body.light .theme-toggle {
+    background: rgba(240,239,234,0.86); border-color: rgba(0,0,0,0.14); color: rgba(0,0,0,0.6);
+    animation: cglow-light 3s ease-in-out infinite;
+  }
+  @keyframes cglow-light {
+    0%,100% { box-shadow: 0 0 14px rgba(234,179,8,0.28), 0 0 28px rgba(234,179,8,0.1); }
+    50%      { box-shadow: 0 0 24px rgba(234,179,8,0.46), 0 0 48px rgba(234,179,8,0.16); }
+  }
+  body.light .theme-toggle:hover { background: rgba(224,223,218,0.96); color: #000; }
+  body.light .theme-icon-moon { display: none; }
+  body.light .theme-icon-sun  { display: block; }
+
+  /* ── HAMBURGER (mobile only) ── */
+  .hamburger {
+    display: none;
+    background: none; border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px; padding: 0.4rem;
+    color: var(--text);
+    width: 36px; height: 36px;
+    align-items: center; justify-content: center;
+    margin-right: 0.4rem;
+  }
+  .hamburger svg { width: 18px; height: 18px; }
+  .hamburger:hover { background: var(--hover); }
+  body.light .hamburger { border-color: rgba(0,0,0,0.12); }
+
+  /* mobile: sidebar becomes a slide-in drawer */
+  @media (max-width: 640px) {
+    .hamburger { display: flex; }
+    .sidebar {
+      display: flex !important;
+      position: fixed; top: 0; left: 0; bottom: 0;
+      width: 280px;
+      z-index: 400;
+      transform: translateX(-100%);
+      transition: transform 0.25s ease;
+      box-shadow: 8px 0 32px rgba(0,0,0,0.5);
+    }
+    .sidebar.mobile-open { transform: translateX(0); }
+    .sidebar-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 350; opacity: 0; pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .sidebar-backdrop.show { opacity: 1; pointer-events: all; }
+  }
+  .sidebar-backdrop { display: none; }
+  @media (max-width: 640px) { .sidebar-backdrop { display: block; } }
+
+  /* ── MESSAGE BUBBLES ── */
+  .messages {
+    width: 100%; max-width: 720px;
+    margin: 0 auto 1.5rem;
+    display: flex; flex-direction: column; gap: 1rem;
+  }
+  .messages.has-messages { display: flex; }
+  .msg {
+    padding: 0.85rem 1.1rem;
+    border-radius: 14px;
+    font-size: 0.95rem; line-height: 1.6;
+    white-space: pre-wrap; word-wrap: break-word;
+  }
+  .msg.user {
+    align-self: flex-end;
+    background: var(--bg-input);
+    border: 1px solid rgba(255,255,255,0.08);
+    max-width: 80%;
+  }
+  .msg.assistant {
+    align-self: flex-start;
+    background: rgba(14, 165, 233, 0.12);
+    border-left: 2px solid rgba(14, 165, 233, 0.5);
+    color: var(--text);
+    max-width: 100%;
+    border-radius: 14px;
+    padding-left: 1rem;
+  }
+  .msg.assistant.thinking {
+    color: var(--text2); font-style: italic;
+  }
+  .msg.assistant.error {
+    color: #f87171;
+    background: rgba(248,113,113,0.06);
+    border: 1px solid rgba(248,113,113,0.25);
+  }
+  body.light .msg.user { background: var(--bg-input); border-color: rgba(0,0,0,0.08); }
+
+  /* ── BOUNCING DOTS ANIMATION ── */
+  @keyframes bounce {
+    0%, 80%, 100% { transform: translateY(0); opacity: 1; }
+    40% { transform: translateY(-8px); opacity: 0.7; }
+  }
+  .bouncing-dots {
+    display: inline-flex;
+    gap: 4px;
+  }
+  .bouncing-dots span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: bounce 1.4s infinite;
+  }
+  .bouncing-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .bouncing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+  /* ── SKELETON SCREENS ── */
+  @keyframes shimmer {
+    0% { background-position: -1000px 0; }
+    100% { background-position: 1000px 0; }
+  }
+  .skeleton {
+    background: linear-gradient(90deg, rgba(255,255,255,0.1) 25%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0.1) 75%);
+    background-size: 1000px 100%;
+    animation: shimmer 2s infinite;
+    border-radius: 8px;
+    height: 16px;
+    margin: 0.5rem 0;
+  }
+  .skeleton-line-short { width: 60%; }
+  .skeleton-line { width: 100%; }
+
+  /* ── MOBILE RESPONSIVE ── */
+  @media (max-width: 768px) {
+    :root { --sidebar-w: 260px; }
+
+    .sidebar.mobile-hidden {
+      position: fixed;
+      left: -260px;
+      top: 0;
+      height: 100vh;
+      z-index: 1000;
+      transition: left 0.3s ease;
+    }
+    .sidebar.mobile-hidden.open { left: 0; }
+
+    .mobile-menu-toggle {
+      display: flex;
+      background: none;
+      border: none;
+      color: var(--text);
+      cursor: pointer;
+      padding: 0.5rem;
+      font-size: 1.5rem;
+    }
+
+    .app.mobile-menu-open {
+      overflow: hidden;
+    }
+
+    .app.mobile-menu-open::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 999;
+    }
+
+    .messages { max-width: 100%; padding: 0 1rem; }
+    .msg.user { max-width: 85%; }
+  }
+
+  @media (max-width: 640px) {
+    :root { --sidebar-w: 260px; }
+
+    .chat-content {
+      padding-top: 3.5rem !important;
+    }
+
+    .input-area {
+      padding: 0.75rem !important;
+    }
+  }
+
+  /* ── LINKS ── */
+  a {
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--accent);
+    transition: opacity 0.2s;
+  }
+  a:hover {
+    opacity: 0.8;
+  }
+</style>
+</head>
+<body>
+
+<!-- Sidebar backdrop (mobile only) -->
+<div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeMobileSidebar()"></div>
+
+<div class="app">
+  <!-- Three.js Canvas Background -->
+  <canvas id="shader-gradient-canvas" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; display: block;"></canvas>
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <a href="index.html" class="sidebar-logo">
+        <span class="sidebar-logo-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+        </span>
+        <span class="sidebar-logo-text">EconIntel</span>
+      </a>
+      <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Toggle sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <line x1="9" y1="3" x2="9" y2="21"/>
+        </svg>
+      </button>
+    </div>
+
+    <button class="new-chat-btn" onclick="newChat()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
+      </svg>
+      <span class="new-chat-btn-label">New chat</span>
+    </button>
+
+    <nav class="sidebar-nav">
+      <a href="index.html" class="nav-item" onclick="closeMobileSidebar()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+        <span class="nav-item-label">Home</span>
+      </a>
+      <button class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <span class="nav-item-label">Search chats</span>
+      </button>
+      <button class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        </svg>
+        <span class="nav-item-label">Library</span>
+      </button>
+      <button class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+        </svg>
+        <span class="nav-item-label">Projects</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-divider"></div>
+
+    <div class="recents-label">Recents</div>
+    <div class="recents-empty">No recent chats</div>
+  </aside>
+
+  <!-- ── MAIN ── -->
+  <main class="chat-main">
+
+    <!-- Header -->
+    <header class="chat-header">
+      <button class="hamburger" onclick="openMobileSidebar()" aria-label="Open menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="3" y1="6" x2="21" y2="6"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+      <div class="header-title">
+        EconIntel
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </div>
+      <div class="header-right">
+        <a href="index.html" class="header-nav-btn" title="Back to home">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+          <span>Home</span>
+        </a>
+        <button class="upgrade-btn">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
+          </svg>
+          <span>Upgrade</span>
+        </button>
+        <div class="account-wrap">
+          <div class="user-avatar" id="user-avatar" title="Account" onclick="toggleAccountMenu(event)">··</div>
+          <!-- Contents rendered by renderAccountMenu() based on auth state -->
+          <div class="account-menu" id="account-menu" onclick="event.stopPropagation()"></div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Center -->
+    <div class="chat-content">
+      <h1 class="chat-greeting" id="chat-greeting">What's moving the <em>markets</em>?</h1>
+      <p class="chat-greeting-sub" id="chat-greeting-sub">Pick a thread — crises, currencies, central banks — let's reason through it.</p>
+
+      <div class="messages" id="messages"></div>
+
+      <div class="prompt-wrap">
+        <div class="prompt-box">
+          <button class="prompt-attach" title="Attach">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </button>
+
+          <textarea
+            class="prompt-input"
+            id="prompt-input"
+            placeholder="Ask anything"
+            rows="1"
+            onInput="autoResize(this)"
+            onKeydown="handleKey(event)"
+          ></textarea>
+
+          <div class="prompt-actions">
+            <!-- Microphone -->
+            <button class="prompt-icon-btn" title="Voice input">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+            </button>
+            <!-- Send -->
+            <button class="prompt-send" title="Send" onclick="sendMessage()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="19" x2="12" y2="5"/>
+                <polyline points="5 12 12 5 19 12"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ACCOUNT MODAL (Profile / Settings) -->
+<div id="acct-modal" class="acct-modal-overlay" onclick="closeAccountModal(event)">
+  <div class="acct-modal-card" onclick="event.stopPropagation()">
+    <button class="acct-modal-close" onclick="closeAccountModal()">✕</button>
+    <h2 class="acct-modal-title" id="acct-modal-title">Profile</h2>
+    <div id="acct-modal-body"></div>
+  </div>
+</div>
+<style>
+  .acct-modal-overlay {
+    position: fixed; inset: 0; z-index: 500;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 1rem;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .acct-modal-overlay.open { opacity: 1; pointer-events: all; }
+  .acct-modal-card {
+    background: #14141a;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    padding: 1.75rem 1.75rem 1.5rem;
+    width: 100%; max-width: 420px;
+    position: relative;
+    transform: translateY(10px); transition: transform 0.22s;
+  }
+  .acct-modal-overlay.open .acct-modal-card { transform: none; }
+  .acct-modal-close {
+    position: absolute; top: 0.75rem; right: 0.75rem;
+    background: none; border: none; color: rgba(255,255,255,0.35);
+    font-size: 0.95rem; width: 28px; height: 28px;
+    border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .acct-modal-close:hover { color: #fff; background: rgba(255,255,255,0.06); }
+  .acct-modal-title {
+    font-family: 'Syne', sans-serif; font-weight: 800;
+    font-size: 1.25rem; letter-spacing: -0.02em;
+    margin-bottom: 1.25rem; color: #fff;
+  }
+  .acct-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    font-size: 0.875rem;
+  }
+  .acct-row:last-child { border-bottom: none; }
+  .acct-row-label { color: var(--text2); }
+  .acct-row-value { color: #fff; font-weight: 500; }
+  .acct-btn {
+    margin-top: 1rem;
+    background: var(--accent); color: #000;
+    border: none; border-radius: 9px;
+    padding: 0.6rem 1.1rem;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.85rem; font-weight: 700;
+  }
+  body.light .acct-modal-card { background: #fff; border-color: rgba(0,0,0,0.1); }
+  body.light .acct-modal-title { color: #0d0d12; }
+  body.light .acct-row { border-color: rgba(0,0,0,0.07); }
+  body.light .acct-row-value { color: #0d0d12; }
+  body.light .acct-modal-close { color: rgba(0,0,0,0.4); }
+  body.light .acct-modal-close:hover { color: #000; background: rgba(0,0,0,0.06); }
+
+  /* ── FORM (sign in / edit profile) ── */
+  .acct-form { display: flex; flex-direction: column; }
+  .acct-label {
+    font-size: 11px; font-weight: 700;
+    color: rgba(255,255,255,0.45); letter-spacing: 0.07em;
+    text-transform: uppercase;
+    margin-bottom: 6px; margin-top: 12px;
+  }
+  .acct-label:first-child { margin-top: 0; }
+  .acct-input {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 10px; padding: 11px 13px;
+    color: #fff; font-family: 'DM Sans', sans-serif;
+    font-size: 14px; outline: none;
+    transition: border-color 0.18s, background 0.18s;
+  }
+  .acct-input::placeholder { color: rgba(255,255,255,0.22); }
+  .acct-input:focus { border-color: var(--accent); background: rgba(255,255,255,0.06); }
+  .acct-input.pl { padding-left: 28px; }
+  .acct-input-pre { position: relative; }
+  .acct-input-at {
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    color: var(--peach); font-size: 14px; font-weight: 700;
+    pointer-events: none;
+  }
+  .acct-btn-full { width: 100%; margin-top: 18px; padding: 12px; }
+  .acct-btn.ghost {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.13);
+    color: rgba(255,255,255,0.7);
+  }
+  .acct-btn.ghost:hover { background: rgba(255,255,255,0.05); color: #fff; }
+  .acct-actions {
+    display: flex; gap: 10px; margin-top: 20px;
+  }
+  .acct-actions .acct-btn { flex: 1; margin: 0; }
+  .acct-foot {
+    margin-top: 14px; font-size: 11.5px;
+    color: rgba(255,255,255,0.32); text-align: center; line-height: 1.5;
+  }
+  body.light .acct-label { color: rgba(0,0,0,0.5); }
+  body.light .acct-input {
+    background: rgba(0,0,0,0.04);
+    border-color: rgba(0,0,0,0.1);
+    color: #2a1810;
+  }
+  body.light .acct-input::placeholder { color: rgba(0,0,0,0.25); }
+  body.light .acct-input:focus { background: rgba(255,176,136,0.08); }
+  body.light .acct-input-at { color: var(--peach-deep); }
+  body.light .acct-btn.ghost { border-color: rgba(0,0,0,0.15); color: rgba(0,0,0,0.65); }
+  body.light .acct-btn.ghost:hover { background: rgba(0,0,0,0.04); color: #000; }
+  body.light .acct-foot { color: rgba(0,0,0,0.4); }
+
+  /* ── Guest avatar variant + signed-in avatar peach ring ── */
+  .account-header-avatar.guest {
+    background: linear-gradient(135deg, #2a2a35, #1a1a22);
+    color: rgba(255,255,255,0.4);
+    box-shadow: none;
+  }
+  .account-header-avatar.guest::after { display: none; }
+  .user-avatar.signed-in {
+    box-shadow: 0 0 0 2px var(--peach-glow);
+  }
+
+  /* ── Primary CTA dropdown item (guest Sign In) ── */
+  .account-menu-item.primary {
+    background: linear-gradient(135deg, rgba(14,165,233,0.15), rgba(255,176,136,0.12));
+    border: 1px solid rgba(14,165,233,0.25);
+    color: #fff;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .account-menu-item.primary svg { color: var(--accent); }
+  .account-menu-item.primary:hover {
+    background: linear-gradient(135deg, rgba(14,165,233,0.28), rgba(255,176,136,0.2));
+    border-color: var(--accent);
+  }
+  .account-menu-item.primary::before { display: none; }
+  body.light .account-menu-item.primary {
+    background: linear-gradient(135deg, rgba(14,165,233,0.12), rgba(240,138,93,0.12));
+    border-color: rgba(14,165,233,0.3);
+    color: #0d0d12;
+  }
+</style>
+
+<!-- THEME TOGGLE -->
+<button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">
+  <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+</button>
+
+<!-- Config loaded as a global (window.CONFIG) before the main script -->
+<script src="config.js"></script>
+<script>
+// ── SIDEBAR (desktop collapse + mobile drawer) ──
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('collapsed');
+}
+function openMobileSidebar() {
+  document.getElementById('sidebar').classList.add('mobile-open');
+  document.getElementById('sidebar-backdrop').classList.add('show');
+}
+function closeMobileSidebar() {
+  document.getElementById('sidebar').classList.remove('mobile-open');
+  document.getElementById('sidebar-backdrop').classList.remove('show');
+}
+
+// ── PROMPT INPUT ──
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+}
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+// ── RATE LIMITING ──
+// AI chat: max 20 messages per hour per session
+const chatTimestamps=[];
+function checkChatLimit(){
+  const now=Date.now();
+  const recent=chatTimestamps.filter(t=>now-t<3600000);
+  if(recent.length>=20) return 'Rate limit: 20 messages/hour. Take a breather.';
+  chatTimestamps.push(now); return null;
+}
+
+// ── CHAT: BACKEND CALL ──
+// Calls /functions/chat (EdgeOne edge function) which proxies OpenRouter.
+// CONFIG is provided globally by config.js (window.CONFIG)
+// Works on EdgeOne deployment and local development
+// - Local: calls localhost:3000/functions/chat
+// - Production: calls /functions/chat (EdgeOne)
+const CHAT_ENDPOINT = CONFIG.chat;
+const MODEL = 'openrouter/auto';
+const history = [
+  { role: 'system', content: 'You are EconIntel, an economic-reasoning assistant. Be concise, structured, and ground claims in mechanisms (causes, channels, second-order effects). Avoid news-style summary.' }
+];
+
+function addMessage(role, content, opts = {}) {
+  const messages = document.getElementById('messages');
+  document.getElementById('chat-greeting').style.display = 'none';
+  document.getElementById('chat-greeting-sub').style.display = 'none';
+  messages.classList.add('has-messages');
+  const el = document.createElement('div');
+  el.className = 'msg ' + role + (opts.thinking ? ' thinking' : '') + (opts.error ? ' error' : '');
+  el.textContent = content;
+  messages.appendChild(el);
+  // Scroll into view inside the chat-content scroller
+  el.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  return el;
+}
+
+async function sendMessage() {
+  const input = document.getElementById('prompt-input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  // Check chat rate limit
+  const limitMsg = checkChatLimit();
+  if (limitMsg) {
+    addMessage('assistant', limitMsg, { error: true });
+    return;
+  }
+
+  input.value = ''; input.style.height = 'auto';
+
+  addMessage('user', text);
+  history.push({ role: 'user', content: text });
+
+  const thinkingEl = addMessage('assistant', '', { thinking: true });
+  thinkingEl.innerHTML = 'Thinking<span class="bouncing-dots"><span></span><span></span><span></span></span>';
+
+  try {
+    // Phase 6: Get CSRF token from sessionStorage
+    let csrfToken = sessionStorage.getItem('econintel:csrf');
+
+    // Build request headers with CSRF token
+    const headers = {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrfToken || ''
+    };
+
+    const res = await fetch(CHAT_ENDPOINT, {
+      method: 'POST',
+      headers: headers,
+      credentials: 'include', // Phase 6: Include cookies (access_token sent automatically)
+      body: JSON.stringify({ model: MODEL, messages: history })
+    });
+
+    // Handle authentication errors
+    if (res.status === 401) {
+      thinkingEl.remove();
+      addMessage('assistant',
+        'Your session has expired. Please sign in again.',
+        { error: true });
+      // Phase 6: Clear session and redirect to sign in
+      sessionStorage.removeItem('econintel:csrf');
+      sessionStorage.removeItem('econintel:user');
+      setTimeout(() => {
+        window.location.href = '/index.html';
+      }, 2000);
+      return;
+    }
+
+    // Phase 6: Handle CSRF token expiry (403 Forbidden)
+    if (res.status === 403) {
+      thinkingEl.remove();
+      addMessage('assistant',
+        'Session security check failed. Please refresh the page.',
+        { error: true });
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+      return;
+    }
+
+    // Handle rate limiting (quota exceeded)
+    if (res.status === 429) {
+      thinkingEl.remove();
+      const data = await res.json();
+      addMessage('assistant',
+        `You've exceeded your monthly query limit. ${data.error || 'Please try again next month or upgrade your plan.'}`,
+        { error: true });
+      return;
+    }
+
+    if (!res.ok) {
+      thinkingEl.remove();
+      const detail = await res.text().catch(() => '');
+      const errorMsg = res.status === 502
+        ? 'Backend service unavailable. Try again in a moment.'
+        : detail.slice(0, 200);
+      addMessage('assistant',
+        `Error ${res.status}: ${errorMsg}`,
+        { error: true });
+      return;
+    }
+
+    const data = await res.json();
+    const reply = data?.choices?.[0]?.message?.content
+      ?? data?.error?.message
+      ?? 'No response.';
+
+    thinkingEl.remove();
+    addMessage('assistant', reply);
+    history.push({ role: 'assistant', content: reply });
+
+    // Show quota info if available in response headers
+    const remaining = res.headers.get('X-Queries-Remaining');
+    const limit = res.headers.get('X-Queries-Limit');
+    if (remaining !== null && limit !== null) {
+      console.log(`📊 Quota: ${remaining}/${limit} queries remaining this month`);
+      // Optionally show this to user in UI
+    }
+  } catch (err) {
+    thinkingEl.remove();
+    addMessage('assistant',
+      `Network error: ${err.message}. Make sure /functions/chat is reachable.`,
+      { error: true });
+  }
+}
+
+function newChat() {
+  document.getElementById('messages').innerHTML = '';
+  document.getElementById('messages').classList.remove('has-messages');
+  document.getElementById('chat-greeting').style.display = '';
+  document.getElementById('chat-greeting-sub').style.display = '';
+  history.length = 1; // keep system prompt
+  const input = document.getElementById('prompt-input');
+  input.value = ''; input.style.height = 'auto'; input.focus();
+}
+
+// ── CHAT HISTORY MANAGEMENT ──
+// Phase 6: Load history from database and display it
+async function loadChatHistory() {
+  const user = getUser();
+  if (!user) return; // Not signed in
+
+  // Phase 6: Get CSRF token from sessionStorage
+  const csrfToken = sessionStorage.getItem('econintel:csrf');
+
+  try {
+    const res = await fetch(CONFIG.chatHistory.get + '&limit=50', {
+      method: 'GET',
+      headers: {
+        'X-CSRF-Token': csrfToken || ''
+      },
+      credentials: 'include' // Phase 6: Include access_token cookie
+    });
+
+    if (!res.ok) return;
+
+    const data = await res.json();
+    const messages = data.messages || [];
+
+    // Load messages in reverse order (oldest first)
+    const reversedMessages = messages.reverse();
+
+    for (const msg of reversedMessages) {
+      addMessage(msg.role, msg.content);
+      history.push({ role: msg.role, content: msg.content });
+    }
+  } catch (err) {
+    console.warn('[chat history] Failed to load:', err);
+  }
+}
+
+// Phase 6: Clear all chat history from database
+async function clearChatHistory() {
+  if (!getUser()) return;
+
+  if (!confirm('Delete all chat history? This cannot be undone.')) return;
+
+  try {
+    const csrfToken = sessionStorage.getItem('econintel:csrf');
+
+    const res = await fetch(CONFIG.chatHistory.delete, {
+      method: 'DELETE',
+      headers: {
+        'X-CSRF-Token': csrfToken || ''
+      },
+      credentials: 'include' // Phase 6: Include access_token cookie
+    });
+
+    if (res.ok) {
+      newChat();
+      console.log('✓ Chat history cleared');
+    } else {
+      alert('Failed to clear history');
+    }
+  } catch (err) {
+    console.warn('[chat history] Failed to delete:', err);
+    alert('Network error clearing history');
+  }
+}
+
+// Phase 6: Load recent chats for sidebar
+async function loadRecentChats() {
+  const user = getUser();
+  if (!user) {
+    const recentsEmpty = document.querySelector('.recents-empty');
+    if (recentsEmpty) recentsEmpty.textContent = 'Sign in to see history';
+    return;
+  }
+
+  const csrfToken = sessionStorage.getItem('econintel:csrf');
+
+  try {
+    const res = await fetch(CONFIG.chatHistory.get + '&limit=20', {
+      method: 'GET',
+      headers: {
+        'X-CSRF-Token': csrfToken || ''
+      },
+      credentials: 'include' // Phase 6: Include access_token cookie
+    });
+
+    if (!res.ok) return;
+
+    const data = await res.json();
+    const userMessages = data.messages.filter(m => m.role === 'user');
+
+    const recentsContainer = document.querySelector('.recents-empty');
+    if (userMessages.length > 0 && recentsContainer) {
+      const recentsList = userMessages
+        .slice(0, 8)
+        .map(msg => {
+          const preview = msg.content.substring(0, 35) + (msg.content.length > 35 ? '…' : '');
+          const date = new Date(msg.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          return `<div class="recent-chat-item" title="${msg.content}"><span class="recent-preview">${preview}</span><span class="recent-date">${date}</span></div>`;
+        })
+        .join('');
+      recentsContainer.innerHTML = recentsList;
+      recentsContainer.classList.add('has-recents');
+    }
+  } catch (err) {
+    console.warn('[recents] Failed to load:', err);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//                          AUTH STATE
+// ════════════════════════════════════════════════════════════════════
+// Phase 6: User info in sessionStorage (survives reload within same session)
+// User shape: { name, email, username, plan, signedInAt }
+
+const USER_KEY = 'econintel:user';
+
+function getUser() {
+  try { return JSON.parse(sessionStorage.getItem(USER_KEY) || 'null'); }
+  catch { return null; }
+}
+function setUser(u) {
+  sessionStorage.setItem(USER_KEY, JSON.stringify(u));
+  refreshAvatar();
+}
+function clearUser() {
+  sessionStorage.removeItem(USER_KEY);
+  sessionStorage.removeItem('econintel:csrf');
+  refreshAvatar();
+}
+function initialsOf(name) {
+  if (!name) return '··';
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || name[0].toUpperCase();
+}
+function refreshAvatar() {
+  const av = document.getElementById('user-avatar');
+  if (!av) return;
+  const u = getUser();
+  av.textContent = u ? initialsOf(u.name) : '··';
+  av.classList.toggle('signed-in', !!u);
+}
+
+// ════════════════════════════════════════════════════════════════════
+//                      ACCOUNT DROPDOWN (dynamic)
+// ════════════════════════════════════════════════════════════════════
+// Re-renders each time it opens so it always reflects current auth state.
+
+const ICON = {
+  user:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
+  edit:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
+  settings:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+  billing: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>`,
+  home:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
+  signin:  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>`,
+  signout: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
+};
+
+function renderAccountMenu() {
+  const menu = document.getElementById('account-menu');
+  const u = getUser();
+  if (u) {
+    // ─── signed in ───
+    menu.innerHTML = `
+      <div class="account-header">
+        <div class="account-header-avatar">${initialsOf(u.name)}</div>
+        <div class="account-header-info">
+          <div class="account-header-name">${escapeHTML(u.name)}</div>
+          <div class="account-header-email">${escapeHTML(u.email)}</div>
+        </div>
+      </div>
+      <button class="account-menu-item" onclick="openAccountModal('edit')">
+        ${ICON.edit} Edit Profile
+      </button>
+      <button class="account-menu-item" onclick="openAccountModal('settings')">
+        ${ICON.settings} Settings
+      </button>
+      <a href="index.html#pricing" class="account-menu-item">
+        ${ICON.billing} Billing &amp; Plan
+      </a>
+      <a href="index.html" class="account-menu-item">
+        ${ICON.home} Back to Landing
+      </a>
+      <div class="account-menu-divider"></div>
+      <button class="account-menu-item danger" onclick="signOut()">
+        ${ICON.signout} Sign Out
+      </button>`;
+  } else {
+    // ─── guest ───
+    menu.innerHTML = `
+      <div class="account-header guest">
+        <div class="account-header-avatar guest">··</div>
+        <div class="account-header-info">
+          <div class="account-header-name">Not signed in</div>
+          <div class="account-header-email">Sign in to save your chats</div>
+        </div>
+      </div>
+      <button class="account-menu-item primary" onclick="openAccountModal('signin')">
+        ${ICON.signin} Sign In
+      </button>
+      <button class="account-menu-item" onclick="openAccountModal('settings')">
+        ${ICON.settings} Settings
+      </button>
+      <a href="index.html#pricing" class="account-menu-item">
+        ${ICON.billing} Pricing
+      </a>
+      <a href="index.html" class="account-menu-item">
+        ${ICON.home} Back to Landing
+      </a>`;
+  }
+}
+
+function toggleAccountMenu(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('account-menu');
+  if (!menu.classList.contains('open')) renderAccountMenu();
+  menu.classList.toggle('open');
+}
+document.addEventListener('click', () => {
+  document.getElementById('account-menu')?.classList.remove('open');
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.getElementById('account-menu')?.classList.remove('open');
+    document.getElementById('acct-modal')?.classList.remove('open');
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════
+//                      ACCOUNT MODAL (multi-mode)
+// ════════════════════════════════════════════════════════════════════
+
+function escapeHTML(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function openAccountModal(which) {
+  document.getElementById('account-menu').classList.remove('open');
+  const title = document.getElementById('acct-modal-title');
+  const body  = document.getElementById('acct-modal-body');
+  const u = getUser();
+
+  if (which === 'signin') {
+    title.textContent = 'Sign in to EconIntel';
+    body.innerHTML = `
+      <form onsubmit="handleSignIn(event)" class="acct-form">
+        <label class="acct-label">Name</label>
+        <input class="acct-input" id="si-name" required placeholder="Jane Analyst" autocomplete="name"/>
+        <label class="acct-label">Email</label>
+        <input class="acct-input" id="si-email" type="email" required placeholder="jane@firm.com" autocomplete="email"/>
+        <div style="text-align: right; margin-top: 0.5rem; margin-bottom: 1rem;">
+          <a href="#" style="font-size: 0.75rem; color: #0ea5e9; text-decoration: none;">Forgot password?</a>
+        </div>
+        <button class="acct-btn acct-btn-full" type="submit">Continue</button>
+        <p class="acct-foot">No password needed for the prototype. Your details stay in this browser.</p>
+      </form>`;
+  } else if (which === 'edit') {
+    if (!u) return openAccountModal('signin');
+    title.textContent = 'Edit Profile';
+    body.innerHTML = `
+      <form onsubmit="handleEditProfile(event)" class="acct-form">
+        <label class="acct-label">Display name</label>
+        <input class="acct-input" id="ep-name" required value="${escapeHTML(u.name)}"/>
+        <label class="acct-label">Username</label>
+        <div class="acct-input-pre">
+          <span class="acct-input-at">@</span>
+          <input class="acct-input pl" id="ep-username" value="${escapeHTML(u.username || u.email.split('@')[0])}" pattern="[a-zA-Z0-9_]{2,24}" required/>
+        </div>
+        <label class="acct-label">Email</label>
+        <input class="acct-input" id="ep-email" type="email" required value="${escapeHTML(u.email)}"/>
+        <div class="acct-actions">
+          <button type="button" class="acct-btn ghost" onclick="closeAccountModal()">Cancel</button>
+          <button type="submit" class="acct-btn">Save changes</button>
+        </div>
+      </form>`;
+  } else if (which === 'settings') {
+    const isLight = document.body.classList.contains('light');
+    title.textContent = 'Settings';
+    const clearHistoryBtn = u
+      ? `<button class="acct-btn" style="margin:0;background:#f87171" onclick="clearChatHistory(); closeAccountModal();">Delete All</button>`
+      : `<span class="acct-row-value">Sign in to save chats</span>`;
+    body.innerHTML = `
+      <div class="acct-row">
+        <span class="acct-row-label">Theme</span>
+        <button class="acct-btn" style="margin:0" onclick="toggleTheme(); openAccountModal('settings');">${isLight ? 'Switch to Dark' : 'Switch to Light'}</button>
+      </div>
+      <div class="acct-row">
+        <span class="acct-row-label">Model</span>
+        <span class="acct-row-value">${MODEL}</span>
+      </div>
+      <div class="acct-row">
+        <span class="acct-row-label">Chat history</span>
+        ${clearHistoryBtn}
+      </div>`;
+  }
+  document.getElementById('acct-modal').classList.add('open');
+}
+
+function closeAccountModal(e) {
+  if (e && e.target.id !== 'acct-modal' && e.type === 'click') return;
+  document.getElementById('acct-modal').classList.remove('open');
+}
+
+function handleSignIn(e) {
+  e.preventDefault();
+  const name  = document.getElementById('si-name').value.trim();
+  const email = document.getElementById('si-email').value.trim().toLowerCase();
+  if (!name || !email) return;
+  setUser({
+    name,
+    email,
+    username: email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_'),
+    plan: 'Free',
+    signedInAt: new Date().toISOString()
+  });
+  closeAccountModal();
+}
+
+function handleEditProfile(e) {
+  e.preventDefault();
+  const u = getUser() || {};
+  setUser({
+    ...u,
+    name:     document.getElementById('ep-name').value.trim(),
+    username: document.getElementById('ep-username').value.trim(),
+    email:    document.getElementById('ep-email').value.trim().toLowerCase()
+  });
+  closeAccountModal();
+}
+
+async function signOut() {
+  // Phase 6: Call /auth/logout endpoint to invalidate session
+  const csrfToken = sessionStorage.getItem('econintel:csrf');
+  if (csrfToken) {
+    try {
+      await fetch(CONFIG.auth.logout, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken
+        },
+        credentials: 'include' // Send access_token cookie
+      });
+    } catch (err) {
+      console.warn('[logout] Failed to call server:', err);
+      // Continue anyway - clear local state
+    }
+  }
+
+  clearUser();
+  // Stay on the page rather than redirect — user can keep using chat as guest.
+  // (Use Back to Landing if they want to leave.)
+}
+
+// Initial avatar sync on load (also picks up sign-ins done on the landing page)
+refreshAvatar();
+// Phase 6: Listen for sessionStorage changes (user signs in from landing page)
+window.addEventListener('storage', e => {
+  if (e.key === USER_KEY || e.key === 'econintel:csrf') {
+    refreshAvatar();
+    loadRecentChats();
+  }
+});
+
+// Load chat history and recent chats on page load
+window.addEventListener('load', () => {
+  loadRecentChats();
+  setTimeout(() => {
+    loadChatHistory();
+  }, 300); // Small delay to ensure auth is set up
+});
+
+// ── MOBILE MENU ──
+function openMobileSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const app = document.querySelector('.app');
+  sidebar.classList.add('mobile-hidden', 'open');
+  app.classList.add('mobile-menu-open');
+}
+
+function closeMobileSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const app = document.querySelector('.app');
+  sidebar.classList.remove('open');
+  app.classList.remove('mobile-menu-open');
+  setTimeout(() => {
+    sidebar.classList.remove('mobile-hidden');
+  }, 300);
+}
+
+// Close menu when clicking outside
+document.addEventListener('click', (e) => {
+  const sidebar = document.getElementById('sidebar');
+  const hamburger = document.querySelector('.hamburger');
+  if (sidebar && sidebar.classList.contains('mobile-hidden') &&
+      !sidebar.contains(e.target) && !hamburger.contains(e.target)) {
+    closeMobileSidebar();
+  }
+});
+
+// ── THEME TOGGLE ──
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  localStorage.setItem('theme', isLight ? 'light' : 'dark');
+}
+(function initTheme() {
+  if (localStorage.getItem('theme') === 'light') document.body.classList.add('light');
+})();
+
+// ── THREE.JS SHADER GRADIENT (ANIMATED) ──
+(function initShaderGradient() {
+  const canvas = document.getElementById('shader-gradient-canvas');
+  if (!canvas || !window.THREE) return;
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setClearColor(0x000000, 1);
+  camera.position.set(-0.5, 0.1, 3.9);
+  camera.lookAt(0, 0, 0);
+
+  const vertexShader = `
+    varying vec2 vUv;
+    varying vec3 vPos;
+    uniform float uTime;
+
+    void main() {
+      vUv = uv;
+      vec3 pos = position;
+      pos.z += sin(uTime * 0.3 + pos.x * 2.0) * 0.2;
+      pos.y += cos(uTime * 0.25 + pos.y * 1.5) * 0.15;
+      vPos = pos;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+    }
+  `;
+
+  const fragmentShader = `
+    varying vec2 vUv;
+    varying vec3 vPos;
+    uniform float uTime;
+
+    void main() {
+      // Base colors: #5606ff -> #3d40fe -> #000000
+      vec3 color1 = vec3(0.337, 0.024, 1.0);      // #5606ff
+      vec3 color2 = vec3(0.239, 0.251, 0.996);    // #3d40fe
+      vec3 color3 = vec3(0.0, 0.0, 0.0);          // #000000
+
+      // Animated time-based mixing
+      float t = sin(uTime * 0.4 + vUv.x * 3.0) * 0.5 + 0.5;
+      float s = cos(uTime * 0.3 + vUv.y * 2.5) * 0.5 + 0.5;
+
+      // Mix colors with animation
+      vec3 mixed = mix(color1, color2, t);
+      mixed = mix(mixed, color3, s * 0.6);
+
+      // Add wave distortion
+      float wave = sin(vUv.x * 5.0 - uTime * 0.8) * 0.1;
+      wave += cos(vUv.y * 4.0 - uTime * 0.6) * 0.08;
+
+      mixed += vec3(wave * 0.3);
+
+      // Brightness boost
+      mixed *= 1.1;
+
+      gl_FragColor = vec4(mixed, 1.0);
+    }
+  `;
+
+  const material = new THREE.ShaderMaterial({
+    vertexShader,
+    fragmentShader,
+    uniforms: {
+      uTime: { value: 0 },
+      uFrequency: { value: 5.5 },
+      uAmplitude: { value: 0.3 }
+    },
+    side: THREE.DoubleSide
+  });
+
+  const geometry = new THREE.PlaneGeometry(8, 6, 64, 64);
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.z = -1;
+  scene.add(mesh);
+
+  let time = 0;
+  function animate() {
+    requestAnimationFrame(animate);
+    time += 0.016;
+    material.uniforms.uTime.value = time;
+    renderer.render(scene, camera);
+  }
+
+  window.addEventListener('resize', () => {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+  });
+
+  animate();
+})();
+</script>
+
+</body>
+</html>

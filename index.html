@@ -1,0 +1,2235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EconIntel — Economics, Reimagined by AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet" />
+<!-- Spline 3D viewer -->
+<script type="module" src="https://unpkg.com/@splinetool/viewer@1.9.82/build/spline-viewer.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #050508;
+    --bg2: #0a0a10;
+    --bg3: #0d0d14;
+    --accent: #0ea5e9;
+    --accent2: #6366f1;
+    --accent3: #8b5cf6;
+    --text: #f0f0f5;
+    --text2: #8888a8;
+    --border: rgba(255,255,255,0.07);
+    --glow: rgba(14,165,233,0.35);
+  }
+
+  html { scroll-behavior: smooth; }
+
+  /* ── ANIMATED GRADIENT BACKGROUND ── */
+  @keyframes gradientShift {
+    0% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+
+  @keyframes gradientRotate {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  body {
+    position: relative;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    overflow-x: hidden;
+    line-height: 1.6;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: -1;
+    background: linear-gradient(
+      135deg,
+      #050508 0%,
+      #1a1a2e 25%,
+      #0f3460 50%,
+      #16213e 75%,
+      #050508 100%
+    );
+    background-size: 200% 200%;
+    animation: gradientShift 30s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: -1;
+    background:
+      radial-gradient(circle at 20% 50%, rgba(96, 96, 128, 0.15) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(141, 125, 202, 0.12) 0%, transparent 50%);
+    animation: gradientShift 40s ease-in-out infinite reverse;
+    pointer-events: none;
+  }
+
+  /* ── NAV (HextaUI floating pill) ── */
+  .nav-wrap {
+    position: fixed; top: 1.25rem; left: 0; right: 0;
+    display: flex; justify-content: center;
+    z-index: 100; padding: 0 1rem;
+  }
+
+  nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.6rem 1.25rem;
+    width: 100%; max-width: 780px;
+    background: rgba(10,10,18,0.85);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 9999px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    transition: background 0.3s;
+  }
+
+  .nav-logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800; font-size: 1rem;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, #fff 30%, var(--accent));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    display: flex; align-items: center; gap: 0.5rem;
+    text-decoration: none;
+  }
+
+  /* Chart icon with theme-aware colors */
+  .nav-logo-chart {
+    width: 18px; height: 18px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .nav-logo-chart svg {
+    width: 100%;
+    height: 100%;
+    color: var(--accent);
+    transition: color 0.3s;
+  }
+  nav:hover .nav-logo-chart svg { color: #fff; }
+
+  .nav-links { display: flex; gap: 1.75rem; list-style: none; }
+  .nav-links a {
+    color: rgba(255,255,255,0.55); text-decoration: none; font-size: 0.85rem;
+    font-weight: 500; letter-spacing: 0.01em;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: #fff; }
+
+  .nav-actions { display: flex; align-items: center; gap: 0.5rem; }
+
+  .nav-signin {
+    background: #fff; color: #000;
+    padding: 0.45rem 1.1rem; border-radius: 9999px;
+    font-size: 0.82rem; font-weight: 700;
+    text-decoration: none; letter-spacing: 0.01em;
+    border: none;
+    transition: background 0.2s, transform 0.2s;
+    white-space: nowrap;
+  }
+  .nav-signin:hover { background: var(--accent); color: #000; transform: scale(1.04); }
+
+  .nav-cta {
+    background: #fff; color: #000;
+    padding: 0.45rem 1.1rem; border-radius: 9999px;
+    font-size: 0.82rem; font-weight: 700;
+    text-decoration: none; letter-spacing: 0.01em;
+    transition: background 0.2s, transform 0.2s;
+    white-space: nowrap;
+  }
+  .nav-cta:hover { background: var(--accent); color: #000; transform: scale(1.04); }
+
+  /* Mobile hamburger */
+  .nav-hamburger {
+    display: none; background: none; border: none; cursor: pointer;
+    padding: 0.25rem; color: #fff;
+  }
+  .nav-hamburger svg { width: 20px; height: 20px; }
+
+  .nav-mobile-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(5,5,8,0.97); z-index: 200;
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 2rem;
+  }
+  .nav-mobile-overlay.open { display: flex; }
+  .nav-mobile-overlay a {
+    color: #fff; font-size: 1.5rem; font-weight: 700;
+    text-decoration: none; font-family: 'Syne', sans-serif;
+  }
+  .nav-mobile-close {
+    position: absolute; top: 1.5rem; right: 1.5rem;
+    background: none; border: none; color: #fff; cursor: pointer; font-size: 1.5rem;
+  }
+
+  @media (max-width: 640px) {
+    .nav-links, .nav-cta { display: none; }
+    .nav-hamburger { display: flex; }
+  }
+
+  /* ── SECTION 1: HERO ── */
+  #hero {
+    position: relative;
+    min-height: 100vh;
+    display: flex; align-items: center;
+    padding: 110px 2.5rem 0;
+    overflow: clip;
+  }
+
+  #hero-spotlight {
+    position: absolute; inset: 0; pointer-events: none; z-index: 0;
+    background: radial-gradient(600px circle at var(--mx, 50%) var(--my, 40%),
+      rgba(14,165,233,0.12) 0%, rgba(99,102,241,0.05) 40%, transparent 70%);
+    transition: background 0.05s;
+  }
+
+  .hero-grid {
+    position: relative; z-index: 1;
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 3rem; align-items: center;
+    max-width: 1280px; margin: 0 auto; width: 100%;
+  }
+
+  .hero-left {
+    align-self: center;
+    padding-top: 3rem;
+    transform: translateX(-15px);
+  }
+
+  /* Spline 3D Robot */
+  .hero-robot-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: calc(100vh - 130px);
+    min-height: 640px;
+    overflow: visible;
+    will-change: transform;
+  }
+
+  .hero-robot-wrap spline-viewer {
+    width: calc(100% + 11rem);
+    height: 100%;
+    margin-left: -2.5rem;
+    --spline-viewer-bg: transparent;
+  }
+
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    background: rgba(14,165,233,0.1); border: 1px solid rgba(14,165,233,0.3);
+    border-radius: 100px; padding: 0.35rem 0.9rem;
+    font-size: 0.78rem; font-weight: 500; color: var(--accent);
+    letter-spacing: 0.05em; text-transform: uppercase;
+    margin-bottom: 1.5rem;
+  }
+  .hero-badge span { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse-dot 2s infinite; }
+
+  @keyframes pulse-dot {
+    0%,100% { opacity:1; transform:scale(1); }
+    50% { opacity:0.4; transform:scale(1.4); }
+  }
+
+  .hero-heading {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(3.25rem, 6.5vw, 5.5rem);
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    margin-bottom: 1.5rem;
+  }
+
+  .hero-heading em {
+    font-style: normal;
+    background: linear-gradient(120deg, var(--accent) 0%, var(--accent3) 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+
+  .hero-sub {
+    font-size: 1.05rem; color: var(--text2);
+    max-width: 440px; margin-bottom: 2.5rem;
+    font-weight: 300; line-height: 1.7;
+  }
+
+  .hero-btns { display: flex; gap: 1rem; flex-wrap: wrap; }
+
+  .btn-primary {
+    background: var(--accent); color: #000;
+    padding: 0.85rem 2rem; border-radius: 10px;
+    font-size: 0.95rem; font-weight: 600;
+    text-decoration: none; letter-spacing: 0.01em;
+    transition: box-shadow 0.3s, transform 0.2s;
+  }
+  .btn-primary:hover {
+    box-shadow: 0 0 32px rgba(14,165,233,0.5);
+    transform: translateY(-2px);
+  }
+
+  .btn-secondary {
+    background: rgba(255,255,255,0.05); color: var(--text);
+    padding: 0.85rem 2rem; border-radius: 10px;
+    font-size: 0.95rem; font-weight: 500;
+    text-decoration: none; border: 1px solid var(--border);
+    transition: background 0.2s, transform 0.2s;
+  }
+  .btn-secondary:hover { background: rgba(255,255,255,0.09); transform: translateY(-2px); }
+
+  @keyframes earthRotate {
+    0%   { background-position: 0 0; }
+    100% { background-position: 400px 0; }
+  }
+
+  /* Grid dots behind hero */
+  .hero-dots {
+    position: absolute; inset: 0; z-index: 0; opacity: 0.18;
+    background-image: radial-gradient(circle, #444 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black, transparent);
+  }
+
+
+  /* ── SECTION 2: GLOW CARDS ── */
+  #cards {
+    padding: 7rem 2.5rem;
+    background: var(--bg2);
+    position: relative;
+    overflow: hidden;
+    contain: paint;
+  }
+
+  #cards::before {
+    content: '';
+    position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 600px; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.4;
+  }
+
+  .section-label {
+    text-align: center;
+    font-size: 0.78rem; font-weight: 600; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--accent);
+    margin-bottom: 1rem;
+  }
+
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(1.8rem, 3.5vw, 2.75rem);
+    font-weight: 800;
+    text-align: center;
+    letter-spacing: -0.03em;
+    margin-bottom: 1rem;
+  }
+
+  .section-sub {
+    text-align: center;
+    color: var(--text2); font-size: 1rem; font-weight: 300;
+    max-width: 520px; margin: 0 auto 4rem;
+  }
+
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    max-width: 1100px; margin: 0 auto;
+  }
+
+  .glow-card {
+    position: relative;
+    border-radius: 20px;
+    padding: 2rem;
+    background: rgba(13,13,20,0.7);
+    backdrop-filter: blur(10px);
+    cursor: default;
+    overflow: hidden;
+    transition: transform 0.3s;
+  }
+
+  .glow-card:hover { transform: translateY(-4px); }
+
+  /* The glow border using --x --y custom props */
+  .glow-card::before,
+  .glow-card::after {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 22px;
+    pointer-events: none;
+    background-attachment: fixed;
+    background-size: calc(100% + 4px) calc(100% + 4px);
+    background-repeat: no-repeat;
+    background-position: 50% 50%;
+  }
+
+  .glow-card::before {
+    background-image: radial-gradient(
+      280px 280px at calc(var(--x, -9999) * 1px) calc(var(--y, -9999) * 1px),
+      rgba(14,165,233,0.8),
+      transparent 100%
+    );
+    mask: linear-gradient(transparent, transparent), linear-gradient(white, white);
+    mask-clip: padding-box, border-box;
+    mask-composite: exclude;
+    -webkit-mask: linear-gradient(transparent, transparent), linear-gradient(white, white);
+    -webkit-mask-clip: padding-box, border-box;
+    -webkit-mask-composite: destination-out;
+    border: 2px solid transparent;
+    filter: brightness(1.5);
+    opacity: 0;
+    transition: opacity 0.4s;
+  }
+
+  .glow-card:hover::before { opacity: 1; }
+
+  .glow-card::after {
+    background-image: radial-gradient(
+      200px 200px at calc(var(--x, -9999) * 1px) calc(var(--y, -9999) * 1px),
+      rgba(255,255,255,0.15),
+      transparent 100%
+    );
+    mask: linear-gradient(transparent, transparent), linear-gradient(white, white);
+    mask-clip: padding-box, border-box;
+    mask-composite: exclude;
+    -webkit-mask: linear-gradient(transparent, transparent), linear-gradient(white, white);
+    -webkit-mask-clip: padding-box, border-box;
+    -webkit-mask-composite: destination-out;
+    border: 2px solid transparent;
+    opacity: 0;
+    transition: opacity 0.4s;
+  }
+
+  .glow-card:hover::after { opacity: 1; }
+
+  /* Static border always visible */
+  .glow-card-inner {
+    position: absolute; inset: 0;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.07);
+    pointer-events: none;
+  }
+
+  .card-icon {
+    width: 52px; height: 52px;
+    border-radius: 14px;
+    background: rgba(14,165,233,0.1);
+    border: 1px solid rgba(14,165,233,0.2);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 1.5rem;
+  }
+
+  .card-icon svg { width: 24px; height: 24px; }
+
+  .card-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.15rem; font-weight: 700;
+    letter-spacing: -0.01em;
+    margin-bottom: 0.75rem;
+  }
+
+  .card-desc {
+    color: var(--text2); font-size: 0.9rem;
+    line-height: 1.65; font-weight: 300;
+  }
+
+  .card-tag {
+    display: inline-flex; align-items: center;
+    margin-top: 1.5rem;
+    font-size: 0.75rem; font-weight: 600;
+    color: var(--accent); letter-spacing: 0.05em;
+    text-transform: uppercase;
+    gap: 0.4rem;
+  }
+
+  .card-tag::after {
+    content: '→';
+    transition: transform 0.2s;
+  }
+
+  .glow-card:hover .card-tag::after { transform: translateX(4px); }
+
+
+  footer {
+    padding: 2rem 2.5rem;
+    border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--bg);
+    font-size: 0.8rem; color: var(--text2);
+  }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .hero-grid { grid-template-columns: 1fr; }
+    .cards-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ── CRISIS ANALOGUES ── */
+  #crises {
+    padding: 7rem 2.5rem;
+    background: var(--bg2);
+    position: relative;
+    contain: paint;
+  }
+  #crises::before {
+    content: '';
+    position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 600px; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.35;
+  }
+
+  .crisis-title {
+    text-align: left;
+    font-size: clamp(2.4rem, 5vw, 3.5rem);
+    margin-bottom: 3rem;
+  }
+
+  .crisis-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    width: 100%;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .crisis-card {
+    padding: 2rem 1.75rem;
+    background: rgba(8,12,22,0.9);
+    border-right: 1px solid rgba(255,255,255,0.07);
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    transition: background 0.25s;
+  }
+  .crisis-card:hover { background: rgba(14,165,233,0.04); }
+  .crisis-card:nth-child(3n) { border-right: none; }
+  .crisis-card:nth-last-child(-n+3) { border-bottom: none; }
+
+  .crisis-meta {
+    font-size: 0.72rem; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 0.75rem;
+  }
+
+  .crisis-name {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.2rem; font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--text);
+    margin-bottom: 0.75rem;
+  }
+
+  .crisis-desc {
+    font-size: 0.875rem; font-weight: 300;
+    color: var(--text2); line-height: 1.65;
+    margin-bottom: 1.25rem;
+  }
+
+  .crisis-tags { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+  .crisis-tag {
+    font-size: 0.68rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text2);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 4px;
+    padding: 0.25rem 0.55rem;
+    background: rgba(255,255,255,0.03);
+  }
+
+  /* ── SOURCES ── */
+  #sources {
+    padding: 7rem 2.5rem;
+    background: var(--bg);
+    position: relative;
+  }
+  #sources::before {
+    content: '';
+    position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 600px; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(99,102,241,0.5), transparent);
+    opacity: 0.4;
+  }
+
+  .sources-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    width: 100%;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-top: 1rem;
+  }
+
+  .source-card {
+    background: rgba(8,12,22,0.9);
+    padding: 2rem 2rem;
+    display: flex; align-items: center; gap: 1.25rem;
+    transition: background 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .source-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0;
+    width: 3px; height: 100%;
+    background: var(--accent);
+    opacity: 0;
+    transition: opacity 0.25s;
+  }
+  .source-card:hover { background: rgba(14,165,233,0.05); }
+  .source-card:hover::before { opacity: 1; }
+
+  .source-card-num {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.6rem; font-weight: 800;
+    color: rgba(14,165,233,0.15);
+    letter-spacing: -0.04em; line-height: 1;
+    flex-shrink: 0; min-width: 40px;
+    transition: color 0.25s;
+  }
+  .source-card:hover .source-card-num { color: rgba(14,165,233,0.4); }
+
+  .source-card-name {
+    font-size: 1rem; font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+  .source-card-sub {
+    font-size: 0.78rem; color: var(--text2);
+    margin-top: 0.2rem; font-weight: 300;
+  }
+
+  /* ── PRICING ── */
+  #pricing {
+    padding: 7rem 2.5rem;
+    background: var(--bg2);
+    position: relative;
+    content-visibility: auto;
+  }
+  #pricing::before {
+    content: '';
+    position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 600px; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.3;
+  }
+
+  .pricing-toggle {
+    display: flex; align-items: center; justify-content: center;
+    gap: 0.75rem; margin-bottom: 3.5rem;
+  }
+  .pricing-toggle-label {
+    font-size: 0.85rem; font-weight: 500; color: var(--text2);
+  }
+  .pricing-toggle-label.active { color: var(--text); }
+  .toggle-switch {
+    width: 44px; height: 24px;
+    background: var(--accent); border-radius: 9999px;
+    position: relative; cursor: pointer; border: none;
+    transition: background 0.2s; flex-shrink: 0;
+  }
+  .toggle-switch::after {
+    content: '';
+    position: absolute; top: 3px; left: 3px;
+    width: 18px; height: 18px;
+    background: #fff; border-radius: 50%;
+    transition: transform 0.25s;
+  }
+  .toggle-switch.annual::after { transform: translateX(20px); }
+  .pricing-save {
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em;
+    background: rgba(14,165,233,0.15); color: var(--accent);
+    border: 1px solid rgba(14,165,233,0.3);
+    border-radius: 9999px; padding: 0.2rem 0.55rem;
+    text-transform: uppercase;
+  }
+
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    width: 100%;
+  }
+
+  .pricing-card {
+    background: rgba(10,10,18,0.8);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px; padding: 2rem;
+    position: relative; display: flex; flex-direction: column;
+    transition: border-color 0.25s, transform 0.25s;
+  }
+  .pricing-card:hover { transform: translateY(-4px); border-color: rgba(255,255,255,0.16); }
+  .pricing-card.popular {
+    border-color: var(--accent);
+    box-shadow: 0 0 40px rgba(14,165,233,0.12);
+  }
+  .pricing-card.popular:hover { box-shadow: 0 0 60px rgba(14,165,233,0.2); }
+
+  .pricing-popular-badge {
+    position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+    background: var(--accent); color: #000;
+    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; padding: 0.3rem 0.9rem; border-radius: 9999px;
+    white-space: nowrap;
+  }
+
+  .pricing-tier {
+    font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 0.5rem;
+  }
+  .pricing-desc {
+    font-size: 0.85rem; color: var(--text2); font-weight: 300;
+    margin-bottom: 1.75rem; line-height: 1.5;
+  }
+
+  .pricing-price {
+    display: flex; align-items: flex-end; gap: 0.25rem;
+    margin-bottom: 0.5rem;
+  }
+  .pricing-currency {
+    font-family: 'Syne', sans-serif; font-size: 1.1rem;
+    font-weight: 700; color: var(--text2);
+    margin-bottom: 0.4rem;
+  }
+  .pricing-amount {
+    font-family: 'Syne', sans-serif;
+    font-size: 3rem; font-weight: 800; line-height: 1;
+    letter-spacing: -0.04em; color: var(--text);
+  }
+  .pricing-period {
+    font-size: 0.8rem; color: var(--text2); margin-bottom: 0.3rem;
+  }
+
+  .pricing-divider {
+    height: 1px; background: rgba(255,255,255,0.07);
+    margin: 1.5rem 0;
+  }
+
+  .pricing-features { list-style: none; display: flex; flex-direction: column; gap: 0.75rem; flex: 1; }
+  .pricing-feature {
+    display: flex; align-items: flex-start; gap: 0.65rem;
+    font-size: 0.875rem; color: var(--text2); line-height: 1.4;
+  }
+  .pricing-feature .check {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: rgba(14,165,233,0.15); color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.6rem; flex-shrink: 0; margin-top: 1px;
+    font-weight: 900;
+  }
+  .pricing-feature.has { color: var(--text); }
+
+  .pricing-btn {
+    margin-top: 2rem; padding: 0.85rem;
+    border-radius: 10px; text-align: center;
+    font-size: 0.9rem; font-weight: 700;
+    text-decoration: none; display: block;
+    transition: opacity 0.2s, transform 0.2s;
+    letter-spacing: 0.01em;
+  }
+  .pricing-btn-outline {
+    border: 1px solid rgba(255,255,255,0.15); color: var(--text);
+    background: transparent;
+  }
+  .pricing-btn-outline:hover { border-color: rgba(255,255,255,0.35); transform: translateY(-1px); }
+  .pricing-btn-primary {
+    background: var(--accent); color: #000;
+  }
+  .pricing-btn-primary:hover { opacity: 0.85; transform: translateY(-1px); }
+
+  @media (max-width: 900px) {
+    .pricing-grid { grid-template-columns: 1fr; max-width: 420px; margin: 0 auto; }
+    .sources-grid { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 540px) { .sources-grid { grid-template-columns: 1fr; } }
+
+  /* ── CONTACT & FAQ ── */
+  #contact {
+    padding: 7rem 2.5rem;
+    background: var(--bg);
+    position: relative;
+    content-visibility: auto;
+  }
+  #contact::before {
+    content: '';
+    position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 600px; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(139,92,246,0.5), transparent);
+    opacity: 0.4;
+  }
+
+  .contact-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4rem;
+    width: 100%;
+    align-items: start;
+  }
+
+  .contact-box {
+    background: rgba(10,10,18,0.8);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px; padding: 2.5rem;
+  }
+  .contact-email-link {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    font-family: 'Syne', sans-serif;
+    font-size: 1rem; font-weight: 700;
+    color: var(--accent); text-decoration: none;
+    margin-top: 0.75rem;
+    transition: gap 0.2s;
+  }
+  .contact-email-link:hover { gap: 0.75rem; }
+
+  .faq-list { display: flex; flex-direction: column; gap: 0; }
+
+  .faq-item {
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    overflow: hidden;
+  }
+  .faq-item:first-child { border-top: 1px solid rgba(255,255,255,0.07); }
+
+  .faq-q {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 1.25rem 0; cursor: pointer;
+    font-size: 0.95rem; font-weight: 600; color: var(--text);
+    gap: 1rem; user-select: none;
+  }
+  .faq-q-icon {
+    font-size: 1.2rem; color: var(--accent); flex-shrink: 0;
+    transition: transform 0.3s; display: inline-block;
+  }
+  .faq-item.open .faq-q-icon { transform: rotate(45deg); }
+
+  .faq-a {
+    max-height: 0; overflow: hidden;
+    transition: max-height 0.35s ease, padding 0.35s ease;
+    font-size: 0.875rem; color: var(--text2); line-height: 1.7;
+    font-weight: 300; padding: 0;
+  }
+  .faq-item.open .faq-a {
+    max-height: 200px;
+    padding-bottom: 1.25rem;
+  }
+
+  @media (max-width: 800px) {
+    .contact-grid { grid-template-columns: 1fr; gap: 2.5rem; }
+  }
+
+  @media (max-width: 900px) {
+    .crisis-grid { grid-template-columns: 1fr; }
+    .crisis-card { border-right: none; }
+    .crisis-card:nth-last-child(-n+3) { border-bottom: 1px solid rgba(255,255,255,0.07); }
+    .crisis-card:last-child { border-bottom: none; }
+  }
+
+  /* ── GLOBE COVERAGE SECTION ── */
+  #globe-coverage {
+    padding: 10rem 2.5rem 7rem;
+    background: var(--bg2);
+    position: relative;
+    overflow: hidden;
+    contain: paint;
+  }
+  #globe-coverage::before {
+    content: '';
+    position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 600px; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.4;
+  }
+  .globe-coverage-inner {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4rem;
+    align-items: center;
+    max-width: 1280px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  .globe-coverage-text h2 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(2.5rem, 5vw, 4rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    margin-bottom: 1.5rem;
+    color: #fff;
+  }
+  .globe-coverage-text p {
+    color: var(--text2);
+    font-size: 1.1rem;
+    font-weight: 300;
+    line-height: 1.75;
+    max-width: 460px;
+  }
+  .globe-coverage-globe-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ruixen-globe-sm {
+    width: 420px; height: 420px;
+    border-radius: 50%;
+    overflow: hidden;
+    background-image: url('https://pub-940ccf6255b54fa799a9b01050e6c227.r2.dev/globe.jpeg');
+    background-size: cover;
+    background-position: left;
+    animation: earthRotate 30s linear infinite;
+    will-change: background-position;
+    box-shadow:
+      0 0 24px rgba(255,255,255,0.2),
+      -5px 0 10px #c3f4ff inset,
+      18px 2px 30px #000 inset,
+      -28px -2px 40px rgba(195,244,255,0.6) inset,
+      230px 0 50px rgba(0,0,0,0.4) inset,
+      145px 0 42px rgba(0,0,0,0.67) inset;
+  }
+  @media (max-width: 900px) {
+    .globe-coverage-inner { grid-template-columns: 1fr; gap: 3rem; }
+    .globe-coverage-text p { max-width: none; }
+  }
+
+  /* ── FOOTER ── */
+  .site-footer {
+    background: #0a0a0f;
+    border-top: 1px solid rgba(255,255,255,0.07);
+  }
+  .footer-main {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr 1fr;
+    gap: 3rem;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 4.5rem 2.5rem 3.5rem;
+  }
+  .footer-brand-logo {
+    display: flex; align-items: center; gap: 0.6rem;
+    font-family: 'Syne', sans-serif;
+    font-size: 1.1rem; font-weight: 800;
+    letter-spacing: -0.02em;
+    color: #fff; text-decoration: none;
+    margin-bottom: 1.5rem;
+  }
+  .footer-brand-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .footer-brand-icon svg { width: 18px; height: 18px; color: #000; }
+  .footer-col-heading {
+    font-family: 'Syne', sans-serif;
+    font-size: 0.8rem; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: #fff;
+    margin-bottom: 1.25rem;
+  }
+  .footer-links { list-style: none; display: flex; flex-direction: column; gap: 0.7rem; }
+  .footer-links a {
+    color: rgba(255,255,255,0.45);
+    text-decoration: none; font-size: 0.875rem; font-weight: 400;
+    transition: color 0.2s;
+  }
+  .footer-links a:hover { color: #fff; }
+  .footer-bottom {
+    border-top: 1px solid rgba(255,255,255,0.07);
+    max-width: 1280px; margin: 0 auto;
+    padding: 1.5rem 2.5rem;
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 1rem; flex-wrap: wrap;
+  }
+  .footer-copy {
+    font-size: 0.8rem; color: rgba(255,255,255,0.3);
+  }
+  .footer-legal { display: flex; gap: 1.75rem; }
+  .footer-legal a {
+    font-size: 0.8rem; color: rgba(255,255,255,0.35);
+    text-decoration: none; transition: color 0.2s;
+  }
+  .footer-legal a:hover { color: #fff; }
+  @media (max-width: 860px) {
+    .footer-main { grid-template-columns: 1fr 1fr; }
+    .footer-brand { grid-column: 1 / -1; }
+  }
+  @media (max-width: 520px) {
+    .footer-main { grid-template-columns: 1fr; }
+    .footer-bottom { flex-direction: column; align-items: flex-start; }
+  }
+
+  /* Fade-in on scroll */
+  .reveal {
+    opacity: 0; transform: translateY(30px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+  .reveal.visible { opacity: 1; transform: none; }
+  .reveal-delay-1 { transition-delay: 0.1s; }
+  .reveal-delay-2 { transition-delay: 0.2s; }
+  .reveal-delay-3 { transition-delay: 0.3s; }
+
+  /* ── LIGHT MODE (warm peach-cream with multi-tone sections) ── */
+  body.light {
+    /* Warm cream base, then each section gets a different tinted background */
+    --bg:  #fdf6ed;   /* cream */
+    --bg2: #fbe9d8;   /* warm peach blush */
+    --bg3: #f6e3f0;   /* dusty rose */
+    --text:  #2a1810;
+    --text2: #7d5945;
+    --border: rgba(120,60,30,0.10);
+    --glow:   rgba(240,138,93,0.30);
+    --peach:       #f08a5d;
+    --peach-soft:  #ffd7b0;
+    --coral:       #ff6b6b;
+    --sky:         #5dade2;
+    --mint:        #7dd3ae;
+    --buttercup:   #ffd166;
+  }
+  /* Section-specific tints — alternate warm/cool for variety */
+  body.light #hero       { background: linear-gradient(180deg, #fdf6ed 0%, #fbe9d8 100%); }
+  body.light #cards      { background: linear-gradient(180deg, #fbe9d8 0%, #f6e3f0 100%); }
+  body.light #crises     { background: #fdf2e7; }
+  body.light #sources    { background: linear-gradient(180deg, #f6e3f0 0%, #eaf3fb 100%); }
+  body.light #pricing    { background: #fff8ee; }
+  body.light #globe-coverage { background: linear-gradient(180deg, #eaf3fb 0%, #fbe9d8 100%); }
+  body.light #contact    { background: #fdf2e7; }
+  body.light .site-footer{ background: #f2d9c6; }
+  /* Accent gradient on hero word now spans peach → coral → sky for warmth */
+  body.light .hero-heading em {
+    background: linear-gradient(120deg, var(--peach) 0%, var(--coral) 50%, var(--sky) 100%);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  /* Section accent rules in light mode pick from the wider palette */
+  body.light #hero-spotlight {
+    background: radial-gradient(600px circle at var(--mx, 50%) var(--my, 40%),
+      rgba(240,138,93,0.18) 0%, rgba(255,107,107,0.08) 40%, transparent 70%);
+  }
+  body.light #cards::before,
+  body.light #crises::before,
+  body.light #pricing::before {
+    background: linear-gradient(90deg, transparent, var(--peach), transparent);
+    opacity: 0.55;
+  }
+  body.light #sources::before {
+    background: linear-gradient(90deg, transparent, var(--sky), transparent);
+    opacity: 0.55;
+  }
+  body.light #contact::before {
+    background: linear-gradient(90deg, transparent, var(--coral), transparent);
+    opacity: 0.55;
+  }
+  /* Crisis card accent colors rotate through the warm palette */
+  body.light .crisis-card:nth-child(6n+1):hover { background: rgba(240,138,93,0.08); }
+  body.light .crisis-card:nth-child(6n+2):hover { background: rgba(255,107,107,0.08); }
+  body.light .crisis-card:nth-child(6n+3):hover { background: rgba(93,173,226,0.08); }
+  body.light .crisis-card:nth-child(6n+4):hover { background: rgba(125,211,174,0.08); }
+  body.light .crisis-card:nth-child(6n+5):hover { background: rgba(255,209,102,0.10); }
+  body.light .crisis-card:nth-child(6n+6):hover { background: rgba(246,227,240,0.6); }
+  /* Source cards get colored left bars */
+  body.light .source-card:nth-child(6n+1)::before { background: var(--peach); }
+  body.light .source-card:nth-child(6n+2)::before { background: var(--coral); }
+  body.light .source-card:nth-child(6n+3)::before { background: var(--sky); }
+  body.light .source-card:nth-child(6n+4)::before { background: var(--mint); }
+  body.light .source-card:nth-child(6n+5)::before { background: var(--buttercup); }
+  body.light .source-card:nth-child(6n+6)::before { background: var(--accent3); }
+  body.light .source-card-num { color: rgba(240,138,93,0.22); }
+  body.light .source-card:hover .source-card-num { color: var(--peach); }
+  /* Pricing popular border = coral in light */
+  body.light .pricing-card.popular { border-color: var(--peach); box-shadow: 0 0 40px rgba(240,138,93,0.15); }
+  body.light .pricing-popular-badge { background: var(--peach); }
+  /* Enter Terminal pill in light mode = peach instead of cyan */
+  body.light .enter-terminal { background: var(--peach); }
+  body.light .enter-terminal:hover { box-shadow: 0 0 32px rgba(240,138,93,0.55); }
+  /* Section label color rotates by section in light mode */
+  body.light #cards .section-label,
+  body.light #crises .section-label  { color: var(--peach); }
+  body.light #sources .section-label { color: var(--sky); }
+  body.light #pricing .section-label { color: var(--mint); }
+  body.light #contact .section-label { color: var(--coral); }
+  body.light #globe-coverage .section-label { color: var(--peach); }
+  body.light nav {
+    background: rgba(240,239,234,0.9);
+    border-color: rgba(0,0,0,0.1);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.07);
+  }
+  body.light .nav-logo {
+    background: linear-gradient(135deg,#111 30%,var(--accent));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  body.light .nav-logo-chart svg {
+    color: var(--peach-deep);
+  }
+  body.light nav:hover .nav-logo-chart svg { color: #111; }
+  body.light .nav-links a { color: rgba(0,0,0,0.5); }
+  body.light .nav-links a:hover { color: #000; }
+  body.light .nav-signin { background: #111; color: #fff; }
+  body.light .nav-signin:hover { background: var(--accent); color: #000; }
+  body.light .nav-cta { background: #111; color: #fff; }
+  body.light .nav-mobile-overlay { background: rgba(240,239,234,0.97); }
+  body.light .nav-mobile-overlay a { color: #111; }
+  body.light .nav-mobile-close { color: #111; }
+  body.light .hero-dots { opacity: 0.08; }
+  body.light #hero-spotlight { opacity: 0.5; }
+  body.light .btn-secondary { background: rgba(0,0,0,0.06); border-color: rgba(0,0,0,0.12); color: var(--text); }
+  body.light .btn-secondary:hover { background: rgba(0,0,0,0.1); }
+  body.light .glow-card { background: rgba(255,255,255,0.82); }
+  body.light .glow-card-inner { border-color: rgba(0,0,0,0.08); }
+  body.light .crisis-grid { border-color: rgba(0,0,0,0.08); }
+  body.light .crisis-card { background: rgba(255,255,255,0.78); border-color: rgba(0,0,0,0.06); }
+  body.light .crisis-card:hover { background: rgba(14,165,233,0.05); }
+  body.light .crisis-tag { border-color: rgba(0,0,0,0.1); color: rgba(0,0,0,0.55); background: rgba(0,0,0,0.04); }
+  body.light .sources-grid { background: rgba(0,0,0,0.06); border-color: rgba(0,0,0,0.08); }
+  body.light .source-card { background: rgba(255,255,255,0.82); }
+  body.light .source-card:hover { background: rgba(14,165,233,0.05); }
+  body.light .pricing-card { background: rgba(255,255,255,0.82); border-color: rgba(0,0,0,0.08); }
+  body.light .pricing-card:hover { border-color: rgba(0,0,0,0.16); }
+  body.light .pricing-card.popular { border-color: var(--accent); box-shadow: 0 0 40px rgba(14,165,233,0.1); }
+  body.light .pricing-amount { color: var(--text); }
+  body.light .pricing-currency { color: var(--text2); }
+  body.light .pricing-divider { background: rgba(0,0,0,0.07); }
+  body.light .pricing-btn-outline { border-color: rgba(0,0,0,0.14); color: var(--text); }
+  body.light .contact-box { background: rgba(255,255,255,0.82); border-color: rgba(0,0,0,0.08); }
+  body.light .faq-item { border-color: rgba(0,0,0,0.08); }
+  body.light .faq-q { color: var(--text); }
+  body.light .site-footer { background: #dddcd7; border-top-color: rgba(0,0,0,0.1); }
+  body.light .footer-bottom { border-top-color: rgba(0,0,0,0.08); }
+  body.light .footer-copy { color: rgba(0,0,0,0.38); }
+  body.light .footer-legal a { color: rgba(0,0,0,0.42); }
+  body.light .footer-legal a:hover { color: #000; }
+  body.light .footer-links a { color: rgba(0,0,0,0.5); }
+  body.light .footer-links a:hover { color: #000; }
+  body.light .footer-brand-logo { color: #111; }
+  body.light .footer-col-heading { color: #111; }
+
+  /* ── CINEMATIC THEME TOGGLE (in nav) ── */
+  .theme-toggle {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.13);
+    cursor: pointer; flex-shrink: 0; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,0.65);
+    transition: background 0.3s, color 0.3s, border-color 0.3s;
+    animation: cglow-dark 3s ease-in-out infinite;
+  }
+  @keyframes cglow-dark {
+    0%,100% { box-shadow: 0 0 10px rgba(14,165,233,0.2), 0 0 22px rgba(14,165,233,0.07); }
+    50%      { box-shadow: 0 0 18px rgba(14,165,233,0.36), 0 0 40px rgba(14,165,233,0.13); }
+  }
+  .theme-toggle:hover { background: rgba(255,255,255,0.09); color: #fff; border-color: rgba(255,255,255,0.25); }
+  .theme-toggle svg { width: 15px; height: 15px; transition: transform 0.4s; }
+  .theme-toggle:hover svg { transform: rotate(20deg); }
+  .theme-icon-moon { display: block; }
+  .theme-icon-sun  { display: none; }
+  body.light .theme-toggle {
+    background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.15); color: rgba(0,0,0,0.6);
+    animation: cglow-light 3s ease-in-out infinite;
+  }
+  @keyframes cglow-light {
+    0%,100% { box-shadow: 0 0 10px rgba(234,179,8,0.26), 0 0 22px rgba(234,179,8,0.09); }
+    50%      { box-shadow: 0 0 18px rgba(234,179,8,0.44), 0 0 40px rgba(234,179,8,0.16); }
+  }
+  body.light .theme-toggle:hover { background: rgba(0,0,0,0.09); color: #000; }
+  body.light .theme-icon-moon { display: none; }
+  body.light .theme-icon-sun  { display: block; }
+
+  /* ── SIGN IN MODAL ── */
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 400;
+    background: rgba(0,0,0,0.62);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 1rem;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+
+  .modal-card {
+    background: #07070e;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 22px;
+    padding: 2.5rem 2.5rem 2.25rem;
+    width: 100%; max-width: 420px;
+    position: relative; overflow: hidden;
+    transform: translateY(20px) scale(0.96);
+    transition: transform 0.32s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  .modal-overlay.open .modal-card { transform: none; }
+
+  .modal-card::before {
+    content: '';
+    position: absolute; inset: -1px; border-radius: 22px; pointer-events: none;
+    background-image: radial-gradient(
+      300px 300px at calc(var(--mcx,-9999) * 1px) calc(var(--mcy,-9999) * 1px),
+      rgba(14,165,233,0.72), transparent 70%
+    );
+    mask: linear-gradient(transparent,transparent), linear-gradient(white,white);
+    mask-clip: padding-box, border-box;
+    mask-composite: exclude;
+    -webkit-mask: linear-gradient(transparent,transparent), linear-gradient(white,white);
+    -webkit-mask-clip: padding-box, border-box;
+    -webkit-mask-composite: destination-out;
+    border: 1px solid transparent;
+    opacity: 0; transition: opacity 0.35s;
+  }
+  .modal-card:hover::before { opacity: 1; }
+
+  .modal-close {
+    position: absolute; top: 1rem; right: 1rem;
+    background: none; border: none; color: rgba(255,255,255,0.3);
+    cursor: pointer; width: 28px; height: 28px; border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.95rem; line-height: 1;
+    transition: color 0.15s, background 0.15s;
+  }
+  .modal-close:hover { color: #fff; background: rgba(255,255,255,0.07); }
+
+  .modal-logo {
+    display: flex; align-items: center; gap: 0.5rem;
+    margin-bottom: 1.75rem;
+  }
+  .modal-logo-icon {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: var(--accent);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .modal-logo-icon svg { width: 14px; height: 14px; color: #000; }
+  .modal-logo-name {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800; font-size: 0.95rem; color: #fff; letter-spacing: -0.02em;
+  }
+
+  .modal-heading {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.5rem; font-weight: 800;
+    letter-spacing: -0.03em; color: #fff; margin-bottom: 0.35rem;
+  }
+  .modal-sub {
+    font-size: 0.85rem; color: rgba(255,255,255,0.36);
+    font-weight: 300; margin-bottom: 1.75rem;
+  }
+
+  .social-btns { display: flex; gap: 0.7rem; margin-bottom: 1.25rem; }
+  .social-btn {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px; padding: 0.6rem 0.75rem;
+    color: rgba(255,255,255,0.75); font-size: 0.82rem; font-weight: 500;
+    cursor: pointer; font-family: 'DM Sans', sans-serif;
+    transition: background 0.15s, border-color 0.15s; white-space: nowrap;
+  }
+  .social-btn:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.2); }
+  .social-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
+
+  .modal-or {
+    display: flex; align-items: center; gap: 0.75rem; margin: 1.2rem 0;
+  }
+  .modal-or::before, .modal-or::after {
+    content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.07);
+  }
+  .modal-or span { font-size: 0.72rem; color: rgba(255,255,255,0.27); letter-spacing: 0.04em; white-space: nowrap; }
+
+  .modal-field { margin-bottom: 0.9rem; }
+  .modal-label {
+    display: block; font-size: 0.75rem; font-weight: 600;
+    color: rgba(255,255,255,0.42); letter-spacing: 0.05em;
+    text-transform: uppercase; margin-bottom: 0.4rem;
+  }
+  .modal-input {
+    width: 100%; background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 10px; padding: 0.68rem 0.9rem;
+    color: #fff; font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem; outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .modal-input::placeholder { color: rgba(255,255,255,0.18); }
+  .modal-input:focus {
+    border-color: rgba(14,165,233,0.5);
+    box-shadow: 0 0 0 3px rgba(14,165,233,0.09);
+  }
+  .modal-input {
+    caret-color: var(--accent);
+  }
+
+  .modal-row {
+    display: flex; justify-content: flex-end;
+    margin-bottom: 1.4rem; margin-top: -0.2rem;
+  }
+  .modal-forgot {
+    font-size: 0.75rem; color: var(--accent); font-weight: 500;
+    text-decoration: none; transition: opacity 0.2s;
+  }
+  .modal-forgot:hover { opacity: 0.7; }
+
+  .modal-submit {
+    width: 100%; padding: 0.82rem;
+    background: var(--accent); color: #000; border: none;
+    border-radius: 10px; font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem; font-weight: 700; cursor: pointer;
+    transition: box-shadow 0.25s, transform 0.2s;
+    margin-bottom: 1.25rem;
+  }
+  .modal-submit:hover { box-shadow: 0 0 24px rgba(14,165,233,0.5); transform: translateY(-1px); }
+
+  .modal-signup {
+    text-align: center; font-size: 0.8rem; color: rgba(255,255,255,0.3);
+  }
+  .modal-signup a { color: var(--accent); text-decoration: none; }
+  .modal-signup a:hover { text-decoration: underline; }
+
+  body.light .modal-overlay { background: rgba(0,0,0,0.28); }
+  body.light .modal-card { background: #f7f6f1; border-color: rgba(0,0,0,0.1); }
+  body.light .modal-heading { color: #0d0d12; }
+  body.light .modal-sub { color: rgba(0,0,0,0.42); }
+  body.light .modal-close { color: rgba(0,0,0,0.3); }
+  body.light .modal-close:hover { color: #000; background: rgba(0,0,0,0.06); }
+  body.light .modal-logo-name { color: #111; }
+  body.light .social-btn { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.1); color: rgba(0,0,0,0.7); }
+  body.light .social-btn:hover { background: rgba(0,0,0,0.08); }
+  body.light .modal-or::before, body.light .modal-or::after { background: rgba(0,0,0,0.09); }
+  body.light .modal-or span { color: rgba(0,0,0,0.3); }
+  body.light .modal-label { color: rgba(0,0,0,0.5); }
+  body.light .modal-input { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.1); color: #0d0d12; }
+  body.light .modal-input::placeholder { color: rgba(0,0,0,0.22); }
+  body.light .modal-signup { color: rgba(0,0,0,0.35); }
+  body.light .modal-card::before {
+    background-image: radial-gradient(
+      300px 300px at calc(var(--mcx,-9999) * 1px) calc(var(--mcy,-9999) * 1px),
+      rgba(14,165,233,0.55), transparent 70%
+    );
+  }
+
+  /* ── ENTER TERMINAL pill (replaces "Historical Engine" label) ── */
+  .terminal-btn-wrap { text-align: center; margin-bottom: 1rem; }
+  .enter-terminal {
+    display: inline-flex; align-items: center; gap: 0.55rem;
+    background: var(--accent); color: #000;
+    padding: 0.7rem 1.5rem; border-radius: 9999px;
+    font-family: 'Syne', sans-serif;
+    font-size: 0.85rem; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    text-decoration: none;
+    transition: box-shadow 0.3s, transform 0.2s;
+  }
+  .enter-terminal:hover {
+    box-shadow: 0 0 32px rgba(14,165,233,0.55);
+    transform: translateY(-2px);
+  }
+  .enter-terminal svg { width: 14px; height: 14px; }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<div class="nav-wrap">
+  <nav>
+    <a class="nav-logo" href="#">
+      <span class="nav-logo-chart">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 3 7 3 7 7 3 7 3 3"></polyline>
+          <polyline points="14 3 21 3 21 10 14 10 14 3"></polyline>
+          <polyline points="14 14 21 14 21 21 14 21 14 14"></polyline>
+          <polyline points="3 14 7 14 7 21 3 21 3 14"></polyline>
+        </svg>
+      </span>
+      EconIntel
+    </a>
+    <ul class="nav-links">
+      <li><a href="chat.html" title="Open AI Chat Terminal">Terminal</a></li>
+      <li><a href="#crises">Crisis Analogues</a></li>
+      <li><a href="#pricing">Pricing</a></li>
+      <li><a href="#sources">Sources</a></li>
+      <li><a href="#contact">Contact</a></li>
+    </ul>
+    <div class="nav-actions">
+      <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">
+        <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+      <a href="#" class="nav-signin" onclick="openSignIn(event)">Sign In</a>
+    </div>
+    <button class="nav-hamburger" onclick="document.getElementById('nav-mobile').classList.toggle('open')" aria-label="Menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+  </nav>
+</div>
+<div class="nav-mobile-overlay" id="nav-mobile">
+  <button class="nav-mobile-close" onclick="document.getElementById('nav-mobile').classList.remove('open')">✕</button>
+  <a href="chat.html" onclick="document.getElementById('nav-mobile').classList.remove('open')">Terminal</a>
+  <a href="#crises" onclick="document.getElementById('nav-mobile').classList.remove('open')">Crisis Analogues</a>
+  <a href="#pricing" onclick="document.getElementById('nav-mobile').classList.remove('open')">Pricing</a>
+  <a href="#sources" onclick="document.getElementById('nav-mobile').classList.remove('open')">Sources</a>
+  <a href="#contact" onclick="document.getElementById('nav-mobile').classList.remove('open')">Contact</a>
+</div>
+
+<!-- SECTION 1: HERO -->
+<section id="hero">
+  <div class="hero-dots"></div>
+  <div id="hero-spotlight"></div>
+
+  <div class="hero-grid">
+    <!-- Left: Hero Text -->
+    <div class="hero-left">
+      <h1 class="hero-heading">Structured<br />Reasoning,<br /><em>Not News</em></h1>
+      <p style="font-size: 1.1rem; color: var(--text2); margin-top: 1rem; max-width: 500px; line-height: 1.7;">
+        Economic analysis powered by AI. Get structured insights on crisis mechanisms, policy effects, and second-order impacts.
+      </p>
+    </div>
+
+    <!-- Right: Spline 3D Robot -->
+    <div class="hero-robot-wrap">
+      <spline-viewer url="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"></spline-viewer>
+
+      <!-- SVG kept as comment for reference -->
+      <svg viewBox="0 0 240 340" class="robot-svg" style="display:none;" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+            <feMerge>
+              <feMergeNode in="coloredBlur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
+        </defs>
+
+        <!-- Head -->
+        <rect x="70" y="20" width="100" height="100" rx="12" fill="none" stroke="var(--accent)" stroke-width="3" filter="url(#glow)"/>
+
+        <!-- Eyes -->
+        <circle cx="95" cy="55" r="12" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+        <circle cx="145" cy="55" r="12" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+        <circle cx="95" cy="55" r="6" fill="var(--accent)" opacity="0.8"/>
+        <circle cx="145" cy="55" r="6" fill="var(--accent)" opacity="0.8"/>
+
+        <!-- Antenna -->
+        <line x1="120" y1="15" x2="120" y2="-5" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="120" cy="-8" r="3" fill="var(--accent)"/>
+
+        <!-- Upper Body (Chest) -->
+        <rect x="55" y="130" width="130" height="90" rx="10" fill="none" stroke="var(--accent)" stroke-width="3"/>
+
+        <!-- Center Panel -->
+        <rect x="85" y="145" width="70" height="60" rx="6" fill="none" stroke="var(--accent)" stroke-width="2" opacity="0.6"/>
+
+        <!-- Status Lights -->
+        <circle cx="95" cy="160" r="4" fill="var(--accent)" opacity="0.7"/>
+        <circle cx="110" cy="160" r="4" fill="var(--accent)" opacity="0.5"/>
+        <circle cx="125" cy="160" r="4" fill="var(--accent)" opacity="0.8"/>
+        <circle cx="140" cy="160" r="4" fill="var(--accent)" opacity="0.6"/>
+
+        <!-- Left Arm -->
+        <g>
+          <rect x="20" y="145" width="35" height="25" rx="5" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+          <rect x="10" y="155" width="15" height="15" rx="3" fill="none" stroke="var(--accent)" stroke-width="2"/>
+        </g>
+
+        <!-- Right Arm -->
+        <g>
+          <rect x="185" y="145" width="35" height="25" rx="5" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+          <rect x="215" y="155" width="15" height="15" rx="3" fill="none" stroke="var(--accent)" stroke-width="2"/>
+        </g>
+
+        <!-- Lower Body -->
+        <rect x="70" y="230" width="100" height="80" rx="8" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+
+        <!-- Left Leg -->
+        <g>
+          <line x1="95" y1="310" x2="95" y2="330" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>
+          <rect x="85" y="325" width="20" height="12" rx="2" fill="none" stroke="var(--accent)" stroke-width="2"/>
+        </g>
+
+        <!-- Right Leg -->
+        <g>
+          <line x1="145" y1="310" x2="145" y2="330" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>
+          <rect x="135" y="325" width="20" height="12" rx="2" fill="none" stroke="var(--accent)" stroke-width="2"/>
+        </g>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 2: CRISIS ANALOGUES -->
+<section id="crises">
+  <!-- "Historical Engine" label replaced with primary CTA to terminal -->
+  <div class="terminal-btn-wrap reveal">
+    <a href="chat.html" class="enter-terminal">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="4 17 10 11 4 5"/>
+        <line x1="12" y1="19" x2="20" y2="19"/>
+      </svg>
+      Enter Terminal
+    </a>
+  </div>
+  <h2 class="section-title crisis-title reveal">Crisis Analogues</h2>
+
+  <div class="crisis-grid">
+    <div class="crisis-card reveal reveal-delay-1">
+      <div class="crisis-meta">1929 — USA</div>
+      <div class="crisis-name">Great Depression</div>
+      <div class="crisis-desc">Deflationary spiral triggered by credit contraction, trade protection, and bank failures.</div>
+      <div class="crisis-tags">
+        <span class="crisis-tag">Deflation</span>
+        <span class="crisis-tag">Banking</span>
+        <span class="crisis-tag">Trade War</span>
+      </div>
+    </div>
+
+    <div class="crisis-card reveal reveal-delay-2">
+      <div class="crisis-meta">1973–79 — Global</div>
+      <div class="crisis-name">Stagflation Era</div>
+      <div class="crisis-desc">Oil supply shock combined with loose monetary policy produced simultaneous high inflation and unemployment.</div>
+      <div class="crisis-tags">
+        <span class="crisis-tag">Inflation</span>
+        <span class="crisis-tag">Energy</span>
+        <span class="crisis-tag">Policy Error</span>
+      </div>
+    </div>
+
+    <div class="crisis-card reveal reveal-delay-3">
+      <div class="crisis-meta">1997 — Asia-Pacific</div>
+      <div class="crisis-name"><a href="https://en.wikipedia.org/wiki/1997_Asian_financial_crisis" target="_blank" rel="noopener">Asian Financial Crisis ↗</a></div>
+      <div class="crisis-desc">Currency peg collapse, hot money outflows, and IMF austerity. Template for EM contagion dynamics.</div>
+      <div class="crisis-tags">
+        <span class="crisis-tag">EM Contagion</span>
+        <span class="crisis-tag">Currency</span>
+      </div>
+    </div>
+
+    <div class="crisis-card reveal reveal-delay-1">
+      <div class="crisis-meta">2008 — Global</div>
+      <div class="crisis-name"><a href="https://en.wikipedia.org/wiki/Financial_crisis_of_2007%E2%80%9310" target="_blank" rel="noopener">Global Financial Crisis ↗</a></div>
+      <div class="crisis-desc">Credit instrument mispricing, leverage unwind, and global transmission through interbank markets.</div>
+      <div class="crisis-tags">
+        <span class="crisis-tag">Credit</span>
+        <span class="crisis-tag">Systemic</span>
+        <span class="crisis-tag">QE</span>
+      </div>
+    </div>
+
+    <div class="crisis-card reveal reveal-delay-2">
+      <div class="crisis-meta">2011 — Europe</div>
+      <div class="crisis-name"><a href="https://en.wikipedia.org/wiki/European_debt_crisis" target="_blank" rel="noopener">Eurozone Debt Crisis ↗</a></div>
+      <div class="crisis-desc">Sovereign spread blowout in periphery nations. Draghi "whatever it takes" as the policy turning point.</div>
+      <div class="crisis-tags">
+        <span class="crisis-tag">Sovereign Debt</span>
+        <span class="crisis-tag">ECB</span>
+      </div>
+    </div>
+
+    <div class="crisis-card reveal reveal-delay-3">
+      <div class="crisis-meta">2020 — Global</div>
+      <div class="crisis-name"><a href="https://en.wikipedia.org/wiki/COVID-19_pandemic" target="_blank" rel="noopener">COVID Economic Shock ↗</a></div>
+      <div class="crisis-desc">Simultaneous demand and supply collapse with unprecedented fiscal and monetary response.</div>
+      <div class="crisis-tags">
+        <span class="crisis-tag">Supply Shock</span>
+        <span class="crisis-tag">Fiscal</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 3: SOURCES -->
+<section id="sources">
+  <div class="section-label reveal">Data Provenance</div>
+  <h2 class="section-title reveal reveal-delay-1">Our Sources</h2>
+  <p class="section-sub reveal reveal-delay-2">EconIntel synthesises structured signals from the world's most authoritative economic data streams.</p>
+
+  <div class="sources-grid reveal reveal-delay-2">
+    <a href="https://bbc.com/news/business" target="_blank" class="source-card">
+      <div class="source-card-num">01</div>
+      <div>
+        <div class="source-card-name">BBC World Service</div>
+        <div class="source-card-sub">Global news & economic reporting</div>
+      </div>
+    </a>
+    <a href="https://thehindu.com/business/" target="_blank" class="source-card">
+      <div class="source-card-num">02</div>
+      <div>
+        <div class="source-card-name">The Hindu</div>
+        <div class="source-card-sub">South Asian markets & policy</div>
+      </div>
+    </a>
+    <a href="https://aljazeera.com/economy/" target="_blank" class="source-card">
+      <div class="source-card-num">03</div>
+      <div>
+        <div class="source-card-name">Al Jazeera</div>
+        <div class="source-card-sub">MENA region economics & geopolitics</div>
+      </div>
+    </a>
+    <div class="source-card">
+      <div class="source-card-num">04</div>
+      <div>
+        <div class="source-card-name"><a href="https://imf.org" target="_blank">IMF</a> · <a href="https://worldbank.org" target="_blank">World Bank</a> · <a href="https://oecd.org" target="_blank">OECD</a></div>
+        <div class="source-card-sub">Multilateral institutional data</div>
+      </div>
+    </div>
+    <a href="https://federalreserve.gov" target="_blank" class="source-card">
+      <div class="source-card-num">05</div>
+      <div>
+        <div class="source-card-name">Central Bank Statements</div>
+        <div class="source-card-sub">Monetary policy communiqués</div>
+      </div>
+    </a>
+    <div class="source-card">
+      <div class="source-card-num">06</div>
+      <div>
+        <div class="source-card-name">CEO / CFO Conference Calls</div>
+        <div class="source-card-sub">Forward guidance & sentiment signals</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 4: PRICING -->
+<section id="pricing">
+  <div class="section-label reveal">Plans</div>
+  <h2 class="section-title reveal reveal-delay-1">Simple, Transparent Pricing</h2>
+  <p class="section-sub reveal reveal-delay-2">Start free. Scale as your analysis deepens.</p>
+
+  <div class="pricing-toggle reveal reveal-delay-2">
+    <span class="pricing-toggle-label active" id="lbl-monthly">Monthly</span>
+    <button class="toggle-switch" id="billing-toggle" onclick="toggleBilling()" aria-label="Toggle billing"></button>
+    <span class="pricing-toggle-label" id="lbl-annual">Annual</span>
+    <span class="pricing-save">Save 20%</span>
+  </div>
+
+  <div class="pricing-grid reveal">
+    <!-- Free -->
+    <div class="pricing-card">
+      <div class="pricing-tier">Free</div>
+      <div class="pricing-desc">Get started at no cost — explore EconIntel's core reasoning engine.</div>
+      <div class="pricing-price">
+        <span class="pricing-currency"></span>
+        <span class="pricing-amount" data-monthly="Free" data-annual="Free">Free</span>
+        <span class="pricing-period"></span>
+      </div>
+      <div class="pricing-divider"></div>
+      <ul class="pricing-features">
+        <li class="pricing-feature has"><span class="check">✓</span>10 queries / month</li>
+        <li class="pricing-feature has"><span class="check">✓</span>Crisis Analogues library</li>
+        <li class="pricing-feature has"><span class="check">✓</span>3 curated sources</li>
+        <li class="pricing-feature"><span class="check" style="background:rgba(255,255,255,0.05);color:var(--text2)">✕</span>Real-time signals</li>
+        <li class="pricing-feature"><span class="check" style="background:rgba(255,255,255,0.05);color:var(--text2)">✕</span>API access</li>
+      </ul>
+      <a href="chat.html" class="pricing-btn pricing-btn-outline">Get Started</a>
+    </div>
+
+    <!-- Pro -->
+    <div class="pricing-card popular">
+      <div class="pricing-popular-badge">Most Popular</div>
+      <div class="pricing-tier">Pro</div>
+      <div class="pricing-desc">For analysts and institutions requiring depth and real-time coverage.</div>
+      <div class="pricing-price">
+        <span class="pricing-currency">$</span>
+        <span class="pricing-amount" data-monthly="15" data-annual="12">15</span>
+        <span class="pricing-period">/mo</span>
+      </div>
+      <div class="pricing-divider"></div>
+      <ul class="pricing-features">
+        <li class="pricing-feature has"><span class="check">✓</span>Unlimited queries</li>
+        <li class="pricing-feature has"><span class="check">✓</span>Full Crisis Analogues engine</li>
+        <li class="pricing-feature has"><span class="check">✓</span>All sources + live ingestion</li>
+        <li class="pricing-feature has"><span class="check">✓</span>Real-time economic signals</li>
+        <li class="pricing-feature"><span class="check" style="background:rgba(255,255,255,0.05);color:var(--text2)">✕</span>Dedicated API access</li>
+      </ul>
+      <a href="#contact" class="pricing-btn pricing-btn-primary">Get Started</a>
+    </div>
+
+    <!-- Enterprise -->
+    <div class="pricing-card">
+      <div class="pricing-tier">Enterprise</div>
+      <div class="pricing-desc">For sovereign funds, central banks, and institutional teams.</div>
+      <div class="pricing-price">
+        <span class="pricing-currency">$</span>
+        <span class="pricing-amount" data-monthly="30" data-annual="24">30</span>
+        <span class="pricing-period">/mo</span>
+      </div>
+      <div class="pricing-divider"></div>
+      <ul class="pricing-features">
+        <li class="pricing-feature has"><span class="check">✓</span>Unlimited queries + priority</li>
+        <li class="pricing-feature has"><span class="check">✓</span>Custom source ingestion</li>
+        <li class="pricing-feature has"><span class="check">✓</span>Dedicated API + webhooks</li>
+        <li class="pricing-feature has"><span class="check">✓</span>SLA guarantee + uptime</li>
+        <li class="pricing-feature has"><span class="check">✓</span>White-glove onboarding</li>
+      </ul>
+      <a href="#contact" class="pricing-btn pricing-btn-outline">Contact Sales</a>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION: GLOBAL ECONOMIC COVERAGE -->
+<section id="globe-coverage">
+  <div class="globe-coverage-inner">
+    <div class="globe-coverage-text reveal">
+      <div class="section-label" style="text-align:left;margin-bottom:1rem">Worldwide Intelligence</div>
+      <h2>Global Economic Coverage</h2>
+    </div>
+    <div class="globe-coverage-globe-wrap reveal reveal-delay-1">
+      <div class="ruixen-globe-sm"></div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 5: CONTACT & FAQ -->
+<section id="contact">
+  <div class="section-label reveal">Support</div>
+  <h2 class="section-title reveal reveal-delay-1">Contact &amp; FAQs</h2>
+
+  <div class="contact-grid">
+    <!-- Contact -->
+    <div class="contact-box reveal">
+      <div class="section-label" style="text-align:left;margin-bottom:1rem">Get In Touch</div>
+      <p style="color:var(--text2);font-size:0.9rem;font-weight:300;line-height:1.7;margin-bottom:1.5rem">
+        Have a question about our platform, pricing, or data coverage? Our team typically responds within one business day.
+      </p>
+      <a href="mailto:econintelai@gmail.com" class="contact-email-link">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+        econintelai@gmail.com →
+      </a>
+    </div>
+
+    <!-- FAQ -->
+    <div class="reveal reveal-delay-1">
+      <div class="faq-list">
+        <div class="faq-item">
+          <div class="faq-q" onclick="toggleFaq(this)">
+            What makes EconIntel different from Bloomberg or Reuters?
+            <span class="faq-q-icon">+</span>
+          </div>
+          <div class="faq-a">EconIntel provides structured causal reasoning — not raw news feeds. We map current conditions to historical analogues, surfacing the mechanisms behind economic events rather than just reporting them.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q" onclick="toggleFaq(this)">
+            Which sources does EconIntel ingest?
+            <span class="faq-q-icon">+</span>
+          </div>
+          <div class="faq-a">We ingest BBC World Service, The Hindu, Al Jazeera, IMF/World Bank/OECD datasets, central bank statements, and executive conference calls. Enterprise plans support custom source pipelines.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q" onclick="toggleFaq(this)">
+            Can I cancel my subscription at any time?
+            <span class="faq-q-icon">+</span>
+          </div>
+          <div class="faq-a">Yes. Monthly plans cancel with no penalty. Annual plans include a 14-day money-back guarantee from the renewal date.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q" onclick="toggleFaq(this)">
+            Is there an API for institutional integration?
+            <span class="faq-q-icon">+</span>
+          </div>
+          <div class="faq-a">API access is available on Pro and Enterprise plans. Enterprise customers receive dedicated endpoints, webhook support, and custom rate limits. Contact us for integration specs.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="site-footer">
+  <div class="footer-main">
+    <!-- Brand -->
+    <div class="footer-brand">
+      <a href="#" class="footer-brand-logo">
+        <span class="footer-brand-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </span>
+        EconIntel
+      </a>
+    </div>
+
+    <!-- Platform -->
+    <div>
+      <div class="footer-col-heading">Platform</div>
+      <ul class="footer-links">
+        <li><a href="#crises">Crisis Analogues</a></li>
+        <li><a href="#sources">Data Sources</a></li>
+        <li><a href="#pricing">Pricing</a></li>
+        <li><a href="#contact">API Access</a></li>
+      </ul>
+    </div>
+
+    <!-- Resources -->
+    <div>
+      <div class="footer-col-heading">Resources</div>
+      <ul class="footer-links">
+        <li><a href="#contact">Documentation</a></li>
+        <li><a href="#contact">Case Studies</a></li>
+        <li><a href="#contact">Blog</a></li>
+        <li><a href="#contact">Community</a></li>
+      </ul>
+    </div>
+
+    <!-- Company -->
+    <div>
+      <div class="footer-col-heading">Company</div>
+      <ul class="footer-links">
+        <li><a href="#contact">About Us</a></li>
+        <li><a href="#contact">Careers</a></li>
+        <li><a href="mailto:econintelai@gmail.com">Contact</a></li>
+        <li><a href="#contact">Press</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="footer-bottom">
+    <span class="footer-copy">© 2025 EconIntel. All rights reserved.</span>
+    <nav class="footer-legal">
+      <a href="#contact">Terms of Service</a>
+      <a href="#contact">Privacy Policy</a>
+      <a href="#contact">Cookie Settings</a>
+    </nav>
+  </div>
+</footer>
+
+<!-- SIGN IN MODAL -->
+<div id="signin-modal" class="modal-overlay" onclick="handleModalClick(event)">
+  <div class="modal-card" id="modal-card">
+    <button class="modal-close" onclick="closeSignIn()">✕</button>
+
+    <div class="modal-logo">
+      <span class="modal-logo-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      </span>
+      <span class="modal-logo-name">EconIntel</span>
+    </div>
+
+    <h2 class="modal-heading">Welcome back</h2>
+    <p class="modal-sub">Sign in to your account to continue</p>
+
+    <form onsubmit="submitSignIn(event)" id="signin-form">
+
+    <div class="social-btns">
+      <button class="social-btn">
+        <svg viewBox="0 0 24 24" fill="none" width="15" height="15"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+        Google
+      </button>
+      <button class="social-btn">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.017C22 6.484 17.522 2 12 2z"/></svg>
+        GitHub
+      </button>
+    </div>
+
+    <div class="modal-or"><span>or continue with email</span></div>
+
+    <div class="modal-field">
+      <label class="modal-label">Name</label>
+      <input class="modal-input" id="signin-name" required placeholder="Jane Analyst" autocomplete="name" />
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Email</label>
+      <input class="modal-input" id="signin-email" type="email" required placeholder="you@example.com" autocomplete="email" />
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Password</label>
+      <input class="modal-input" id="signin-password" type="password" placeholder="••••••••" autocomplete="current-password" />
+    </div>
+
+    <div class="modal-row">
+      <a href="#" class="modal-forgot">Forgot password?</a>
+    </div>
+
+    <button class="modal-submit" type="submit">Sign In</button>
+    <p class="modal-signup">Don't have an account? <a href="#">Create one →</a></p>
+    </form>
+  </div>
+</div>
+
+<!-- Config loaded as a global (window.CONFIG) before the main script -->
+<script src="config.js"></script>
+<script>
+// ── REMOVE SPLINE WATERMARK ──
+(function() {
+  const removeWatermark = () => {
+    const viewer = document.querySelector('spline-viewer');
+    if (!viewer) return;
+
+    try {
+      const root = viewer.shadowRoot;
+      if (!root) return;
+
+      // Remove watermark/badge elements
+      root.querySelectorAll('[class*="badge"], [class*="watermark"], [class*="logo"], a[href*="spline"]').forEach(el => {
+        el.style.display = 'none';
+        el.remove();
+      });
+
+      // Hide "Built with Spline" text
+      root.querySelectorAll('*').forEach(el => {
+        if (el.textContent && el.textContent.includes('Spline')) {
+          el.style.display = 'none';
+        }
+      });
+    } catch(e) {}
+  };
+
+  // Try immediately and on load event
+  removeWatermark();
+  document.addEventListener('DOMContentLoaded', removeWatermark);
+
+  // Also setup observer for when Spline finishes rendering
+  const viewer = document.querySelector('spline-viewer');
+  if (viewer) {
+    viewer.addEventListener('load', removeWatermark);
+    // Retry every 500ms for 10 seconds
+    for (let i = 0; i < 20; i++) {
+      setTimeout(removeWatermark, i * 500);
+    }
+  }
+})();
+
+// ── HERO SPOTLIGHT (RAF-throttled) ──
+const spotlight = document.getElementById('hero-spotlight');
+const hero = document.getElementById('hero');
+let rafPending = false, mx = '50%', my = '40%';
+hero.addEventListener('mousemove', e => {
+  const rect = hero.getBoundingClientRect();
+  mx = ((e.clientX - rect.left) / rect.width * 100).toFixed(1) + '%';
+  my = ((e.clientY - rect.top) / rect.height * 100).toFixed(1) + '%';
+  if (!rafPending) {
+    rafPending = true;
+    requestAnimationFrame(() => {
+      spotlight.style.background = `radial-gradient(600px circle at ${mx} ${my},rgba(14,165,233,0.13) 0%,rgba(99,102,241,0.06) 40%,transparent 70%)`;
+      rafPending = false;
+    });
+  }
+}, { passive: true });
+
+
+// ── BILLING TOGGLE ──
+let isAnnual = false;
+function toggleBilling() {
+  isAnnual = !isAnnual;
+  const btn = document.getElementById('billing-toggle');
+  btn.classList.toggle('annual', isAnnual);
+  document.getElementById('lbl-monthly').classList.toggle('active', !isAnnual);
+  document.getElementById('lbl-annual').classList.toggle('active', isAnnual);
+  document.querySelectorAll('.pricing-amount').forEach(el => {
+    const val = isAnnual ? el.dataset.annual : el.dataset.monthly;
+    el.textContent = val;
+    const currency = el.previousElementSibling;
+    const period = el.nextElementSibling;
+    if (currency) currency.style.display = (val === 'Free') ? 'none' : '';
+    if (period) period.style.display = (val === 'Free') ? 'none' : '';
+  });
+}
+
+// ── FAQ ACCORDION ──
+function toggleFaq(el) {
+  const item = el.parentElement;
+  const isOpen = item.classList.contains('open');
+  document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
+  if (!isOpen) item.classList.add('open');
+}
+
+// ── SCROLL REVEAL ──
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); } });
+}, { threshold: 0.12 });
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+// ── SIGN IN MODAL ──
+function openSignIn(e) {
+  if (e) e.preventDefault();
+  document.getElementById('signin-modal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeSignIn() {
+  document.getElementById('signin-modal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+function handleModalClick(e) {
+  if (e.target === document.getElementById('signin-modal')) closeSignIn();
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSignIn(); });
+
+// Modal card spotlight glow
+const modalCard = document.getElementById('modal-card');
+if (modalCard) {
+  modalCard.addEventListener('pointermove', e => {
+    const r = modalCard.getBoundingClientRect();
+    modalCard.style.setProperty('--mcx', (e.clientX - r.left).toFixed(1));
+    modalCard.style.setProperty('--mcy', (e.clientY - r.top).toFixed(1));
+  });
+  modalCard.addEventListener('pointerleave', () => {
+    modalCard.style.setProperty('--mcx', '-9999');
+    modalCard.style.setProperty('--mcy', '-9999');
+  });
+}
+
+// ── THEME TOGGLE ──
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  localStorage.setItem('theme', isLight ? 'light' : 'dark');
+}
+(function initTheme() {
+  if (localStorage.getItem('theme') === 'light') document.body.classList.add('light');
+})();
+
+// ── RATE LIMITING ──
+// Login: max 5 attempts, 15min lockout
+const MAX_ATT=5, LOCK_MS=15*60*1000;
+function getLock(e){try{return JSON.parse(localStorage.getItem('ei:lock:'+e)||'{}');}catch(err){return{};}}
+function setLock(e,d){try{localStorage.setItem('ei:lock:'+e,JSON.stringify(d));}catch(x){}}
+function checkLock(email){const l=getLock(email);if(l.until&&Date.now()<l.until){const m=Math.ceil((l.until-Date.now())/60000);return`Locked. Try again in ${m} min.`;}return null;}
+function failAttempt(email){const l=getLock(email);const a=(l.attempts||0)+1;if(a>=MAX_ATT){setLock(email,{attempts:a,until:Date.now()+LOCK_MS});}else{setLock(email,{attempts:a});}}
+function clearLock(email){try{localStorage.removeItem('ei:lock:'+email);}catch(e){}}
+
+// Signup: max 3 accounts per hour per browser
+function checkSignupLimit(){
+  try{
+    const d=JSON.parse(localStorage.getItem('ei:sl')||'[]').filter(t=>Date.now()-t<3600000);
+    if(d.length>=3) return 'Too many accounts created. Try again in an hour.';
+    localStorage.setItem('ei:sl',JSON.stringify([...d,Date.now()]));
+    return null;
+  }catch(e){return null;}
+}
+
+// ── AUTHENTICATION: Sign In / Sign Up ──
+// Wired to real backend endpoints with JWT authentication
+// CONFIG is provided globally by config.js (window.CONFIG)
+
+let isSignupMode = false; // Track if user is in signup or login mode
+let currentCSRFToken = null; // Phase 6: Store CSRF token in memory
+let currentUser = null; // Phase 6: Store user info in memory
+
+/**
+ * Handle form submission for sign in or sign up
+ * Calls /functions/auth/login or /functions/auth/signup based on mode
+ * Phase 6: Stores CSRF token in memory, JWT in secure httpOnly cookie (set by server)
+ */
+async function submitSignIn(e) {
+  e.preventDefault();
+
+  const name = document.getElementById('signin-name').value.trim();
+  const email = document.getElementById('signin-email').value.trim().toLowerCase();
+  const password = document.getElementById('signin-password').value.trim();
+
+  // Validate inputs
+  if (!email || !password) {
+    alert('Please enter email and password');
+    return;
+  }
+
+  if (isSignupMode && !name) {
+    alert('Please enter your name');
+    return;
+  }
+
+  if (password.length < 12) {
+    alert('Password must be at least 12 characters');
+    return;
+  }
+
+  // Check rate limits
+  if (!isSignupMode) {
+    // Login rate limiting
+    const lockMsg = checkLock(email);
+    if (lockMsg) {
+      alert(lockMsg);
+      return;
+    }
+  } else {
+    // Signup rate limiting
+    const signupMsg = checkSignupLimit();
+    if (signupMsg) {
+      alert(signupMsg);
+      return;
+    }
+  }
+
+  try {
+    // Disable submit button to prevent double-submit
+    const btn = document.querySelector('.modal-submit');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = isSignupMode ? 'Creating account...' : 'Signing in...';
+
+    // Call appropriate endpoint (uses config for dev/prod)
+    const endpoint = isSignupMode ? CONFIG.auth.signup : CONFIG.auth.login;
+    const body = isSignupMode
+      ? { email, password, username: email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_') }
+      : { email, password };
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', // Phase 6: Include cookies in request
+      body: JSON.stringify(body)
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      // Handle specific error cases
+      if (res.status === 409) {
+        alert('Email or username already registered. Try signing in instead.');
+        isSignupMode = false;
+        toggleSignupMode();
+      } else if (res.status === 401) {
+        // Track failed login attempt
+        if (!isSignupMode) {
+          failAttempt(email);
+          alert('Account not found. Create one instead?');
+          isSignupMode = true;
+          toggleSignupMode();
+          return;
+        }
+      } else {
+        // Track failed login on other errors too
+        if (!isSignupMode) {
+          failAttempt(email);
+        }
+        alert(data.error || 'Authentication failed. Try again.');
+      }
+      btn.disabled = false;
+      btn.textContent = originalText;
+      return;
+    }
+
+    // Phase 6: Success! Server set JWT cookie, we just store CSRF token + user info
+    if (data.csrfToken) {
+      // Clear login lockout on successful login
+      if (!isSignupMode) {
+        clearLock(email);
+      }
+
+      currentCSRFToken = data.csrfToken; // Store CSRF token in memory
+      currentUser = {
+        userId: data.userId,
+        name: name || data.username,
+        email: data.email,
+        username: data.username,
+        plan: data.plan || 'free',
+        signedInAt: new Date().toISOString()
+      };
+
+      // Also store user info in sessionStorage (survives reload within same session)
+      sessionStorage.setItem('econintel:user', JSON.stringify(currentUser));
+      sessionStorage.setItem('econintel:csrf', currentCSRFToken);
+
+      refreshSignInBtn();
+      closeSignIn();
+
+      // Redirect to chat after brief delay to show success
+      setTimeout(() => {
+        window.location.href = 'chat.html';
+      }, 300);
+    }
+  } catch (err) {
+    console.error('[auth] Error:', err);
+    alert('Network error. Make sure the backend is reachable.');
+    const btn = document.querySelector('.modal-submit');
+    btn.disabled = false;
+    btn.textContent = isSignupMode ? 'Sign Up' : 'Sign In';
+  }
+}
+
+/**
+ * Toggle between signup and login mode
+ * Updates form heading and button text without changing HTML structure
+ */
+function toggleSignupMode() {
+  isSignupMode = !isSignupMode;
+  const heading = document.querySelector('.modal-heading');
+  const sub = document.querySelector('.modal-sub');
+  const nameField = document.getElementById('signin-name').parentElement;
+  const submitBtn = document.querySelector('.modal-submit');
+  const link = document.querySelector('.modal-signup a');
+  const forgotPasswordRow = document.querySelector('.modal-row');
+
+  if (isSignupMode) {
+    heading.textContent = 'Create account';
+    sub.textContent = 'Sign up to get started';
+    nameField.style.display = 'block';
+    submitBtn.textContent = 'Sign Up';
+    link.textContent = 'Already have an account? Sign in →';
+    forgotPasswordRow.style.display = 'none';
+  } else {
+    heading.textContent = 'Welcome back';
+    sub.textContent = 'Sign in to your account to continue';
+    nameField.style.display = 'block';
+    submitBtn.textContent = 'Sign In';
+    link.textContent = "Don't have an account? Create one →";
+    forgotPasswordRow.style.display = 'block';
+  }
+}
+
+/**
+ * Wire the "Create one" / "Sign in" link to toggle modes
+ */
+document.addEventListener('DOMContentLoaded', () => {
+  const signupLink = document.querySelector('.modal-signup a');
+  if (signupLink) {
+    signupLink.onclick = (e) => {
+      e.preventDefault();
+      toggleSignupMode();
+    };
+  }
+});
+
+/**
+ * Update the nav sign-in button based on auth state
+ * Phase 6: Check sessionStorage + memory state (no localStorage)
+ * Shows username if signed in, "Sign In" button if not
+ */
+function refreshSignInBtn() {
+  const btn = document.querySelector('.nav-signin');
+  if (!btn) return;
+
+  // Phase 6: Check both memory state and sessionStorage (survives reload)
+  const user = currentUser || JSON.parse(sessionStorage.getItem('econintel:user') || 'null');
+  const csrf = currentCSRFToken || sessionStorage.getItem('econintel:csrf');
+
+  if (user && csrf) {
+    // User is signed in
+    btn.textContent = '@' + (user.username || user.name.split(' ')[0]);
+    btn.onclick = (e) => { e.preventDefault(); window.location.href = 'chat.html'; };
+  } else {
+    // User is not signed in
+    btn.textContent = 'Sign In';
+    btn.onclick = (e) => openSignIn(e);
+  }
+}
+
+// Initialize on page load
+refreshSignInBtn();
+
+// Phase 6: Initialize CSRF token from sessionStorage on page load
+if (!currentCSRFToken) {
+  currentCSRFToken = sessionStorage.getItem('econintel:csrf');
+  currentUser = JSON.parse(sessionStorage.getItem('econintel:user') || 'null');
+}
+</script>
+
+</body>
+</html>
