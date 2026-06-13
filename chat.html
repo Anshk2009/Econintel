@@ -41,6 +41,31 @@
     overflow: hidden;
   }
 
+  /* Animated navy-blue background for the chat (shows behind the transparent main area) */
+  @keyframes gradientShift {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: -2;
+    background: linear-gradient(135deg, #0a1838 0%, #102a5e 25%, #1d3f96 50%, #102a5e 75%, #0a1838 100%);
+    background-size: 200% 200%;
+    animation: gradientShift 26s ease-in-out infinite;
+    pointer-events: none;
+  }
+  body::after {
+    content: '';
+    position: fixed; inset: 0; z-index: -2;
+    background:
+      radial-gradient(circle at 18% 25%, rgba(56,104,224,0.28) 0%, transparent 55%),
+      radial-gradient(circle at 82% 80%, rgba(40,72,180,0.22) 0%, transparent 55%);
+    animation: gradientShift 40s ease-in-out infinite reverse;
+    pointer-events: none;
+  }
+  body.light::before, body.light::after { display: none; }
+
   .app {
     display: flex;
     height: 100vh;
@@ -85,6 +110,7 @@
   }
   .sidebar-logo-icon svg { width: 15px; height: 15px; color: #000; }
   .sidebar-logo-text { overflow: hidden; white-space: nowrap; }
+  .sidebar.collapsed .sidebar-logo { display: none; }
   .sidebar.collapsed .sidebar-logo-text { display: none; }
 
   .sidebar-toggle {
@@ -133,6 +159,10 @@
   .nav-item:hover { background: var(--hover); color: #fff; }
   .nav-item svg { width: 17px; height: 17px; flex-shrink: 0; }
   .sidebar.collapsed .nav-item-label { display: none; }
+  /* Collapsed: only icons remain — center everything so all icons share the same axis */
+  .sidebar.collapsed .sidebar-header,
+  .sidebar.collapsed .nav-item,
+  .sidebar.collapsed .new-chat-btn { justify-content: center; padding-left: 0; padding-right: 0; }
 
   .sidebar-divider {
     height: 1px; background: var(--border);
@@ -414,9 +444,24 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: center; /* centers greeting when empty */
     padding: 2rem 1.5rem 6rem;
     overflow-y: auto;
+  }
+  /* When messages exist, switch to flex-start so overflow scrolls correctly.
+     justify-content:center clips the top of overflowing content — it's a
+     known flex/scroll bug. flex-start lets you scroll all the way to the top. */
+  .chat-content.has-messages { justify-content: flex-start; padding-bottom: 0; }
+  /* margin-top:auto anchors a short conversation to the BOTTOM of the screen
+     (like Claude/ChatGPT) instead of floating at the top. Once the chat grows
+     taller than the screen it scrolls normally. */
+  .chat-content.has-messages .messages { margin: auto auto 1.5rem; }
+  /* Prompt box stays pinned to the bottom of the screen while messages
+     scroll behind it. Solid background hides the scrolling content. */
+  .chat-content.has-messages .prompt-wrap {
+    position: sticky; bottom: 0; z-index: 5;
+    padding: 0.5rem 0 1.25rem;
+    background: var(--bg-main);
   }
 
   .chat-greeting {
@@ -542,10 +587,15 @@
     --peach-glow: rgba(240,138,93,0.30);
   }
   body.light .msg.assistant {
-    background: var(--peach-tint);
-    border-left-color: var(--peach-deep);
-    color: var(--text);
+    /* Warm cream bubble that sits on the peach-cream page background */
+    background: #fff8f2;
+    border-left-color: #f08a5d;   /* peach accent matches the palette */
+    color: #2a1810;               /* same dark brown as --text */
+    box-shadow: 0 4px 18px -8px rgba(200,100,50,0.12);
   }
+  body.light .msg.assistant a { color: #c05a20; }
+  body.light .msg.assistant code { background: rgba(0,0,0,0.07); }
+  body.light .msg.assistant pre { background: rgba(0,0,0,0.05); }
   body.light .chat-greeting { color: #2a1810; }
   body.light .chat-greeting em {
     color: var(--text);
@@ -709,8 +759,32 @@
     padding: 0.85rem 1.1rem;
     border-radius: 14px;
     font-size: 0.95rem; line-height: 1.6;
-    white-space: pre-wrap; word-wrap: break-word;
+    word-wrap: break-word;
   }
+  /* User messages are plain text — keep literal whitespace */
+  .msg.user { white-space: pre-wrap; }
+  /* Markdown element styles inside assistant bubbles */
+  .msg.assistant p { margin: 0 0 0.5rem; }
+  .msg.assistant p:last-child { margin-bottom: 0; }
+  .msg.assistant ul, .msg.assistant ol { padding-left: 1.25rem; margin: 0.3rem 0 0.5rem; }
+  .msg.assistant li { margin-bottom: 0.25rem; }
+  .msg.assistant strong { font-weight: 700; }
+  .msg.assistant em { font-style: italic; }
+  .msg.assistant code {
+    font-family: 'Fira Code', 'Courier New', monospace; font-size: 0.85em;
+    background: rgba(255,255,255,0.1); padding: 0.15em 0.35em;
+    border-radius: 4px;
+  }
+  .msg.assistant pre {
+    background: rgba(0,0,0,0.35); border-radius: 8px;
+    padding: 0.8rem 1rem; margin: 0.5rem 0;
+    overflow-x: auto;
+  }
+  .msg.assistant pre code { background: none; padding: 0; font-size: 0.85rem; }
+  .msg.assistant a { color: #7aa7ff; text-decoration: underline; }
+  .msg.assistant h2 { font-size: 1rem; font-weight: 700; margin: 0.6rem 0 0.2rem; }
+  .msg.assistant h3 { font-size: 0.95rem; font-weight: 600; margin: 0.5rem 0 0.2rem; }
+  .msg.assistant hr { border: none; border-top: 1px solid rgba(255,255,255,0.12); margin: 0.6rem 0; }
   .msg.user {
     align-self: flex-end;
     background: var(--bg-input);
@@ -719,15 +793,30 @@
   }
   .msg.assistant {
     align-self: flex-start;
-    background: var(--peach-tint);
-    border-left: 2px solid var(--peach);
-    color: var(--text);
+    background: linear-gradient(135deg, rgba(13,22,52,0.94), rgba(22,34,72,0.94));
+    border-left: 2px solid #3b6ed8;
+    color: #e8ecf6;
     max-width: 100%;
     border-radius: 14px;
     padding-left: 1rem;
+    box-shadow: 0 8px 26px -14px rgba(20,45,110,0.65);
   }
+  .msg.assistant a { color: #7aa7ff; }
   .msg.assistant.thinking {
-    color: var(--text2); font-style: italic;
+    display: inline-flex; align-items: center;
+    padding: 0.95rem 1.2rem;
+  }
+  .think-dots { display: inline-flex; gap: 6px; align-items: center; }
+  .think-dots i {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #6f9bff;
+    animation: thinkBounce 1.15s ease-in-out infinite;
+  }
+  .think-dots i:nth-child(2) { animation-delay: 0.16s; }
+  .think-dots i:nth-child(3) { animation-delay: 0.32s; }
+  @keyframes thinkBounce {
+    0%, 65%, 100% { transform: translateY(0); opacity: 0.40; }
+    32%           { transform: translateY(-7px); opacity: 1; }
   }
   .msg.assistant.error {
     color: #f87171;
@@ -735,6 +824,59 @@
     border: 1px solid rgba(248,113,113,0.25);
   }
   body.light .msg.user { background: var(--bg-input); border-color: rgba(0,0,0,0.08); }
+
+  /* ── ACCESSIBLE FOCUS RINGS ──
+     Visible outline for keyboard / assistive-tech users only (not on every
+     mouse click), so the terminal stays accessible without a stray outline. */
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  :focus:not(:focus-visible) { outline: none; }
+
+  /* ── REDUCED MOTION ──
+     Respect the OS "reduce motion" setting: finish animations/transitions
+     near-instantly and disable smooth scrolling for those users. */
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+
+  /* ── SEND BUTTON: DISABLED WHILE STREAMING ──
+     Greyed + not-clickable while a reply is generating so a user can't
+     double-fire a second request mid-stream. */
+  .prompt-send:disabled { opacity: 0.45; cursor: not-allowed; }
+  .prompt-send:disabled:hover { background: #fff; }
+  body.light .prompt-send:disabled:hover { background: #111; }
+
+  /* ── RECENTS SKELETON (loading placeholder) ──
+     Shown in the sidebar while chat history is being fetched, then replaced
+     by the real recent-chat items. Shimmer = "loading", not "empty". */
+  .recent-skeleton {
+    display: flex; flex-direction: column; gap: 0.4rem;
+    padding: 0.7rem 0.6rem;
+    background: rgba(255,255,255,0.04);
+    border-radius: 8px;
+    border-left: 2px solid rgba(255,255,255,0.08);
+  }
+  .recent-skeleton .sk-line {
+    height: 9px; border-radius: 4px;
+    /* Moving light band across a dim base = classic shimmer skeleton */
+    background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.13) 37%, rgba(255,255,255,0.05) 63%);
+    background-size: 400% 100%;
+    animation: sk-shimmer 1.4s ease-in-out infinite;
+  }
+  .recent-skeleton .sk-line.short { width: 55%; }
+  @keyframes sk-shimmer {
+    0%   { background-position: 100% 0; }
+    100% { background-position: 0 0; }
+  }
+  body.light .recent-skeleton { background: rgba(0,0,0,0.05); border-left-color: rgba(0,0,0,0.08); }
+  body.light .recent-skeleton .sk-line {
+    background: linear-gradient(90deg, rgba(0,0,0,0.05) 25%, rgba(0,0,0,0.11) 37%, rgba(0,0,0,0.05) 63%);
+    background-size: 400% 100%;
+  }
 </style>
 </head>
 <body>
@@ -771,13 +913,13 @@
     </button>
 
     <nav class="sidebar-nav">
-      <button class="nav-item">
+      <button class="nav-item" onclick="searchChats()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
         </svg>
         <span class="nav-item-label">Search chats</span>
       </button>
-      <button class="nav-item">
+      <button class="nav-item" onclick="openLibrary()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
         </svg>
@@ -862,7 +1004,7 @@
 
           <div class="prompt-actions">
             <!-- Microphone -->
-            <button class="prompt-icon-btn" title="Voice input">
+            <button class="prompt-icon-btn" id="voice-btn" title="Voice input" onclick="toggleVoiceInput()">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
@@ -1047,6 +1189,55 @@
 <!-- Config loaded as a global (window.CONFIG) before the main script -->
 <script src="config.js"></script>
 <script>
+// ── MARKDOWN RENDERER ──
+// Converts AI response markdown to safe HTML. Applied after stream ends,
+// not during streaming (so partial tokens don't break mid-tag).
+function escHtml(s) {
+  // Escape HTML special chars to prevent XSS when inserting into innerHTML
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function renderMarkdown(raw) {
+  let t = raw;
+  // Step 1: Extract fenced code blocks (```lang\ncode\n```) so inner content
+  // isn't touched by bold/italic/link replacements
+  const blocks = [];
+  t = t.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    blocks.push(`<pre><code>${escHtml(code.trim())}</code></pre>`);
+    return `\x00B${blocks.length - 1}\x00`; // placeholder
+  });
+  // Step 2: Inline code
+  t = t.replace(/`([^`\n]+)`/g, (_, c) => `<code>${escHtml(c)}</code>`);
+  // Step 3: Bold+italic, bold, italic
+  t = t.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+  t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  t = t.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+  // Step 4: Links — only allow http/https to prevent javascript: injection
+  t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  // Step 5: Headers
+  t = t.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  t = t.replace(/^## (.+)$/gm,  '<h2>$1</h2>');
+  t = t.replace(/^# (.+)$/gm,   '<h1>$1</h1>');
+  // Step 6: Horizontal rule
+  t = t.replace(/^[-*]{3,}$/gm, '<hr>');
+  // Step 7: Bullet and numbered list items
+  t = t.replace(/^[*-] (.+)$/gm, '<li>$1</li>');
+  t = t.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+  // Step 8: Wrap consecutive <li> lines in a single <ul>
+  t = t.replace(/((?:<li>.*\n?)+)/g, '<ul>$1</ul>');
+  // Step 9: Paragraphs — blank lines separate blocks
+  t = t.split(/\n{2,}/).map(chunk => {
+    const c = chunk.trim();
+    if (!c) return '';
+    // Already an HTML block (or a code-block placeholder) — don't wrap in <p>
+    if (/^(<(ul|ol|pre|h[1-6]|hr)|\x00B)/.test(c)) return c;
+    return '<p>' + c.replace(/\n/g, '<br>') + '</p>';
+  }).join('\n');
+  // Step 10: Restore code blocks
+  blocks.forEach((b, i) => { t = t.replace(`\x00B${i}\x00`, b); });
+  return t;
+}
+
 // ── SIDEBAR (desktop collapse + mobile drawer) ──
 function toggleSidebar() {
   document.getElementById('sidebar').classList.toggle('collapsed');
@@ -1089,20 +1280,48 @@ function addMessage(role, content, opts = {}) {
   document.getElementById('chat-greeting').style.display = 'none';
   document.getElementById('chat-greeting-sub').style.display = 'none';
   messages.classList.add('has-messages');
+  // Switch chat-content from justify-content:center to flex-start so
+  // overflow is scrollable all the way to the top (center clips the top)
+  document.querySelector('.chat-content').classList.add('has-messages');
   const el = document.createElement('div');
   el.className = 'msg ' + role + (opts.thinking ? ' thinking' : '') + (opts.error ? ' error' : '');
-  el.textContent = content;
+  if (opts.thinking) {
+    el.innerHTML = '<span class="think-dots"><i></i><i></i><i></i></span>';
+  } else {
+    el.textContent = content;
+  }
   messages.appendChild(el);
-  // Scroll into view inside the chat-content scroller
-  el.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  // Scroll the container so the new message lands just above the sticky prompt
+  scrollChatToBottom(true);
   return el;
 }
 
+// Scrolls the chat container to the bottom. With force=false it only scrolls
+// if the user is already near the bottom — so reading old messages while a
+// reply streams in doesn't yank them back down.
+function scrollChatToBottom(force = false) {
+  const sc = document.querySelector('.chat-content');
+  if (!sc) return;
+  const nearBottom = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 130;
+  if (force || nearBottom) sc.scrollTop = sc.scrollHeight;
+}
+
+// True while a reply is streaming in — blocks a second request being fired
+// before the first finishes (double-send protection).
+let isSending = false;
+function setSending(on) {
+  isSending = on;
+  const btn = document.querySelector('.prompt-send');
+  if (btn) btn.disabled = on; // greys out + blocks clicks (see .prompt-send:disabled)
+}
+
 async function sendMessage() {
+  if (isSending) return; // a reply is already streaming — ignore double-fires
   const input = document.getElementById('prompt-input');
   const text = input.value.trim();
   if (!text) return;
   input.value = ''; input.style.height = 'auto';
+  setSending(true); // disable the send button until the reply finishes
 
   addMessage('user', text);
   history.push({ role: 'user', content: text });
@@ -1110,34 +1329,48 @@ async function sendMessage() {
   const thinkingEl = addMessage('assistant', 'Thinking…', { thinking: true });
 
   try {
-    // Phase 6: Get CSRF token from sessionStorage
-    let csrfToken = sessionStorage.getItem('econintel:csrf');
-
-    // Build request headers with CSRF token
-    const headers = {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrfToken || ''
-    };
-
-    const res = await fetch(CHAT_ENDPOINT, {
+    // Small helper so we can fire the same request twice (see retry below).
+    // Reads the CSRF token fresh each time — silentRefresh may have replaced it.
+    const fireRequest = () => fetch(CHAT_ENDPOINT, {
       method: 'POST',
-      headers: headers,
-      credentials: 'include', // Phase 6: Include cookies (access_token sent automatically)
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': localStorage.getItem('econintel:csrf') || ''
+      },
+      credentials: 'include', // cookies (access_token) sent automatically
       body: JSON.stringify({ model: MODEL, messages: history })
     });
+
+    let res = await fireRequest();
+
+    // Access tokens only live 15 minutes. If a signed-in user sat idle and
+    // then sent a message, the token is expired → 401/403. Instead of kicking
+    // them out, renew the token with the 30-day refresh cookie and retry ONCE.
+    if ((res.status === 401 || res.status === 403) && getUser()) {
+      await silentRefresh(); // renews access_token cookie + CSRF token, or clears user if truly expired
+      if (getUser()) res = await fireRequest();
+    }
 
     // Handle authentication errors
     if (res.status === 401) {
       thinkingEl.remove();
-      addMessage('assistant',
-        'Your session has expired. Please sign in again.',
-        { error: true });
-      // Phase 6: Clear session and redirect to sign in
-      sessionStorage.removeItem('econintel:csrf');
-      sessionStorage.removeItem('econintel:user');
-      setTimeout(() => {
-        window.location.href = '/index.html';
-      }, 2000);
+      let errData = {};
+      try { errData = await res.clone().json(); } catch {}
+
+      if (errData.code === 'GUEST_QUOTA_EXCEEDED') {
+        // Guest ran out of free messages — show sign-up CTA
+        addMessage('assistant',
+          `You've used all 15 free messages. **[Sign up free](index.html)** for 100 queries/month — no credit card needed.`,
+          { error: false });
+      } else {
+        // Expired session
+        addMessage('assistant',
+          'Your session has expired. Please sign in again.',
+          { error: true });
+        localStorage.removeItem('econintel:csrf');
+        localStorage.removeItem('econintel:user');
+        setTimeout(() => { window.location.href = '/index.html'; }, 2000);
+      }
       return;
     }
 
@@ -1175,38 +1408,138 @@ async function sendMessage() {
       return;
     }
 
-    const data = await res.json();
-    const reply = data?.choices?.[0]?.message?.content
-      ?? data?.error?.message
-      ?? 'No response.';
-
+    // Streaming: remove the "Thinking…" spinner and show an empty assistant bubble
+    // immediately. OpenRouter sends tokens as SSE (text/event-stream) events, and
+    // we append each delta to the bubble in real time so the user sees text appear
+    // token-by-token instead of waiting for the full response.
     thinkingEl.remove();
-    addMessage('assistant', reply);
-    history.push({ role: 'assistant', content: reply });
+    const msgEl = addMessage('assistant', ''); // empty bubble — filled as tokens arrive
+    let fullReply = '';
 
-    // Show quota info if available in response headers
-    const remaining = res.headers.get('X-Queries-Remaining');
-    const limit = res.headers.get('X-Queries-Limit');
-    if (remaining !== null && limit !== null) {
-      console.log(`📊 Quota: ${remaining}/${limit} queries remaining this month`);
-      // Optionally show this to user in UI
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    // partial holds an incomplete SSE line that was split across two chunks
+    let partial = '';
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        // Prepend any leftover incomplete line, then split on newlines
+        partial += dec.decode(value, { stream: true });
+        const lines = partial.split('\n');
+        partial = lines.pop(); // last element may be incomplete — save for next chunk
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const payload = line.slice(6).trim();
+          if (payload === '[DONE]') { partial = ''; break; }
+          try {
+            const delta = JSON.parse(payload)?.choices?.[0]?.delta?.content;
+            if (delta) {
+              fullReply += delta;
+              msgEl.textContent = fullReply; // live update — user sees text as it arrives
+              scrollChatToBottom(); // follow the stream (unless user scrolled up)
+            }
+          } catch {} // malformed SSE line — skip silently
+        }
+      }
+    } catch (err) {
+      // Network dropped mid-stream — keep whatever arrived
+      if (!fullReply) msgEl.textContent = 'Stream interrupted. Try again.';
     }
+    if (!fullReply && !msgEl.textContent) msgEl.textContent = 'No response.';
+    // Stream done — switch from plain textContent to rendered HTML.
+    // We stream as text so partial tokens don't break mid-tag, then
+    // render once the full response is received.
+    if (fullReply) msgEl.innerHTML = renderMarkdown(fullReply);
+    // Final scroll so the rendered reply sits just above the prompt box
+    scrollChatToBottom();
+    history.push({ role: 'assistant', content: fullReply });
   } catch (err) {
     thinkingEl.remove();
     addMessage('assistant',
       `Network error: ${err.message}. Make sure /functions/chat is reachable.`,
       { error: true });
+  } finally {
+    setSending(false); // re-enable the send button on every exit path (success, error, early return)
   }
 }
 
 function newChat() {
   document.getElementById('messages').innerHTML = '';
   document.getElementById('messages').classList.remove('has-messages');
+  document.querySelector('.chat-content').classList.remove('has-messages');
   document.getElementById('chat-greeting').style.display = '';
   document.getElementById('chat-greeting-sub').style.display = '';
   history.length = 1; // keep system prompt
   const input = document.getElementById('prompt-input');
   input.value = ''; input.style.height = 'auto'; input.focus();
+}
+
+// ── SEARCH CHATS (filters the Recents list) ──
+function searchChats() {
+  const items = document.querySelectorAll('.recent-chat-item');
+  if (!items.length) { alert('No recent chats to search yet.'); return; }
+  const term = (prompt('Search your recent chats:') || '').toLowerCase().trim();
+  let shown = 0;
+  items.forEach(it => {
+    const match = !term || it.textContent.toLowerCase().includes(term);
+    it.style.display = match ? '' : 'none';
+    if (match) shown++;
+  });
+  if (term && shown === 0) alert('No chats match "' + term + '".');
+}
+
+// ── LIBRARY (all past prompts in a quick overlay) ──
+async function openLibrary() {
+  let data;
+  try {
+    const res = await fetch(CONFIG.chatHistory.get + '&limit=200', {
+      credentials: 'include',
+      headers: { 'X-CSRF-Token': localStorage.getItem('econintel:csrf') || '' }
+    });
+    if (!res.ok) { alert('Sign in to view your library.'); return; }
+    data = await res.json();
+  } catch { alert('Could not load your library.'); return; }
+  const msgs = (data.messages || []).filter(m => m.role === 'user');
+  if (!msgs.length) { alert('Your library is empty — start a chat!'); return; }
+  const rows = msgs.map(m =>
+    `<div class="lib-row" data-q="${escapeHTML(m.content)}"
+       onclick="document.getElementById('prompt-input').value=this.dataset.q;document.getElementById('lib-overlay').remove();document.getElementById('prompt-input').focus();autoResize(document.getElementById('prompt-input'));"
+       style="padding:.65rem .85rem;border-bottom:1px solid rgba(255,255,255,.07);font-size:.86rem;cursor:pointer;color:#dfe6f5;">
+       ${escapeHTML(m.content.slice(0, 90))}${m.content.length > 90 ? '…' : ''}</div>`
+  ).join('');
+  const ov = document.createElement('div');
+  ov.id = 'lib-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(4,8,20,.62);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px);';
+  ov.innerHTML = `<div style="background:#0e1426;border:1px solid rgba(90,130,230,.28);border-radius:16px;max-width:520px;width:90%;max-height:72vh;overflow:auto;padding:1.1rem 1.1rem 1.3rem;box-shadow:0 24px 60px -20px rgba(0,0,0,.7);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.7rem;"><strong style="font-size:1.05rem;color:#fff;">Library</strong><button onclick="document.getElementById('lib-overlay').remove()" style="background:none;border:none;color:#9aa;font-size:1.3rem;cursor:pointer;line-height:1;">✕</button></div>${rows}</div>`;
+  ov.onclick = e => { if (e.target === ov) ov.remove(); };
+  document.body.appendChild(ov);
+}
+
+// ── VOICE INPUT (Web Speech API) ──
+let _recognition = null, _recognizing = false;
+function toggleVoiceInput() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { alert('Voice input needs a Chromium browser (Chrome/Brave/Edge).'); return; }
+  const btn = document.getElementById('voice-btn');
+  const input = document.getElementById('prompt-input');
+  if (_recognizing && _recognition) { _recognition.stop(); return; }
+  _recognition = new SR();
+  _recognition.lang = 'en-US';
+  _recognition.interimResults = true;
+  _recognition.continuous = false;
+  const base = input.value.trim();
+  _recognition.onstart = () => { _recognizing = true; if (btn) btn.style.color = '#ff5b5b'; };
+  _recognition.onresult = (e) => {
+    let txt = '';
+    for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
+    input.value = (base ? base + ' ' : '') + txt;
+    autoResize(input);
+  };
+  _recognition.onerror = () => { _recognizing = false; if (btn) btn.style.color = ''; };
+  _recognition.onend = () => { _recognizing = false; if (btn) btn.style.color = ''; input.focus(); };
+  _recognition.start();
 }
 
 // ── CHAT HISTORY MANAGEMENT ──
@@ -1216,7 +1549,7 @@ async function loadChatHistory() {
   if (!user) return; // Not signed in
 
   // Phase 6: Get CSRF token from sessionStorage
-  const csrfToken = sessionStorage.getItem('econintel:csrf');
+  const csrfToken = localStorage.getItem('econintel:csrf');
 
   try {
     const res = await fetch(CONFIG.chatHistory.get + '&limit=50', {
@@ -1251,7 +1584,7 @@ async function clearChatHistory() {
   if (!confirm('Delete all chat history? This cannot be undone.')) return;
 
   try {
-    const csrfToken = sessionStorage.getItem('econintel:csrf');
+    const csrfToken = localStorage.getItem('econintel:csrf');
 
     const res = await fetch(CONFIG.chatHistory.delete, {
       method: 'DELETE',
@@ -1276,13 +1609,31 @@ async function clearChatHistory() {
 // Phase 6: Load recent chats for sidebar
 async function loadRecentChats() {
   const user = getUser();
+  const recentsContainer = document.querySelector('.recents-empty');
+
   if (!user) {
-    const recentsEmpty = document.querySelector('.recents-empty');
-    if (recentsEmpty) recentsEmpty.textContent = 'Sign in to see history';
+    if (recentsContainer) recentsContainer.textContent = 'Sign in to see history';
     return;
   }
 
-  const csrfToken = sessionStorage.getItem('econintel:csrf');
+  // Small helper: drop back to the plain empty label (used on no-history / errors).
+  // Clearing .has-recents resets the spacing the populated list uses.
+  const showEmpty = () => {
+    if (!recentsContainer) return;
+    recentsContainer.classList.remove('has-recents');
+    recentsContainer.textContent = 'No recent chats';
+  };
+
+  // Show shimmer skeleton rows WHILE we fetch — reads as "loading", not "empty",
+  // and feels faster than a blank gap that suddenly pops full of items.
+  if (recentsContainer) {
+    recentsContainer.classList.remove('has-recents');
+    recentsContainer.innerHTML = Array.from({ length: 4 }).map(() =>
+      '<div class="recent-skeleton"><div class="sk-line"></div><div class="sk-line short"></div></div>'
+    ).join('');
+  }
+
+  const csrfToken = localStorage.getItem('econintel:csrf');
 
   try {
     const res = await fetch(CONFIG.chatHistory.get + '&limit=20', {
@@ -1293,49 +1644,91 @@ async function loadRecentChats() {
       credentials: 'include' // Phase 6: Include access_token cookie
     });
 
-    if (!res.ok) return;
+    if (!res.ok) { showEmpty(); return; } // couldn't load — clear the skeletons
 
     const data = await res.json();
     const userMessages = data.messages.filter(m => m.role === 'user');
 
-    const recentsContainer = document.querySelector('.recents-empty');
     if (userMessages.length > 0 && recentsContainer) {
       const recentsList = userMessages
         .slice(0, 8)
         .map(msg => {
           const preview = msg.content.substring(0, 35) + (msg.content.length > 35 ? '…' : '');
           const date = new Date(msg.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-          return `<div class="recent-chat-item" title="${msg.content}"><span class="recent-preview">${preview}</span><span class="recent-date">${date}</span></div>`;
+          // Escape user-controlled content before inserting into innerHTML (prevents stored XSS)
+          return `<div class="recent-chat-item" title="${escapeHTML(msg.content)}"><span class="recent-preview">${escapeHTML(preview)}</span><span class="recent-date">${escapeHTML(date)}</span></div>`;
         })
         .join('');
-      recentsContainer.innerHTML = recentsList;
+      recentsContainer.innerHTML = recentsList; // replaces the skeletons
       recentsContainer.classList.add('has-recents');
+    } else {
+      // Signed in but no history yet — replace skeletons with the empty label
+      showEmpty();
     }
   } catch (err) {
     console.warn('[recents] Failed to load:', err);
+    showEmpty(); // network error — don't leave skeletons shimmering forever
   }
 }
 
 // ════════════════════════════════════════════════════════════════════
 //                          AUTH STATE
 // ════════════════════════════════════════════════════════════════════
-// Phase 6: User info in sessionStorage (survives reload within same session)
+// User info in localStorage so it survives tab closes and browser restarts.
+// The actual auth is in HttpOnly cookies (access_token 15min, refresh_token 30d).
+// localStorage just holds display data (name, plan) and the CSRF token.
 // User shape: { name, email, username, plan, signedInAt }
 
 const USER_KEY = 'econintel:user';
 
 function getUser() {
-  try { return JSON.parse(sessionStorage.getItem(USER_KEY) || 'null'); }
+  try { return JSON.parse(localStorage.getItem(USER_KEY) || 'null'); }
   catch { return null; }
 }
 function setUser(u) {
-  sessionStorage.setItem(USER_KEY, JSON.stringify(u));
+  localStorage.setItem(USER_KEY, JSON.stringify(u));
   refreshAvatar();
 }
 function clearUser() {
-  sessionStorage.removeItem(USER_KEY);
-  sessionStorage.removeItem('econintel:csrf');
+  localStorage.removeItem(USER_KEY);
+  localStorage.removeItem('econintel:csrf');
   refreshAvatar();
+}
+
+// Called on every page load if localStorage has a user.
+// Silently calls /auth?action=refresh — this renews the access_token cookie
+// (which expires every 15 min) and returns a fresh CSRF token.
+// If the refresh_token cookie has also expired (>30 days), server returns 401
+// and we clear localStorage so the UI shows the user as logged out.
+async function silentRefresh() {
+  try {
+    const res = await fetch(`${window.CONFIG?.auth?.logout?.replace('?action=logout','') || '/auth'}?action=refresh`, {
+      method: 'POST',
+      credentials: 'include', // sends the refresh_token HttpOnly cookie automatically
+    });
+    if (!res.ok) {
+      // refresh_token expired or invalid — treat as logged out
+      clearUser();
+      return;
+    }
+    const data = await res.json();
+    // Refresh CSRF token
+    if (data.csrfToken) {
+      localStorage.setItem('econintel:csrf', data.csrfToken);
+    }
+    // Update stored user data with latest from server (plan may have changed).
+    // No `current` check: after a Discord/OAuth login there IS no localStorage
+    // user yet — only the cookies — so this is what creates the local session.
+    if (data.user) {
+      setUser({
+        signedInAt: new Date().toISOString(),
+        ...(getUser() || {}),
+        ...data.user,
+      });
+    }
+  } catch {
+    // Network error — keep localStorage as-is, don't log out (offline tolerance)
+  }
 }
 function initialsOf(name) {
   if (!name) return '··';
@@ -1378,9 +1771,10 @@ function renderAccountMenu() {
           <div class="account-header-email">${escapeHTML(u.email)}</div>
         </div>
       </div>
-      <button class="account-menu-item" onclick="openAccountModal('edit')">
+      <!-- Edit Profile lives on the landing page — ?profile=1 opens the modal there -->
+      <a href="index.html?profile=1" class="account-menu-item">
         ${ICON.edit} Edit Profile
-      </button>
+      </a>
       <button class="account-menu-item" onclick="openAccountModal('settings')">
         ${ICON.settings} Settings
       </button>
@@ -1454,12 +1848,15 @@ function openAccountModal(which) {
     title.textContent = 'Sign in to EconIntel';
     body.innerHTML = `
       <form onsubmit="handleSignIn(event)" class="acct-form">
-        <label class="acct-label">Name</label>
-        <input class="acct-input" id="si-name" required placeholder="Jane Analyst" autocomplete="name"/>
         <label class="acct-label">Email</label>
-        <input class="acct-input" id="si-email" type="email" required placeholder="jane@firm.com" autocomplete="email"/>
-        <button class="acct-btn acct-btn-full" type="submit">Continue</button>
-        <p class="acct-foot">No password needed for the prototype. Your details stay in this browser.</p>
+        <input class="acct-input" id="si-email" type="email" required placeholder="jane@firm.com" autocomplete="email" style="font-size:16px"/>
+        <label class="acct-label">Password</label>
+        <input class="acct-input" id="si-password" type="password" required placeholder="••••••••" autocomplete="current-password" style="font-size:16px"/>
+        <div class="acct-actions" style="margin-top:.5rem">
+          <button type="button" class="acct-btn ghost" onclick="closeAccountModal()">Cancel</button>
+          <button type="submit" class="acct-btn" id="si-submit">Sign in</button>
+        </div>
+        <p class="acct-foot" style="text-align:center;margin-top:.75rem">No account? <a href="/index.html" style="color:var(--accent)">Sign up free →</a></p>
       </form>`;
   } else if (which === 'edit') {
     if (!u) return openAccountModal('signin');
@@ -1467,14 +1864,14 @@ function openAccountModal(which) {
     body.innerHTML = `
       <form onsubmit="handleEditProfile(event)" class="acct-form">
         <label class="acct-label">Display name</label>
-        <input class="acct-input" id="ep-name" required value="${escapeHTML(u.name)}"/>
+        <input class="acct-input" id="ep-name" required maxlength="25" value="${escapeHTML(u.name)}"/>
         <label class="acct-label">Username</label>
         <div class="acct-input-pre">
           <span class="acct-input-at">@</span>
           <input class="acct-input pl" id="ep-username" value="${escapeHTML(u.username || u.email.split('@')[0])}" pattern="[a-zA-Z0-9_]{2,24}" required/>
         </div>
         <label class="acct-label">Email</label>
-        <input class="acct-input" id="ep-email" type="email" required value="${escapeHTML(u.email)}"/>
+        <input class="acct-input" id="ep-email" type="email" required value="${escapeHTML(u.email)}" pattern="[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}" title="Enter a valid email address (e.g. you@example.com)"/>
         <div class="acct-actions">
           <button type="button" class="acct-btn ghost" onclick="closeAccountModal()">Cancel</button>
           <button type="submit" class="acct-btn">Save changes</button>
@@ -1492,10 +1889,6 @@ function openAccountModal(which) {
         <button class="acct-btn" style="margin:0" onclick="toggleTheme(); openAccountModal('settings');">${isLight ? 'Switch to Dark' : 'Switch to Light'}</button>
       </div>
       <div class="acct-row">
-        <span class="acct-row-label">Model</span>
-        <span class="acct-row-value">${MODEL}</span>
-      </div>
-      <div class="acct-row">
         <span class="acct-row-label">Chat history</span>
         ${clearHistoryBtn}
       </div>`;
@@ -1508,19 +1901,52 @@ function closeAccountModal(e) {
   document.getElementById('acct-modal').classList.remove('open');
 }
 
-function handleSignIn(e) {
+// Real login — calls the auth API instead of just storing locally.
+// Previous version was a prototype mock that never authenticated with the server.
+async function handleSignIn(e) {
   e.preventDefault();
-  const name  = document.getElementById('si-name').value.trim();
-  const email = document.getElementById('si-email').value.trim().toLowerCase();
-  if (!name || !email) return;
-  setUser({
-    name,
-    email,
-    username: email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_'),
-    plan: 'Free',
-    signedInAt: new Date().toISOString()
-  });
-  closeAccountModal();
+  const email    = document.getElementById('si-email').value.trim().toLowerCase();
+  const password = document.getElementById('si-password').value;
+  const btn      = document.getElementById('si-submit');
+  if (!email || !password) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Signing in…';
+
+  try {
+    const res = await fetch(CONFIG.auth.login, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', // sends/receives HttpOnly cookies
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      // 429 = rate-limited by server; 401 = wrong credentials
+      alert(res.status === 429 ? 'Too many attempts. Try again in 15 minutes.' : (data.error || 'Invalid email or password.'));
+      btn.disabled = false;
+      btn.textContent = 'Sign in';
+      return;
+    }
+
+    // Store real user data from server (replaces the old local-only mock)
+    setUser({
+      name:       data.username || email.split('@')[0],
+      email:      data.email,
+      username:   data.username,
+      plan:       data.plan || 'free',
+      signedInAt: new Date().toISOString(),
+    });
+    // Persist CSRF token for use in authenticated requests (logout, delete history)
+    try { localStorage.setItem('econintel:csrf', data.csrfToken); } catch (_) {}
+    closeAccountModal();
+    loadRecentChats(); // refresh sidebar now that we have a real session
+  } catch (err) {
+    alert('Sign in failed. Check your connection and try again.');
+    btn.disabled = false;
+    btn.textContent = 'Sign in';
+  }
 }
 
 function handleEditProfile(e) {
@@ -1537,7 +1963,7 @@ function handleEditProfile(e) {
 
 async function signOut() {
   // Phase 6: Call /auth/logout endpoint to invalidate session
-  const csrfToken = sessionStorage.getItem('econintel:csrf');
+  const csrfToken = localStorage.getItem('econintel:csrf');
   if (csrfToken) {
     try {
       await fetch(CONFIG.auth.logout, {
@@ -1555,13 +1981,14 @@ async function signOut() {
   }
 
   clearUser();
-  // Stay on the page rather than redirect — user can keep using chat as guest.
-  // (Use Back to Landing if they want to leave.)
+  // Redirect to the landing page. Staying here left the recents list and
+  // chat on screen, which made sign-out look like it did nothing.
+  window.location.href = 'index.html';
 }
 
 // Initial avatar sync on load (also picks up sign-ins done on the landing page)
 refreshAvatar();
-// Phase 6: Listen for sessionStorage changes (user signs in from landing page)
+// Listen for localStorage changes (user signs in from another tab)
 window.addEventListener('storage', e => {
   if (e.key === USER_KEY || e.key === 'econintel:csrf') {
     refreshAvatar();
@@ -1570,7 +1997,17 @@ window.addEventListener('storage', e => {
 });
 
 // Load chat history and recent chats on page load
-window.addEventListener('load', () => {
+window.addEventListener('load', async () => {
+  // ?oauth=1 means we just arrived from a Discord login redirect: the auth
+  // cookies are set but localStorage is empty — silentRefresh fills it in
+  const fromOAuth = new URLSearchParams(window.location.search).get('oauth') === '1';
+  // If localStorage shows a logged-in user, silently renew their access_token
+  // cookie via the refresh endpoint. This is what keeps users from having to
+  // log in again after closing and reopening the tab/browser.
+  if (getUser() || fromOAuth) await silentRefresh();
+  // Clean ?oauth=1 from the address bar so reloads look normal
+  // window.history explicitly — `history` here is our messages array (shadows the global)
+  if (fromOAuth) window.history.replaceState({}, '', window.location.pathname);
   loadRecentChats();
   setTimeout(() => {
     loadChatHistory();

@@ -6,7 +6,7 @@
 <title>EconIntel — Economics, Reimagined by AI</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&family=Carter+One&display=swap" rel="stylesheet" />
 <!-- Spline 3D viewer -->
 <script type="module" src="https://unpkg.com/@splinetool/viewer@1.9.82/build/spline-viewer.js"></script>
 <style>
@@ -26,6 +26,71 @@
   }
 
   html { scroll-behavior: smooth; }
+
+  /* ── ANCHOR SCROLL OFFSET ──
+     The navbar is fixed at the top, so a plain anchor jump (#pricing etc.)
+     parks the section heading UNDER the navbar. scroll-margin-top reserves
+     space equal to the nav height + a little breathing room, so headings
+     land just below the bar instead of being hidden behind it. */
+  #case-studies, #sources, #pricing, #contact { scroll-margin-top: 96px; }
+
+  /* ── ACCESSIBLE FOCUS RINGS ──
+     :focus-visible only shows the ring for keyboard / assistive-tech users,
+     not on every mouse click — so we get accessibility without an ugly
+     outline appearing every time someone taps a button with the mouse. */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  /* Suppress the browser's default outline for pointer users (no focus-visible) */
+  :focus:not(:focus-visible) { outline: none; }
+
+  /* ── REDUCED MOTION ──
+     Honour the OS-level "reduce motion" setting (set by people who get motion
+     sickness or just prefer calm UIs). We near-instantly finish every
+     animation/transition and turn off smooth scrolling for them. */
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+
+  /* ── TOAST NOTIFICATIONS ──
+     Replaces the jarring native alert() for OAuth errors / profile saves.
+     Toasts are injected into #toast-container (created on first use by
+     showToast()) and slide in from the bottom-right. */
+  .toast-container {
+    position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999;
+    display: flex; flex-direction: column; gap: 0.6rem;
+    pointer-events: none; /* let clicks pass through the empty container */
+  }
+  .toast {
+    display: flex; align-items: center; gap: 0.6rem;
+    min-width: 240px; max-width: 360px;
+    background: rgba(13,13,20,0.95);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); /* accent stripe, recoloured per type */
+    border-radius: 10px; padding: 0.85rem 1rem;
+    color: var(--text); font-size: 0.88rem; line-height: 1.45;
+    box-shadow: 0 12px 32px -8px rgba(0,0,0,0.6);
+    backdrop-filter: blur(12px);
+    /* Start off-screen to the right and transparent; .show slides it in */
+    transform: translateX(120%); opacity: 0;
+    transition: transform 0.35s cubic-bezier(0.16,1,0.3,1), opacity 0.35s;
+    pointer-events: auto; /* but the toast itself is interactive */
+  }
+  .toast.show { transform: translateX(0); opacity: 1; }
+  .toast.success { border-left-color: #34d399; }
+  .toast.error { border-left-color: #f87171; }
+  /* On phones, stretch the toast across the bottom instead of a corner card */
+  @media (max-width: 520px) {
+    .toast-container { left: 1rem; right: 1rem; bottom: 1rem; }
+    .toast { max-width: none; min-width: 0; }
+  }
 
   /* ── ANIMATED GRADIENT BACKGROUND ── */
   @keyframes gradientShift {
@@ -54,50 +119,7 @@
     line-height: 1.6;
   }
 
-  /* Shader background canvas — sits above the CSS gradient fallback, below content */
-  #shader-bg {
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    pointer-events: none;
-  }
-  #shader-bg canvas { display: block; width: 100% !important; height: 100% !important; }
-
-  body::before {
-    content: '';
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: -2;
-    background: linear-gradient(
-      135deg,
-      #050508 0%,
-      #1a1a2e 25%,
-      #0f3460 50%,
-      #16213e 75%,
-      #050508 100%
-    );
-    background-size: 200% 200%;
-    animation: gradientShift 30s ease-in-out infinite;
-    pointer-events: none;
-  }
-
-  body::after {
-    content: '';
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: -2;
-    background:
-      radial-gradient(circle at 20% 50%, rgba(96, 96, 128, 0.15) 0%, transparent 50%),
-      radial-gradient(circle at 80% 80%, rgba(141, 125, 202, 0.12) 0%, transparent 50%);
-    animation: gradientShift 40s ease-in-out infinite reverse;
-    pointer-events: none;
-  }
+  /* Hero/landing background removed — clean solid var(--bg) */
 
   /* ── NAV (HextaUI floating pill) ── */
   .nav-wrap {
@@ -108,8 +130,8 @@
 
   nav {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 0.6rem 1.25rem;
-    width: 100%; max-width: 780px;
+    padding: 0.6rem 1.4rem;
+    width: 100%; max-width: 960px;
     background: rgba(10,10,18,0.85);
     backdrop-filter: blur(20px);
     border: 1px solid rgba(255,255,255,0.1);
@@ -144,10 +166,10 @@
   }
   nav:hover .nav-logo-chart svg { color: #fff; }
 
-  .nav-links { display: flex; gap: 1.75rem; list-style: none; }
+  .nav-links { display: flex; gap: 1.15rem; list-style: none; }
   .nav-links a {
-    color: rgba(255,255,255,0.55); text-decoration: none; font-size: 0.85rem;
-    font-weight: 500; letter-spacing: 0.01em;
+    color: rgba(255,255,255,0.55); text-decoration: none; font-size: 0.82rem;
+    font-weight: 500; letter-spacing: 0.01em; white-space: nowrap;
     transition: color 0.2s;
   }
   .nav-links a:hover { color: #fff; }
@@ -197,10 +219,45 @@
     position: absolute; top: 1.5rem; right: 1.5rem;
     background: none; border: none; color: #fff; cursor: pointer; font-size: 1.5rem;
   }
+  /* Auth buttons pinned to the bottom of the mobile overlay */
+  .nav-mobile-auth {
+    position: absolute; bottom: 2.5rem; left: 1.5rem; right: 1.5rem;
+    display: flex; flex-direction: column; gap: 0.65rem;
+  }
+  .nav-mobile-social {
+    display: flex; gap: 0.6rem;
+  }
+  /* Each social button is half-width, pill style matching the modal */
+  .nav-mobile-social-btn {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px; padding: 0.65rem 0.5rem;
+    color: #fff; font-size: 0.85rem; font-family: 'DM Sans', sans-serif;
+    cursor: pointer; transition: background 0.15s;
+  }
+  .nav-mobile-social-btn:hover { background: rgba(255,255,255,0.1); }
+  /* "Sign in with email" text link */
+  .nav-mobile-email-link {
+    text-align: center; font-size: 0.8rem; font-family: 'DM Sans', sans-serif;
+    color: rgba(255,255,255,0.35); text-decoration: none; font-weight: 400;
+    transition: color 0.15s;
+  }
+  .nav-mobile-email-link:hover { color: rgba(255,255,255,0.65); }
 
-  @media (max-width: 640px) {
+  /* Tablet & below: 7 nav links need ~835px and overflow the pill on iPads,
+     so the hamburger takes over earlier than the phone breakpoint */
+  @media (max-width: 900px) {
     .nav-links, .nav-cta { display: none; }
     .nav-hamburger { display: flex; }
+  }
+
+  /* Phones: compact pill — auto-width so it wraps its content instead of
+     stretching edge-to-edge, and a small gap holds logo + actions apart */
+  @media (max-width: 640px) {
+    nav { padding: 0.45rem 0.9rem; width: auto; gap: 1.25rem; }
+    .nav-logo { font-size: 0.85rem; }
+    .nav-logo-chart { width: 16px; height: 16px; }
+    .theme-toggle { width: 30px; height: 30px; }
   }
 
   /* ── SECTION 1: HERO ── */
@@ -213,10 +270,7 @@
   }
 
   #hero-spotlight {
-    position: absolute; inset: 0; pointer-events: none; z-index: 0;
-    background: radial-gradient(600px circle at var(--mx, 50%) var(--my, 40%),
-      rgba(14,165,233,0.12) 0%, rgba(99,102,241,0.05) 40%, transparent 70%);
-    transition: background 0.05s;
+    display: none; /* cursor-following spotlight removed */
   }
 
   .hero-grid {
@@ -249,6 +303,36 @@
     height: 100%;
     margin-left: -2.5rem;
     --spline-viewer-bg: transparent;
+    /* Sit ABOVE the placeholder glow so the robot draws on top of it.
+       NOTE: we deliberately do NOT set opacity on the viewer. The
+       <spline-viewer> web component manages its own host opacity while the
+       scene loads (via the Web Animations API), so fading the host ourselves
+       just fights the component and can leave the robot dimmed. Instead we
+       leave the viewer alone and fade the PLACEHOLDER out (below). */
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Soft pulsing glow shown WHILE the 3D scene downloads, sitting BEHIND the
+     viewer so the space reads as "loading" rather than "broken". JS adds
+     .loaded to .hero-robot-wrap once the scene is ready (or after a 4s
+     safety timeout), which fades this out. */
+  .hero-robot-placeholder {
+    position: absolute; inset: 0; z-index: 0;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+    opacity: 1; transition: opacity 0.6s ease;
+  }
+  .hero-robot-placeholder::before {
+    content: '';
+    width: 280px; height: 280px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(14,165,233,0.18), transparent 70%);
+    animation: robotPulse 2.4s ease-in-out infinite;
+  }
+  .hero-robot-wrap.loaded .hero-robot-placeholder { opacity: 0; }
+  @keyframes robotPulse {
+    0%, 100% { transform: scale(0.9); opacity: 0.5; }
+    50%      { transform: scale(1.1); opacity: 1; }
   }
 
   .hero-badge {
@@ -281,9 +365,12 @@
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   }
 
+  /* Matches the look the hero <p> previously had as inline styles.
+     Moved into a class so media queries can actually override it on mobile
+     (inline styles always beat stylesheet rules). */
   .hero-sub {
-    font-size: 1.05rem; color: var(--text2);
-    max-width: 440px; margin-bottom: 2.5rem;
+    font-size: 1.1rem; color: var(--text2);
+    max-width: 500px; margin-top: 1rem;
     font-weight: 300; line-height: 1.7;
   }
 
@@ -492,10 +579,51 @@
     font-size: 0.8rem; color: var(--text2);
   }
 
+  /* ── ENTER TERMINAL CTA (bridge between hero and case studies) ── */
+  .terminal-cta-wrap {
+    display: flex; justify-content: center;
+    padding: 2.5rem 1.5rem 0;
+  }
+  .terminal-cta {
+    display: inline-flex; align-items: center; gap: 0.6rem;
+    background: var(--accent); color: #04131f;
+    font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 0.82rem;
+    text-transform: uppercase; letter-spacing: 0.14em;
+    padding: 0.9rem 1.9rem;
+    border-radius: 9999px;
+    text-decoration: none;
+    transition: transform 0.2s, background 0.2s, box-shadow 0.3s;
+  }
+  .terminal-cta:hover {
+    background: #fff;
+    transform: translateY(-2px);
+    box-shadow: 0 12px 36px -10px rgba(14,165,233,0.55);
+  }
+  .terminal-cta svg { width: 15px; height: 15px; }
+
   /* Responsive */
+  @media (max-width: 640px) {
+    #hero { padding: 100px 1.5rem 1rem; min-height: auto; }
+    .terminal-cta-wrap { padding: 1.5rem 1.5rem 0; }
+    .hero-left { padding-top: 0; transform: none; }
+    .hero-heading { font-size: clamp(1.75rem, 5vw, 2.5rem); margin-bottom: 1rem; }
+    .hero-sub { max-width: 100%; font-size: 0.95rem; margin-bottom: 1.5rem; }
+    .hero-robot-wrap { display: none; }
+    .hero-grid { grid-template-columns: 1fr; gap: 0; }
+  }
+
   @media (max-width: 900px) {
+    /* Kill the 100vh minimum so the hero doesn't sit empty on tablets */
+    #hero { min-height: auto; }
     .hero-grid { grid-template-columns: 1fr; }
     .cards-grid { grid-template-columns: 1fr; }
+    /* Single column now — undo the desktop-only left shift of the text */
+    .hero-left { transform: none; }
+    /* The stacked robot was 640px+ tall on tablets — cap it */
+    .hero-robot-wrap { height: 440px; min-height: 0; }
+    /* Desktop makes the 3D canvas 11rem wider than its column (a framing
+       trick) — on tablets that overflows the right edge, so reset it */
+    .hero-robot-wrap spline-viewer { width: 100%; margin-left: 0; }
   }
 
   /* ── CRISIS ANALOGUES ── */
@@ -834,14 +962,14 @@
     margin-bottom: 0.5rem;
   }
   .pricing-currency {
-    font-family: 'Syne', sans-serif; font-size: 1.1rem;
-    font-weight: 700; color: var(--text2);
-    margin-bottom: 0.4rem;
+    font-family: 'Carter One', cursive; font-size: 1.3rem;
+    font-weight: 400; color: var(--text2);
+    align-self: flex-end; margin-bottom: 0.35rem;
   }
   .pricing-amount {
-    font-family: 'Syne', sans-serif;
-    font-size: 3rem; font-weight: 800; line-height: 1;
-    letter-spacing: -0.04em; color: var(--text);
+    font-family: 'Carter One', cursive;
+    font-size: 3.2rem; font-weight: 400; line-height: 1;
+    letter-spacing: -0.01em; color: var(--text);
   }
   .pricing-period {
     font-size: 0.8rem; color: var(--text2); margin-bottom: 0.3rem;
@@ -1001,7 +1129,7 @@
     letter-spacing: -0.03em;
     line-height: 1.05;
     margin-bottom: 1.5rem;
-    color: #fff;
+    color: #0369a1;
   }
   .globe-coverage-text p {
     color: var(--text2);
@@ -1016,7 +1144,9 @@
     justify-content: center;
   }
   .ruixen-globe-sm {
-    width: 420px; height: 420px;
+    /* min() caps the globe at 78% of the viewport width on narrow phones,
+       so the circle shrinks instead of getting clipped at the screen edges */
+    width: min(420px, 78vw); height: min(420px, 78vw);
     border-radius: 50%;
     overflow: hidden;
     background-image: url('https://pub-940ccf6255b54fa799a9b01050e6c227.r2.dev/globe.jpeg');
@@ -1039,6 +1169,12 @@
 
   /* ── FOOTER ── */
   .site-footer {
+    /* The generic `footer` rule above (line ~455, for an older footer design)
+       sets display:flex + padding — that laid footer-main and footer-bottom
+       side by side and pushed the © row off-screen on phones. Reset both:
+       sections inside manage their own padding. */
+    display: block;
+    padding: 0;
     background: #0a0a0f;
     border-top: 1px solid rgba(255,255,255,0.07);
   }
@@ -1056,7 +1192,28 @@
     font-size: 1.1rem; font-weight: 800;
     letter-spacing: -0.02em;
     color: #fff; text-decoration: none;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  .footer-brand-desc {
+    font-size: 0.82rem; line-height: 1.65;
+    color: rgba(255,255,255,0.38);
+    max-width: 240px;
+    margin-bottom: 1.4rem;
+  }
+  .footer-social { display: flex; gap: 0.6rem; }
+  .footer-social-link {
+    width: 32px; height: 32px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.45);
+    text-decoration: none;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+  }
+  .footer-social-link:hover {
+    background: rgba(14,165,233,0.15);
+    color: var(--accent);
+    border-color: rgba(14,165,233,0.3);
   }
   .footer-brand-icon {
     width: 36px; height: 36px; border-radius: 10px;
@@ -1101,7 +1258,10 @@
   }
   @media (max-width: 520px) {
     .footer-main { grid-template-columns: 1fr; }
-    .footer-bottom { flex-direction: column; align-items: flex-start; }
+    /* Tighter side padding so content doesn't overflow the viewport */
+    .footer-bottom { flex-direction: column; align-items: flex-start; padding: 1.25rem 1.25rem; }
+    /* Three links in a row at 1.75rem gap overflow narrow screens — wrap them */
+    .footer-legal { flex-wrap: wrap; gap: 0.75rem; }
   }
 
   /* Fade-in on scroll */
@@ -1132,14 +1292,16 @@
     --buttercup:   #ffd166;
   }
   /* Section-specific tints — alternate warm/cool for variety */
-  body.light #hero       { background: linear-gradient(180deg, #fdf6ed 0%, #fbe9d8 100%); }
-  body.light #cards      { background: linear-gradient(180deg, #fbe9d8 0%, #f6e3f0 100%); }
-  body.light #case-studies     { background: #fdf2e7; }
-  body.light #sources    { background: linear-gradient(180deg, #f6e3f0 0%, #eaf3fb 100%); }
-  body.light #pricing    { background: #fff8ee; }
-  body.light #globe-coverage { background: linear-gradient(180deg, #eaf3fb 0%, #fbe9d8 100%); }
-  body.light #contact    { background: #fdf2e7; }
-  body.light .site-footer{ background: #f2d9c6; }
+  /* Light mode: ONE constant background across the whole page (no per-section patchwork) */
+  body.light { background: #fdf6ed; }
+  body.light #hero,
+  body.light #cards,
+  body.light #case-studies,
+  body.light #sources,
+  body.light #pricing,
+  body.light #globe-coverage,
+  body.light #contact,
+  body.light .site-footer { background: transparent; }
   /* Accent gradient on hero word now spans peach → coral → sky for warmth */
   body.light .hero-heading em {
     background: linear-gradient(120deg, var(--peach) 0%, var(--coral) 50%, var(--sky) 100%);
@@ -1215,6 +1377,11 @@
   body.light .nav-mobile-overlay { background: rgba(240,239,234,0.97); }
   body.light .nav-mobile-overlay a { color: #111; }
   body.light .nav-mobile-close { color: #111; }
+  body.light .nav-mobile-social-btn { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.1); color: #111; }
+  body.light .nav-mobile-social-btn:hover { background: rgba(0,0,0,0.08); }
+  body.light .nav-mobile-email-link { color: rgba(0,0,0,0.35); }
+  body.light .nav-mobile-email-link:hover { color: rgba(0,0,0,0.7); }
+  body.light .toast { background: rgba(255,255,255,0.96); color: #111; border-color: rgba(0,0,0,0.1); }
   body.light .hero-dots { opacity: 0.08; }
   body.light #hero-spotlight { opacity: 0.5; }
   body.light .btn-secondary { background: rgba(0,0,0,0.06); border-color: rgba(0,0,0,0.12); color: var(--text); }
@@ -1247,6 +1414,11 @@
   body.light .footer-links a:hover { color: #000; }
   body.light .footer-brand-logo { color: #111; }
   body.light .footer-col-heading { color: #111; }
+  body.light .globe-coverage-text h2 { color: #b85020; }
+  body.light .globe-coverage-text p { color: rgba(0,0,0,0.55); }
+  body.light .footer-brand-desc { color: rgba(0,0,0,0.42); }
+  body.light .footer-social-link { background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.1); color: rgba(0,0,0,0.45); }
+  body.light .footer-social-link:hover { background: rgba(14,165,233,0.1); color: var(--accent); border-color: rgba(14,165,233,0.25); }
 
   /* ── CINEMATIC THEME TOGGLE (in nav) ── */
   .theme-toggle {
@@ -1319,8 +1491,9 @@
     -webkit-mask-composite: destination-out;
     border: 1px solid transparent;
     opacity: 0; transition: opacity 0.35s;
+    display: none; /* cursor-following glow removed */
   }
-  .modal-card:hover::before { opacity: 1; }
+  .modal-card:hover::before { opacity: 0; }
 
   .modal-close {
     position: absolute; top: 1rem; right: 1rem;
@@ -1483,12 +1656,47 @@
     transform: translateY(-2px);
   }
   .enter-terminal svg { width: 14px; height: 14px; }
+
+  /* ════ RESPONSIVE & OVERFLOW FIXES ════
+     These rules MUST stay at the END of the stylesheet: they override base
+     rules defined above (same specificity), and in CSS the later rule wins. */
+
+  /* The decorative divider lines on each section are 600px wide — on phones
+     narrower than 600px they poked past the screen edge and made the page
+     wider than the viewport. min() caps them at the section width. */
+  #cards::before, #case-studies::before, #sources::before,
+  #pricing::before, #contact::before, #globe-coverage::before {
+    width: min(600px, 100%);
+  }
+
+  /* content-visibility:auto skips rendering off-screen sections (good for
+     speed) but needs a size estimate — without one the scrollbar jumps
+     around as sections render in while you scroll. */
+  #pricing { contain-intrinsic-size: auto 1100px; }
+  #contact { contain-intrinsic-size: auto 900px; }
+
+  /* The sign-in modal could grow taller than small screens (especially in
+     landscape or with the keyboard open) with no way to scroll it. */
+  .modal-card {
+    max-height: calc(100vh - 2rem);
+    max-height: calc(100dvh - 2rem); /* dvh = height minus browser UI bars */
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  @media (max-width: 640px) {
+    /* Desktop sections use 7rem (112px) of padding — too much on phones */
+    #cards, #sources, #pricing, #contact { padding: 4.5rem 1.25rem; }
+    /* case-studies is directly below hero — smaller top so there's no dead gap */
+    #case-studies { padding: 2.5rem 1.25rem; }
+    #globe-coverage { padding: 5rem 1.25rem 4.5rem; }
+    /* 16px minimum stops iOS Safari from auto-zooming into focused inputs */
+    .modal-input { font-size: 16px; }
+  }
 </style>
 </head>
 <body>
 
-<!-- Animated ShaderGradient background (falls back to CSS gradient if it fails to load) -->
-<div id="shader-bg" aria-hidden="true"></div>
 
 <!-- NAV -->
 <div class="nav-wrap">
@@ -1509,6 +1717,8 @@
       <li><a href="#case-studies">Crisis Analogues</a></li>
       <li><a href="#pricing">Pricing</a></li>
       <li><a href="#sources">Sources</a></li>
+      <li><a href="blogs.html">Blogs</a></li>
+      <li><a href="newsletter.html">Newsletter</a></li>
       <li><a href="#contact">Contact</a></li>
     </ul>
     <div class="nav-actions">
@@ -1529,7 +1739,24 @@
   <a href="#case-studies" onclick="document.getElementById('nav-mobile').classList.remove('open')">Crisis Analogues</a>
   <a href="#pricing" onclick="document.getElementById('nav-mobile').classList.remove('open')">Pricing</a>
   <a href="#sources" onclick="document.getElementById('nav-mobile').classList.remove('open')">Sources</a>
+  <a href="blogs.html" onclick="document.getElementById('nav-mobile').classList.remove('open')">Blogs</a>
+  <a href="newsletter.html" onclick="document.getElementById('nav-mobile').classList.remove('open')">Newsletter</a>
   <a href="#contact" onclick="document.getElementById('nav-mobile').classList.remove('open')">Contact</a>
+
+  <!-- Sign-in shortcuts pinned to the bottom of the mobile menu -->
+  <div class="nav-mobile-auth">
+    <div class="nav-mobile-social">
+      <button type="button" class="nav-mobile-social-btn" onclick="document.getElementById('nav-mobile').classList.remove('open'); startGoogleOAuth();">
+        <svg viewBox="0 0 24 24" fill="none" width="15" height="15"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+        Google
+      </button>
+      <button type="button" class="nav-mobile-social-btn" onclick="document.getElementById('nav-mobile').classList.remove('open'); startDiscordOAuth();">
+        <svg viewBox="0 0 24 24" width="15" height="15"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" fill="#5865F2"/></svg>
+        Discord
+      </button>
+    </div>
+    <a href="#" class="nav-mobile-email-link" onclick="document.getElementById('nav-mobile').classList.remove('open'); openSignIn(event);">or sign in with email →</a>
+  </div>
 </div>
 
 <!-- SECTION 1: HERO -->
@@ -1541,13 +1768,15 @@
     <!-- Left: Hero Text -->
     <div class="hero-left">
       <h1 class="hero-heading">Structured<br />Reasoning,<br /><em>Not News</em></h1>
-      <p style="font-size: 1.1rem; color: var(--text2); margin-top: 1rem; max-width: 500px; line-height: 1.7;">
+      <p class="hero-sub">
         Economic analysis powered by AI. Get structured insights on crisis mechanisms, policy effects, and second-order impacts.
       </p>
     </div>
 
     <!-- Right: Spline 3D Robot -->
     <div class="hero-robot-wrap">
+      <!-- Pulsing glow placeholder — visible until the 3D scene finishes loading -->
+      <div class="hero-robot-placeholder"></div>
       <spline-viewer url="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"></spline-viewer>
 
       <!-- SVG kept as comment for reference -->
@@ -1618,6 +1847,17 @@
   </div>
 </section>
 
+<!-- ENTER TERMINAL CTA — sits between the hero and the proof sections -->
+<div class="terminal-cta-wrap reveal">
+  <a href="chat.html" class="terminal-cta">
+    <!-- Terminal prompt icon: > _ -->
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+    </svg>
+    Enter Terminal
+  </a>
+</div>
+
 <!-- SECTION 2: CRISIS ANALOGUES -->
 <!-- CASE STUDIES -->
 <section id="case-studies">
@@ -1681,11 +1921,10 @@
       </div>
       <div class="pricing-divider"></div>
       <ul class="pricing-features">
-        <li class="pricing-feature has"><span class="check">✓</span>10 queries / month</li>
+        <li class="pricing-feature has"><span class="check">✓</span>100 queries / month</li>
         <li class="pricing-feature has"><span class="check">✓</span>Crisis Analogues library</li>
         <li class="pricing-feature has"><span class="check">✓</span>3 curated sources</li>
         <li class="pricing-feature"><span class="check" style="background:rgba(255,255,255,0.05);color:var(--text2)">✕</span>Real-time signals</li>
-        <li class="pricing-feature"><span class="check" style="background:rgba(255,255,255,0.05);color:var(--text2)">✕</span>API access</li>
       </ul>
       <a href="chat.html" class="pricing-btn pricing-btn-outline">Get Started</a>
     </div>
@@ -1694,10 +1933,12 @@
     <div class="pricing-card popular">
       <div class="pricing-popular-badge">Most Popular</div>
       <div class="pricing-tier">Pro</div>
-      <div class="pricing-desc">For analysts and institutions requiring depth and real-time coverage.</div>
+      <div class="pricing-desc">For analysts and researchers requiring depth, real-time coverage, and daily intelligence.</div>
       <div class="pricing-price">
-        <span class="pricing-currency">$</span>
-        <span class="pricing-amount" data-monthly="15" data-annual="12">15</span>
+        <span class="pricing-currency" id="pro-currency">$</span>
+        <span class="pricing-amount" id="pro-amount"
+          data-monthly="15" data-annual="12"
+          data-monthly-in="199" data-annual-in="159">15</span>
         <span class="pricing-period">/mo</span>
       </div>
       <div class="pricing-divider"></div>
@@ -1706,7 +1947,8 @@
         <li class="pricing-feature has"><span class="check">✓</span>Full Crisis Analogues engine</li>
         <li class="pricing-feature has"><span class="check">✓</span>All sources + live ingestion</li>
         <li class="pricing-feature has"><span class="check">✓</span>Real-time economic signals</li>
-        <li class="pricing-feature"><span class="check" style="background:rgba(255,255,255,0.05);color:var(--text2)">✕</span>Dedicated API access</li>
+        <li class="pricing-feature has"><span class="check">✓</span>Daily blog posts</li>
+        <li class="pricing-feature has"><span class="check">✓</span>Weekly newsletter</li>
       </ul>
       <a href="#contact" class="pricing-btn pricing-btn-primary">Get Started</a>
     </div>
@@ -1716,17 +1958,20 @@
       <div class="pricing-tier">Enterprise</div>
       <div class="pricing-desc">For sovereign funds, central banks, and institutional teams.</div>
       <div class="pricing-price">
-        <span class="pricing-currency">$</span>
-        <span class="pricing-amount" data-monthly="30" data-annual="24">30</span>
+        <span class="pricing-currency" id="ent-currency">$</span>
+        <span class="pricing-amount" id="ent-amount"
+          data-monthly="30" data-annual="24"
+          data-monthly-in="599" data-annual-in="479">30</span>
         <span class="pricing-period">/mo</span>
       </div>
       <div class="pricing-divider"></div>
       <ul class="pricing-features">
         <li class="pricing-feature has"><span class="check">✓</span>Unlimited queries + priority</li>
         <li class="pricing-feature has"><span class="check">✓</span>Custom source ingestion</li>
-        <li class="pricing-feature has"><span class="check">✓</span>Dedicated API + webhooks</li>
         <li class="pricing-feature has"><span class="check">✓</span>SLA guarantee + uptime</li>
         <li class="pricing-feature has"><span class="check">✓</span>White-glove onboarding</li>
+        <li class="pricing-feature has"><span class="check">✓</span>2× daily blogs + newsletters</li>
+        <li class="pricing-feature has"><span class="check">✓</span>Fortnightly economic magazine</li>
       </ul>
       <a href="#contact" class="pricing-btn pricing-btn-outline">Contact Sales</a>
     </div>
@@ -1738,7 +1983,7 @@
   <div class="globe-coverage-inner">
     <div class="globe-coverage-text reveal">
       <div class="section-label" style="text-align:left;margin-bottom:1rem">Worldwide Intelligence</div>
-      <h2>Global Economic Coverage</h2>
+      <h2>Every market. Every institution. One feed.</h2>
     </div>
     <div class="globe-coverage-globe-wrap reveal reveal-delay-1">
       <div class="ruixen-globe-sm"></div>
@@ -1756,7 +2001,7 @@
     <div class="contact-box reveal">
       <div class="section-label" style="text-align:left;margin-bottom:1rem">Get In Touch</div>
       <p style="color:var(--text2);font-size:0.9rem;font-weight:300;line-height:1.7;margin-bottom:1.5rem">
-        Have a question about our platform, pricing, or data coverage? Our team typically responds within one business day.
+        Have a question about our platform, pricing, or data coverage? Our team typically responds within 48 hours.
       </p>
       <a href="mailto:econintelai@gmail.com" class="contact-email-link">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
@@ -1788,13 +2033,6 @@
           </div>
           <div class="faq-a">Yes. Monthly plans cancel with no penalty. Annual plans include a 14-day money-back guarantee from the renewal date.</div>
         </div>
-        <div class="faq-item">
-          <div class="faq-q" onclick="toggleFaq(this)">
-            Is there an API for institutional integration?
-            <span class="faq-q-icon">+</span>
-          </div>
-          <div class="faq-a">API access is available on Pro and Enterprise plans. Enterprise customers receive dedicated endpoints, webhook support, and custom rate limits. Contact us for integration specs.</div>
-        </div>
       </div>
     </div>
   </div>
@@ -1810,16 +2048,25 @@
         </span>
         EconIntel
       </a>
+      <p class="footer-brand-desc">Bloomberg-grade economic intelligence, powered by AI. Built for analysts, traders, and institutions who can't afford to be wrong.</p>
+      <div class="footer-social">
+        <a href="mailto:econintelai@gmail.com" class="footer-social-link" title="Email">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+        </a>
+        <a href="newsletter.html" class="footer-social-link" title="Newsletter">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        </a>
+      </div>
     </div>
 
     <!-- Platform -->
     <div>
       <div class="footer-col-heading">Platform</div>
       <ul class="footer-links">
+        <li><a href="chat.html">AI Terminal</a></li>
         <li><a href="#case-studies">Crisis Analogues</a></li>
         <li><a href="#sources">Data Sources</a></li>
         <li><a href="#pricing">Pricing</a></li>
-        <li><a href="#contact">API Access</a></li>
       </ul>
     </div>
 
@@ -1827,10 +2074,10 @@
     <div>
       <div class="footer-col-heading">Resources</div>
       <ul class="footer-links">
+        <li><a href="blogs.html">Blog</a></li>
+        <li><a href="newsletter.html">Newsletter</a></li>
+        <li><a href="#case-studies">Case Studies</a></li>
         <li><a href="#contact">Documentation</a></li>
-        <li><a href="#contact">Case Studies</a></li>
-        <li><a href="#contact">Blog</a></li>
-        <li><a href="#contact">Community</a></li>
       </ul>
     </div>
 
@@ -1839,15 +2086,15 @@
       <div class="footer-col-heading">Company</div>
       <ul class="footer-links">
         <li><a href="#contact">About Us</a></li>
-        <li><a href="#contact">Careers</a></li>
         <li><a href="mailto:econintelai@gmail.com">Contact</a></li>
+        <li><a href="#pricing">Plans</a></li>
         <li><a href="#contact">Press</a></li>
       </ul>
     </div>
   </div>
 
   <div class="footer-bottom">
-    <span class="footer-copy">© 2025 EconIntel. All rights reserved.</span>
+    <span class="footer-copy">© 2026 EconIntel. All rights reserved.</span>
     <nav class="footer-legal">
       <a href="#contact">Terms of Service</a>
       <a href="#contact">Privacy Policy</a>
@@ -1874,29 +2121,34 @@
     <form onsubmit="submitSignIn(event)" id="signin-form">
 
     <div class="social-btns">
-      <button class="social-btn">
+      <!-- type="button" is required: these live inside the form, and a button
+           without a type defaults to submit — clicking would submit the form -->
+      <button class="social-btn" type="button" onclick="startGoogleOAuth()">
         <svg viewBox="0 0 24 24" fill="none" width="15" height="15"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
         Google
       </button>
-      <button class="social-btn">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.017C22 6.484 17.522 2 12 2z"/></svg>
-        GitHub
+      <button class="social-btn" type="button" onclick="startDiscordOAuth()">
+        <svg viewBox="0 0 24 24" width="15" height="15"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" fill="#5865F2"/></svg>
+        Discord
       </button>
     </div>
 
     <div class="modal-or"><span>or continue with email</span></div>
 
-    <div class="modal-field">
+    <!-- Name is only needed when CREATING an account. Hidden by default because
+         the modal opens in sign-in mode; toggleSignupMode() shows it and makes
+         it required when the user switches to signup. -->
+    <div class="modal-field" style="display:none">
       <label class="modal-label">Name</label>
-      <input class="modal-input" id="signin-name" required placeholder="Jane Analyst" autocomplete="name" />
+      <input class="modal-input" id="signin-name" placeholder="Jane Analyst" autocomplete="name" maxlength="25" />
     </div>
     <div class="modal-field">
       <label class="modal-label">Email</label>
-      <input class="modal-input" id="signin-email" type="email" required placeholder="you@example.com" autocomplete="email" />
+      <input class="modal-input" id="signin-email" type="email" required placeholder="you@example.com" autocomplete="email" pattern="[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}" title="Enter a valid email address (e.g. you@example.com)" />
     </div>
     <div class="modal-field">
       <label class="modal-label">Password</label>
-      <input class="modal-input" id="signin-password" type="password" placeholder="••••••••" autocomplete="current-password" />
+      <input class="modal-input" id="signin-password" type="password" required placeholder="••••••••" autocomplete="current-password" />
     </div>
 
     <div class="modal-row">
@@ -1909,9 +2161,93 @@
   </div>
 </div>
 
+<!-- PROFILE MODAL — opened by clicking your name in the nav when signed in,
+     or by arriving with ?profile=1 (the terminal's Edit Profile links here) -->
+<div id="profile-modal" class="modal-overlay" onclick="handleProfileModalClick(event)">
+  <div class="modal-card">
+    <button class="modal-close" onclick="closeProfile()">✕</button>
+
+    <h2 class="modal-heading">Your profile</h2>
+    <p class="modal-sub">Manage your account details</p>
+
+    <form onsubmit="saveProfile(event)" id="profile-form">
+      <div class="modal-field">
+        <label class="modal-label">Name</label>
+        <input class="modal-input" id="profile-name" required maxlength="25" autocomplete="name" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Username</label>
+        <input class="modal-input" id="profile-username" required pattern="[a-zA-Z0-9_]{2,24}" title="2-24 characters: letters, numbers, underscores" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Email</label>
+        <!-- Email is the account key (tied to login + OAuth) — not editable here -->
+        <input class="modal-input" id="profile-email" disabled />
+      </div>
+
+      <button class="modal-submit" type="submit">Save changes</button>
+      <p class="modal-signup">
+        <a href="chat.html">Open Terminal →</a>
+        &nbsp;·&nbsp;
+        <a href="#" onclick="signOutLanding(event)" style="color:#f87171">Sign out</a>
+      </p>
+    </form>
+  </div>
+</div>
+
 <!-- Config loaded as a global (window.CONFIG) before the main script -->
 <script src="config.js"></script>
 <script>
+// ── MOBILE: SKIP THE 3D ROBOT ENTIRELY ──
+// CSS hides the robot on phones, but display:none does NOT stop the Spline
+// component from downloading its multi-MB scene in the background. Removing
+// the element before the component initialises saves that bandwidth.
+if (window.matchMedia('(max-width: 640px)').matches) {
+  const robotWrap = document.querySelector('.hero-robot-wrap');
+  if (robotWrap) robotWrap.remove();
+}
+
+// ── HERO ROBOT: FADE IN WHEN LOADED ──
+// The <spline-viewer> starts invisible (CSS). Add .loaded once the 3D scene
+// is ready so it fades in and the placeholder glow fades out. The spline
+// component emits a 'load' event; a timeout is a safety net in case it
+// doesn't fire (slow network, blocked asset) so the robot can't stay hidden.
+(function revealRobotWhenReady() {
+  const wrap = document.querySelector('.hero-robot-wrap');
+  if (!wrap) return; // removed on mobile
+  const viewer = wrap.querySelector('spline-viewer');
+  if (!viewer) return;
+  const reveal = () => wrap.classList.add('loaded');
+  viewer.addEventListener('load', reveal);
+  setTimeout(reveal, 4000); // safety net
+})();
+
+// ── TOAST NOTIFICATIONS ──
+// Small, non-blocking replacement for alert(). Call showToast('message')
+// for info, or pass 'success' / 'error' as the second argument to colour the
+// left stripe. Toasts auto-dismiss after `duration` ms.
+function showToast(message, type = 'info', duration = 4000) {
+  // Lazily create the container the first time a toast is shown
+  let container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement('div');
+  toast.className = 'toast ' + type;
+  toast.textContent = message;
+  container.appendChild(toast);
+  // Next frame: add .show so the CSS transition actually animates the slide-in
+  requestAnimationFrame(() => toast.classList.add('show'));
+  // Slide out, then remove from the DOM once the exit transition finishes
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 400);
+  }, duration);
+}
+
 // ── REMOVE SPLINE WATERMARK ──
 (function() {
   const removeWatermark = () => {
@@ -1956,7 +2292,10 @@
 const spotlight = document.getElementById('hero-spotlight');
 const hero = document.getElementById('hero');
 let rafPending = false, mx = '50%', my = '40%';
-hero.addEventListener('mousemove', e => {
+// The spotlight is currently display:none (feature removed in CSS).
+// Only attach the mousemove handler when it's actually visible, so we don't
+// waste CPU repainting an invisible element on every mouse move.
+if (spotlight && hero && getComputedStyle(spotlight).display !== 'none') hero.addEventListener('mousemove', e => {
   const rect = hero.getBoundingClientRect();
   mx = ((e.clientX - rect.left) / rect.width * 100).toFixed(1) + '%';
   my = ((e.clientY - rect.top) / rect.height * 100).toFixed(1) + '%';
@@ -1969,6 +2308,32 @@ hero.addEventListener('mousemove', e => {
   }
 }, { passive: true });
 
+
+// ── GEO PRICING ──
+const isIndia = Intl.DateTimeFormat().resolvedOptions().timeZone === 'Asia/Calcutta' ||
+                Intl.DateTimeFormat().resolvedOptions().timeZone === 'Asia/Kolkata';
+
+function applyGeoPricing() {
+  if (!isIndia) return;
+  // Pro
+  const proAmt = document.getElementById('pro-amount');
+  const proCur = document.getElementById('pro-currency');
+  if (proAmt) {
+    proAmt.dataset.monthly = proAmt.dataset.monthlyIn;
+    proAmt.dataset.annual  = proAmt.dataset.annualIn;
+    proAmt.textContent     = isAnnual ? proAmt.dataset.annualIn : proAmt.dataset.monthlyIn;
+    if (proCur) proCur.textContent = '₹';
+  }
+  // Enterprise
+  const entAmt = document.getElementById('ent-amount');
+  const entCur = document.getElementById('ent-currency');
+  if (entAmt) {
+    entAmt.dataset.monthly = entAmt.dataset.monthlyIn;
+    entAmt.dataset.annual  = entAmt.dataset.annualIn;
+    entAmt.textContent     = isAnnual ? entAmt.dataset.annualIn : entAmt.dataset.monthlyIn;
+    if (entCur) entCur.textContent = '₹';
+  }
+}
 
 // ── BILLING TOGGLE ──
 let isAnnual = false;
@@ -1987,6 +2352,8 @@ function toggleBilling() {
     if (period) period.style.display = (val === 'Free') ? 'none' : '';
   });
 }
+
+applyGeoPricing();
 
 // ── FAQ ACCORDION ──
 function toggleFaq(el) {
@@ -2011,6 +2378,13 @@ function openSignIn(e) {
 function closeSignIn() {
   document.getElementById('signin-modal').classList.remove('open');
   document.body.style.overflow = '';
+  // Reset the form so entered data doesn't persist after closing
+  const form = document.getElementById('signin-form');
+  if (form) form.reset();
+  // Reset to default (sign in) mode for next open
+  if (typeof isSignupMode !== 'undefined' && isSignupMode && typeof toggleSignupMode === 'function') {
+    toggleSignupMode();
+  }
 }
 function handleModalClick(e) {
   if (e.target === document.getElementById('signin-modal')) closeSignIn();
@@ -2034,10 +2408,16 @@ if (modalCard) {
 // ── THEME TOGGLE ──
 function toggleTheme() {
   const isLight = document.body.classList.toggle('light');
-  localStorage.setItem('theme', isLight ? 'light' : 'dark');
+  // try/catch: localStorage can throw in private-browsing modes.
+  // The theme still switches for this page view — it just won't persist.
+  try { localStorage.setItem('theme', isLight ? 'light' : 'dark'); } catch (e) {}
 }
 (function initTheme() {
-  if (localStorage.getItem('theme') === 'light') document.body.classList.add('light');
+  // try/catch: if this top-level call threw, ALL the script below it would
+  // stop running (sign-in button, auth state, etc.) — never let that happen
+  try {
+    if (localStorage.getItem('theme') === 'light') document.body.classList.add('light');
+  } catch (e) {}
 })();
 
 // ── RATE LIMITING ──
@@ -2090,7 +2470,10 @@ async function submitSignIn(e) {
     return;
   }
 
-  if (password.length < 12) {
+  // Length rule applies to NEW passwords only — accounts created before this
+  // policy may have shorter passwords, and login must still work for them.
+  // The server does the real enforcement on signup.
+  if (isSignupMode && password.length < 12) {
     alert('Password must be at least 12 characters');
     return;
   }
@@ -2137,25 +2520,23 @@ async function submitSignIn(e) {
     if (!res.ok) {
       // Handle specific error cases
       if (res.status === 409) {
+        // Signup hit an existing account — flip the form back to sign-in mode.
+        // (toggleSignupMode() flips the current mode, so we only call it if
+        // we are currently in signup mode)
         alert('Email or username already registered. Try signing in instead.');
-        isSignupMode = false;
-        toggleSignupMode();
-      } else if (res.status === 401) {
-        // Track failed login attempt
-        if (!isSignupMode) {
-          failAttempt(email);
-          alert('Account not found. Create one instead?');
-          isSignupMode = true;
-          toggleSignupMode();
-          return;
-        }
+        if (isSignupMode) toggleSignupMode();
+      } else if (res.status === 401 && !isSignupMode) {
+        // Login rejected. Could be wrong email OR wrong password — never
+        // reveal which one (that would let attackers test which emails exist)
+        failAttempt(email);
+        alert('Invalid email or password.');
       } else {
-        // Track failed login on other errors too
-        if (!isSignupMode) {
-          failAttempt(email);
-        }
+        // Any other failure — count it against the login lockout too
+        if (!isSignupMode) failAttempt(email);
         alert(data.error || 'Authentication failed. Try again.');
       }
+      // Always re-enable the button so the user can retry
+      // (previously the 401 path returned early and left it stuck on "Signing in...")
       btn.disabled = false;
       btn.textContent = originalText;
       return;
@@ -2178,9 +2559,14 @@ async function submitSignIn(e) {
         signedInAt: new Date().toISOString()
       };
 
-      // Also store user info in sessionStorage (survives reload within same session)
-      sessionStorage.setItem('econintel:user', JSON.stringify(currentUser));
-      sessionStorage.setItem('econintel:csrf', currentCSRFToken);
+      // Also store user info in localStorage (survives reload within same session)
+      // try/catch: storage can throw in private-browsing modes — login should
+      // still succeed (cookie is already set by the server) even if we can't
+      // persist the user info across reloads
+      try {
+        localStorage.setItem('econintel:user', JSON.stringify(currentUser));
+        localStorage.setItem('econintel:csrf', currentCSRFToken);
+      } catch (storageErr) {}
 
       refreshSignInBtn();
       closeSignIn();
@@ -2189,6 +2575,12 @@ async function submitSignIn(e) {
       setTimeout(() => {
         window.location.href = 'chat.html';
       }, 300);
+    } else {
+      // Server said OK but didn't send the expected payload — don't leave
+      // the button stuck on "Signing in..."
+      alert('Unexpected server response. Please try again.');
+      btn.disabled = false;
+      btn.textContent = originalText;
     }
   } catch (err) {
     console.error('[auth] Error:', err);
@@ -2207,7 +2599,8 @@ function toggleSignupMode() {
   isSignupMode = !isSignupMode;
   const heading = document.querySelector('.modal-heading');
   const sub = document.querySelector('.modal-sub');
-  const nameField = document.getElementById('signin-name').parentElement;
+  const nameInput = document.getElementById('signin-name');
+  const nameField = nameInput.parentElement;
   const submitBtn = document.querySelector('.modal-submit');
   const link = document.querySelector('.modal-signup a');
   const forgotPasswordRow = document.querySelector('.modal-row');
@@ -2215,14 +2608,19 @@ function toggleSignupMode() {
   if (isSignupMode) {
     heading.textContent = 'Create account';
     sub.textContent = 'Sign up to get started';
+    // Signup needs a name — show the field and make the browser enforce it
     nameField.style.display = 'block';
+    nameInput.required = true;
     submitBtn.textContent = 'Sign Up';
     link.textContent = 'Already have an account? Sign in →';
     forgotPasswordRow.style.display = 'none';
   } else {
     heading.textContent = 'Welcome back';
     sub.textContent = 'Sign in to your account to continue';
-    nameField.style.display = 'block';
+    // Sign-in only needs email + password — hide the name field entirely
+    // (a required-but-irrelevant Name field was blocking login submissions)
+    nameField.style.display = 'none';
+    nameInput.required = false;
     submitBtn.textContent = 'Sign In';
     link.textContent = "Don't have an account? Create one →";
     forgotPasswordRow.style.display = 'block';
@@ -2232,7 +2630,37 @@ function toggleSignupMode() {
 /**
  * Wire the "Create one" / "Sign in" link to toggle modes
  */
+/**
+ * Social logins — navigate to the auth function, which redirects to the
+ * provider's consent screen. The whole flow is redirects, not fetches,
+ * so the user leaves this page and comes back logged in (on chat.html).
+ */
+function startDiscordOAuth() {
+  window.location.href = CONFIG.auth.login.replace('action=login', 'action=oauth-discord');
+}
+function startGoogleOAuth() {
+  window.location.href = CONFIG.auth.login.replace('action=login', 'action=oauth-google');
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  // If a Discord login failed, the auth function redirects back here with
+  // ?oauth_error=<code> — show the user what happened instead of failing silently
+  const oauthError = new URLSearchParams(window.location.search).get('oauth_error');
+  if (oauthError) {
+    const messages = {
+      not_configured:    'That login method is not set up yet. Use email instead.',
+      denied:            'Sign-in was cancelled.',
+      bad_state:         'Login session expired. Please try again.',
+      exchange_failed:   'Login failed. Please try again.',
+      no_verified_email: 'That account has no verified email. Verify it with the provider first, or sign up with email.',
+      signup_failed:     'Could not create your account. Please try again or use email.',
+      server_error:      'Something went wrong. Please try again.',
+    };
+    showToast(messages[oauthError] || 'Login failed. Please try again.', 'error', 6000);
+    // Clean the error out of the URL so refreshing doesn't re-toast
+    history.replaceState({}, '', window.location.pathname);
+  }
+
   const signupLink = document.querySelector('.modal-signup a');
   if (signupLink) {
     signupLink.onclick = (e) => {
@@ -2240,25 +2668,63 @@ document.addEventListener('DOMContentLoaded', () => {
       toggleSignupMode();
     };
   }
+
+  // "Forgot password?" — sends a reset email via /auth?action=reset-password.
+  // The user types their email in the Email field first, then clicks this link.
+  // The link text doubles as the status display (Sending… / Sent / error).
+  const forgotLink = document.querySelector('.modal-forgot');
+  if (forgotLink) {
+    forgotLink.onclick = async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('signin-email').value.trim().toLowerCase();
+      if (!email) {
+        showToast('Type your email in the Email field first, then click "Forgot password?"', 'error');
+        return;
+      }
+      forgotLink.textContent = 'Sending…';
+      try {
+        // config.js only defines login/signup/logout URLs — derive the reset
+        // URL from the login one so dev/prod base paths stay consistent
+        const url = CONFIG.auth.login.replace('action=login', 'action=reset-password');
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        forgotLink.textContent = res.ok
+          ? 'Reset link sent — check your email'
+          : 'Could not send. Try again later.';
+      } catch {
+        forgotLink.textContent = 'Network error. Try again.';
+      }
+    };
+  }
 });
 
 /**
  * Update the nav sign-in button based on auth state
- * Phase 6: Check sessionStorage + memory state (no localStorage)
+ * Phase 6: Check localStorage + memory state (no localStorage)
  * Shows username if signed in, "Sign In" button if not
  */
 function refreshSignInBtn() {
   const btn = document.querySelector('.nav-signin');
   if (!btn) return;
 
-  // Phase 6: Check both memory state and sessionStorage (survives reload)
-  const user = currentUser || JSON.parse(sessionStorage.getItem('econintel:user') || 'null');
-  const csrf = currentCSRFToken || sessionStorage.getItem('econintel:csrf');
+  // Phase 6: Check both memory state and localStorage (survives reload)
+  // try/catch: corrupt storage data or private mode must not crash the page —
+  // worst case the user just sees "Sign In" instead of their name
+  let user = currentUser, csrf = currentCSRFToken;
+  try {
+    user = user || JSON.parse(localStorage.getItem('econintel:user') || 'null');
+    csrf = csrf || localStorage.getItem('econintel:csrf');
+  } catch (e) {}
 
   if (user && csrf) {
     // User is signed in
-    btn.textContent = '@' + (user.username || user.name.split(' ')[0]);
-    btn.onclick = (e) => { e.preventDefault(); window.location.href = 'chat.html'; };
+    // Show first name only (keeps the nav compact)
+    btn.textContent = (user.name || user.username || 'Account').trim().split(' ')[0];
+    // Clicking your name opens profile settings here on the landing page
+    btn.onclick = (e) => { e.preventDefault(); openProfile(); };
   } else {
     // User is not signed in
     btn.textContent = 'Sign In';
@@ -2266,62 +2732,87 @@ function refreshSignInBtn() {
   }
 }
 
+// ════════════════════════════════════════════════════════════════════
+//                      PROFILE MODAL (signed-in users)
+// ════════════════════════════════════════════════════════════════════
+
+function openProfile() {
+  // Read the freshest user data (covers sign-ins from other tabs)
+  let u = null;
+  try { u = JSON.parse(localStorage.getItem('econintel:user') || 'null'); } catch (e) {}
+  if (!u) { openSignIn(); return; } // not signed in — show the sign-in modal instead
+  // Fill via .value (not innerHTML) so stored data can't inject markup
+  document.getElementById('profile-name').value = u.name || '';
+  document.getElementById('profile-username').value = u.username || (u.email || '').split('@')[0];
+  document.getElementById('profile-email').value = u.email || '';
+  document.getElementById('profile-modal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeProfile() {
+  document.getElementById('profile-modal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+function handleProfileModalClick(e) {
+  // Click on the dark backdrop (not the card) closes the modal
+  if (e.target === document.getElementById('profile-modal')) closeProfile();
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeProfile(); });
+
+function saveProfile(e) {
+  e.preventDefault();
+  let u = {};
+  try { u = JSON.parse(localStorage.getItem('econintel:user') || '{}'); } catch (err) {}
+  u.name = document.getElementById('profile-name').value.trim();
+  u.username = document.getElementById('profile-username').value.trim();
+  try { localStorage.setItem('econintel:user', JSON.stringify(u)); } catch (err) {}
+  currentUser = u;
+  refreshSignInBtn(); // nav shows the (possibly new) first name
+  closeProfile();
+  showToast('Profile saved', 'success');
+}
+
+async function signOutLanding(e) {
+  e.preventDefault();
+  // Tell the server to invalidate the session (best-effort — local state
+  // clears regardless, so a network failure can't trap the user signed in)
+  const csrf = localStorage.getItem('econintel:csrf');
+  if (csrf) {
+    try {
+      await fetch(CONFIG.auth.logout, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        credentials: 'include',
+      });
+    } catch (err) {}
+  }
+  localStorage.removeItem('econintel:user');
+  localStorage.removeItem('econintel:csrf');
+  currentUser = null;
+  currentCSRFToken = null;
+  refreshSignInBtn(); // nav flips back to "Sign In"
+  closeProfile();
+  showToast('Signed out', 'success');
+}
+
 // Initialize on page load
 refreshSignInBtn();
 
-// Phase 6: Initialize CSRF token from sessionStorage on page load
+// ?profile=1 — the terminal's "Edit Profile" links here; open the modal on arrival
+if (new URLSearchParams(window.location.search).get('profile') === '1') {
+  openProfile();
+  window.history.replaceState({}, '', window.location.pathname); // clean the URL
+}
+
+// Phase 6: Initialize CSRF token from localStorage on page load
 if (!currentCSRFToken) {
-  currentCSRFToken = sessionStorage.getItem('econintel:csrf');
-  currentUser = JSON.parse(sessionStorage.getItem('econintel:user') || 'null');
+  // try/catch: same storage-safety rule as refreshSignInBtn above
+  try {
+    currentCSRFToken = localStorage.getItem('econintel:csrf');
+    currentUser = JSON.parse(localStorage.getItem('econintel:user') || 'null');
+  } catch (e) {}
 }
 </script>
 
-<!-- ShaderGradient background: loaded from CDN, mounted into #shader-bg.
-     Wrapped in try/catch so any failure leaves the CSS gradient fallback intact. -->
-<script type="module">
-  try {
-    const React = (await import('https://esm.sh/react@18.3.1')).default;
-    const { createRoot } = await import('https://esm.sh/react-dom@18.3.1/client');
-    const { ShaderGradientCanvas, ShaderGradient } = await import(
-      'https://esm.sh/@shadergradient/react@2.4.20?deps=react@18.3.1,react-dom@18.3.1'
-    );
-    const h = React.createElement;
-    const mount = document.getElementById('shader-bg');
-    if (mount && ShaderGradientCanvas && ShaderGradient) {
-      createRoot(mount).render(
-        h(ShaderGradientCanvas, {
-          style: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%' },
-          pixelDensity: 1,
-          fov: 40,
-        },
-          h(ShaderGradient, {
-            control: 'props',
-            animate: 'on',
-            uSpeed: 0.2,            // slow, calm flow (~0.5x of default)
-            brightness: 1.0,
-            cAzimuthAngle: 180,
-            cDistance: 3.9,
-            cPolarAngle: 115,
-            cameraZoom: 1,
-            color1: '#5606ff',
-            color2: '#3d40fe',
-            color3: '#000000',
-            positionX: -0.5,
-            positionY: 0.1,
-            positionZ: 0,
-            reflection: 0.1,
-            rotationX: 0,
-            rotationY: 0,
-            rotationZ: 235,
-            type: 'waterPlane',
-          })
-        )
-      );
-    }
-  } catch (err) {
-    console.warn('[shader] ShaderGradient failed to load — using CSS gradient fallback.', err);
-  }
-</script>
 
 </body>
 </html>

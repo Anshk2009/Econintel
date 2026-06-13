@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EconIntel — Newsletter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  @keyframes gradientShift { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+  @keyframes pulse { 0%,100%{opacity:.5;transform:scale(1)} 50%{opacity:1;transform:scale(1.15)} }
+  html, body { height: 100%; }
+  body {
+    font-family: 'DM Sans', sans-serif; color: #eef1f8; background: #05060c;
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 2rem; position: relative; overflow: hidden;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0; z-index: -1;
+    background: linear-gradient(135deg, #06060d 0%, #0c1838 30%, #163a8c 50%, #0c1838 70%, #06060d 100%);
+    background-size: 220% 220%; animation: gradientShift 24s ease-in-out infinite;
+  }
+  .logo {
+    display: inline-flex; align-items: center; gap: .55rem; margin-bottom: 2.2rem;
+    font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.25rem; letter-spacing: -.01em;
+  }
+  .logo-dot { width: 12px; height: 12px; border-radius: 4px; background: linear-gradient(135deg,#5b8def,#7a5bff); animation: pulse 2.4s ease-in-out infinite; }
+  .eyebrow { font-size: .72rem; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: #6f9bff; margin-bottom: 1rem; }
+  h1 {
+    font-family: 'Syne', sans-serif; font-weight: 800; line-height: 1.02;
+    font-size: clamp(2.6rem, 9vw, 5rem); letter-spacing: -.03em; margin-bottom: 1.1rem;
+    background: linear-gradient(135deg,#ffffff 0%, #9ec0ff 60%, #b69bff 100%);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  p { color: rgba(235,240,255,.6); max-width: 480px; font-size: 1.05rem; line-height: 1.6; margin-bottom: 2.2rem; }
+  .back {
+    display: inline-flex; align-items: center; gap: .5rem; text-decoration: none; color: #05060c;
+    background: #fff; padding: .7rem 1.4rem; border-radius: 999px; font-weight: 700; font-size: .9rem;
+    transition: transform .2s, box-shadow .2s;
+  }
+  .back:hover { transform: translateY(-2px); box-shadow: 0 12px 30px -10px rgba(110,150,255,.6); }
+</style>
+</head>
+<body>
+  <div class="logo"><span class="logo-dot"></span>EconIntel</div>
+  <div class="eyebrow">Newsletter</div>
+  <h1>Coming&nbsp;Soon</h1>
+  <p>Weekly structured economic signals and crisis analogues, straight to your inbox. Sign-ups open soon.</p>
+  <a class="back" href="index.html">← Back to home</a>
+</body>
+</html>

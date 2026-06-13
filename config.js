@@ -1,18 +1,20 @@
 /**
  * EconIntel Configuration
  *
- * Handles environment-specific settings:
+ * Frontend and backend are served from the SAME EdgeOne origin, so production
+ * uses relative paths (no cross-origin requests, no CORS to configure).
  * - Development: points to local server (localhost:3000)
- * - Production: points to EdgeOne (econintel.edgeone.app)
+ * - Production: same-origin relative paths
  */
 
 const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
-const BASE = isDev ? 'http://localhost:3000/functions' : 'https://econintel.edgeone.app';
+// Production = same origin → empty base → relative paths like "/auth?action=signup"
+const BASE = isDev ? 'http://localhost:3000/functions' : '';
 
 const CONFIG = {
-  // API Base URL
-  apiBase: isDev ? 'http://localhost:3000' : 'https://econintel.edgeone.app',
+  // API Base URL (same origin in production)
+  apiBase: isDev ? 'http://localhost:3000' : '',
 
   // Auth endpoints — EdgeOne routes exact paths only, so we dispatch via ?action=
   auth: {

@@ -1,0 +1,32 @@
+name: RAG live news ingest
+
+# Keeps the EconIntel knowledge base current by running the live RSS ingester
+# on a schedule. It calls OpenAI (embeddings) + Supabase using repo secrets —
+# no website files are touched, so this never affects the live site.
+
+on:
+  schedule:
+    - cron: "0 */3 * * *"   # every 3 hours, on the hour. NOTE: times are UTC,
+                            # and GitHub may start scheduled runs a few minutes late.
+  workflow_dispatch: {}      # also adds a "Run workflow" button in the Actions tab
+                            # so you can trigger it manually to test.
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"   # Node 20 has fetch() built in — no npm install needed
+
+      - name: Run live ingester
+        working-directory: rag    # ingest-live.mjs reads ./feeds.json from this folder
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: node ingest-live.mjs
