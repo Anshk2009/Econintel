@@ -14,11 +14,9 @@
 import { readFile } from 'node:fs/promises';
 
 // --- Config: set these as environment variables before running ---
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;       // for embeddings
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY; // embeddings (SAME key as chat)
 const SUPABASE_URL   = process.env.SUPABASE_URL;          // https://xxxx.supabase.co
 const SUPABASE_KEY   = process.env.SUPABASE_ANON_KEY;
-// (Free alternative to OpenAI embeddings: Google's text-embedding-004. If you
-//  switch, change embed() below AND the vector size in your DB to 768.)
 
 // Read one RSS/XML feed and pull out its items as {title, url, description, date}.
 // This is a lightweight regex parser — good enough for standard RSS, no library.
@@ -57,15 +55,15 @@ function stripTags(s) {
   return s.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
 }
 
-// Turn text into a 512-number embedding via OpenAI.
+// Turn text into a 2048-number embedding via OpenRouter (NVIDIA model, free).
 async function embed(text) {
-  const res = await fetch('https://api.openai.com/v1/embeddings', {
+  const res = await fetch('https://openrouter.ai/api/v1/embeddings', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ model: 'text-embedding-3-small', input: text, dimensions: 512 }),
+    body: JSON.stringify({ model: 'nvidia/llama-nemotron-embed-vl-1b-v2:free', input: text }),
   });
   if (!res.ok) throw new Error(`Embedding failed: ${res.status} ${await res.text()}`);
   return (await res.json()).data[0].embedding;

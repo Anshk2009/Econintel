@@ -26,7 +26,7 @@ jobs:
       - name: Run live ingester
         working-directory: rag    # ingest-live.mjs reads ./feeds.json from this folder
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: node ingest-live.mjs

@@ -145,21 +145,22 @@ export async function onRequest(context) {
   // Supabase down, empty library), it returns '' and the chat just answers
   // normally instead of breaking.
   //
-  // Embeddings use OpenAI text-embedding-3-small @ 512 dims — this MUST match
-  // the ingester in rag/ingest-live.mjs. Set OPENAI_API_KEY in the EdgeOne
-  // dashboard env vars; if it's missing, retrieval simply skips itself.
+  // Embeddings use nvidia/llama-nemotron-embed-vl-1b-v2:free via OpenRouter
+  // (2048 dims) — this MUST match the ingester (rag/ingest-live.mjs) and the
+  // vector(2048) column (rag/schema.sql). Uses the SAME OPENROUTER_API_KEY as
+  // chat, so no separate embedding key is needed.
   // ---------------------------------------------------------------------------
   async function retrieveContext(query) {
-    // 1. Embed the question (text -> a list of 512 numbers).
+    // 1. Embed the question (text -> a list of 2048 numbers) via OpenRouter.
     let queryEmbedding;
     try {
-      const r = await fetch('https://api.openai.com/v1/embeddings', {
+      const r = await fetch('https://openrouter.ai/api/v1/embeddings', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+          'Authorization': `Bearer ${env.OPENROUTER_API_KEY}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ model: 'text-embedding-3-small', input: query, dimensions: 512 }),
+        body: JSON.stringify({ model: 'nvidia/llama-nemotron-embed-vl-1b-v2:free', input: query }),
       });
       if (!r.ok) return '';
       queryEmbedding = (await r.json()).data[0].embedding;

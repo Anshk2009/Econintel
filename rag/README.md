@@ -30,6 +30,7 @@ So: **put real text in → run an ingester → it lands in Supabase → the chat
 
 | File | What it is |
 |------|------------|
+| `schema.sql` | The Supabase setup — run it once in the SQL editor to create the `documents` table + `match_documents` function. |
 | `sources-catalog.md` | The master human-readable list of every source/outlet we trust, with URLs + RSS feeds. Reference only. |
 | `feeds.json` | The machine-readable list of RSS feeds the LIVE ingester polls. |
 | `ingest-live.mjs` | Fetches the latest news from every feed in `feeds.json` and stores it. Run this on a schedule for "live" world news. |
@@ -39,19 +40,15 @@ So: **put real text in → run an ingester → it lands in Supabase → the chat
 
 ## One-time database setup (run in Supabase SQL editor)
 
-The base table + search function from the main RAG plan must already exist
-(`documents` with a `vector(512)` column and the `match_documents` function).
-For live news, also run this once so we can store dates and avoid duplicates:
+Open `schema.sql` (in this folder) and run it once in the Supabase SQL editor.
+It creates the `documents` table — with a `vector(2048)` embedding column to
+match the NVIDIA embedding model — the `match_documents` search function, and
+the dedupe index on `source_url`.
 
-```sql
--- Optional but recommended for live news:
-alter table documents add column if not exists published_at timestamptz;
-alter table documents add column if not exists category text;
-
--- Stops the same article being stored twice (dedupe by its URL):
-create unique index if not exists documents_source_url_key
-  on documents (source_url);
-```
+Note: embeddings are **2048 dimensions**. pgvector's fast HNSW index only
+supports up to 2000 dims, so search is exact (no vector index) for now — fine
+while the library is small. To scale later, switch the column to `halfvec(2048)`
+and add an HNSW index (one command — ask when you need it).
 
 ## How to add your OWN documents (manual)
 
@@ -87,7 +84,8 @@ The text you store becomes what the AI cites as "primary sources." So:
 
 ## Cost & housekeeping
 
-- Embeddings are pennies (live news ≈ a few rupees/month even at 500 DAU).
+- Embeddings are **free** — nvidia/llama-nemotron-embed-vl-1b-v2:free via
+  OpenRouter, using the same key as chat — so live news costs ₹0 to embed.
 - News piles up. To stay inside Supabase's free tier, delete old news
   periodically, e.g. in the SQL editor:
   ```sql
