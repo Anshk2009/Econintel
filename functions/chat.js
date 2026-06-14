@@ -147,8 +147,9 @@ export async function onRequest(context) {
   //
   // Embeddings use nvidia/llama-nemotron-embed-vl-1b-v2:free via OpenRouter
   // (2048 dims) — this MUST match the ingester (rag/ingest-live.mjs) and the
-  // vector(2048) column (rag/schema.sql). Uses the SAME OPENROUTER_API_KEY as
-  // chat, so no separate embedding key is needed.
+  // vector(2048) column (rag/schema.sql). Uses a SEPARATE OpenRouter key,
+  // OPENROUTER_EMBED_KEY (set in EdgeOne env vars), so chat and embeddings have
+  // independent keys/quota. Optional — if it's missing, retrieval just skips.
   // ---------------------------------------------------------------------------
   async function retrieveContext(query) {
     // 1. Embed the question (text -> a list of 2048 numbers) via OpenRouter.
@@ -157,7 +158,7 @@ export async function onRequest(context) {
       const r = await fetch('https://openrouter.ai/api/v1/embeddings', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${env.OPENROUTER_API_KEY}`,
+          'Authorization': `Bearer ${env.OPENROUTER_EMBED_KEY}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ model: 'nvidia/llama-nemotron-embed-vl-1b-v2:free', input: query }),

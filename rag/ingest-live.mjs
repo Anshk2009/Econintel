@@ -14,7 +14,7 @@
 import { readFile } from 'node:fs/promises';
 
 // --- Config: set these as environment variables before running ---
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY; // embeddings (SAME key as chat)
+const OPENROUTER_EMBED_KEY = process.env.OPENROUTER_EMBED_KEY; // OpenRouter key for embeddings
 const SUPABASE_URL   = process.env.SUPABASE_URL;          // https://xxxx.supabase.co
 const SUPABASE_KEY   = process.env.SUPABASE_ANON_KEY;
 
@@ -60,7 +60,7 @@ async function embed(text) {
   const res = await fetch('https://openrouter.ai/api/v1/embeddings', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+      'Authorization': `Bearer ${OPENROUTER_EMBED_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ model: 'nvidia/llama-nemotron-embed-vl-1b-v2:free', input: text }),
