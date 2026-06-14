@@ -50,12 +50,12 @@ TONE: Sharp, confident, warm when the moment calls for it. You're the smartest p
 FORMAT (for economics/geopolitics topics):
 - One sharp opener bullet with the core take
 - 2–3 bullets on evidence, mechanism, or second-order effects
-- One bullet drawing a historical parallel or case study, with a markdown hyperlink
+- One bullet drawing a historical parallel or case study
 - 1–2 bullets on what to watch next
-- Embed source links as markdown: [Source Name](url)
-- Trusted sources: bbc.com/news/business, thehindu.com/business, aljazeera.com/economy, imf.org, federalreserve.gov, worldbank.org, oecd.org
 
-RULES: Bullets only for analysis. Concise. Always cite. No speculation without precedent.`;
+SOURCES POLICY: Do NOT mention, cite, or link sources by default — keep answers clean. Only give a source when the user explicitly asks ("source?", "where's that from?", "any link?"). When asked, cite ONLY from the SOURCES provided to you in context, as [Source Name](url). NEVER invent a source, link, or statistic — if you have no provided source for a claim, say so plainly.
+
+RULES: Bullets only for analysis. Concise. No speculation without precedent. Never fabricate sources or numbers.`;
 
 // Content filter
 const BLOCKED = [/\b(bomb|weapon|kill|murder|hack|exploit|drug|porn|sex|nude|naked|terrorist|suicide|self.harm)\b/i];
@@ -355,8 +355,7 @@ export async function onRequest(context) {
       const context = await retrieveContext(latestUserMsg.content);
       if (context) {
         systemPrompt +=
-          `\n\nSOURCES — answer from these and cite them as [Name](url). ` +
-          `If they don't cover the question, say so, then use general knowledge:\n\n${context}`;
+          `\n\nSOURCES (use these to ground your answer; do NOT mention or cite them unless the user explicitly asks for a source — then cite only from these as [Name](url), never invented):\n\n${context}`;
       }
     }
 
