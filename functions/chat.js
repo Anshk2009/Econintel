@@ -16,6 +16,12 @@ import { verifyJWT, jsonResponse, corsPreflightResponse, hashIP } from './middle
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
+// Chat model, pinned server-side so users can't request a pricier one.
+// gpt-oss-120b is free on OpenRouter and uses your EXISTING OPENROUTER_API_KEY
+// (no new key needed). To upgrade later, drop ":free" for the paid endpoint,
+// which has higher rate limits.
+const MODEL = 'openai/gpt-oss-120b:free';
+
 // Phase 7: Model allowlist per plan tier (prevent expensive model abuse)
 const MODEL_ALLOWLIST = {
   free: ['openrouter/auto'],
@@ -309,17 +315,9 @@ export async function onRequest(context) {
     );
   }
 
-  // Phase 7: Validate model against allowlist
-  const requestedModel = body.model || 'openrouter/auto';
-  const allowedModels = MODEL_ALLOWLIST[userPlan] || MODEL_ALLOWLIST.free;
-
-  if (allowedModels.length > 0 && !allowedModels.includes(requestedModel)) {
-    return jsonResponse(
-      { error: `Model '${requestedModel}' not allowed for ${userPlan} plan. Allowed: ${allowedModels.join(', ')}` },
-      403,
-      ALLOWED_ORIGIN
-    );
-  }
+  // Model is pinned server-side (see MODEL near the top of this file), so the
+  // user can no longer choose it — the old per-plan allowlist check that read
+  // body.model is therefore unnecessary and has been removed.
 
   // Phase 7: Cap message count (prevent token inflation)
   if (body.messages.length > 30) {
@@ -373,7 +371,7 @@ export async function onRequest(context) {
         'X-Title': 'EconIntel',
       },
       body: JSON.stringify({
-        model: requestedModel,
+        model: MODEL,
         messages: messagesWithSystem,
         max_tokens: 550,
         temperature: 0.5,
@@ -454,7 +452,7 @@ export async function onRequest(context) {
           await supabaseRest('chat_history', 'POST', '', {
             id: generateId(), user_id: userId, role: 'user',
             content: userMessage.content,
-            model: body.model || 'openrouter/auto',
+            model: MODEL,
             tokens_used: 0, created_at: now,
           });
         }
@@ -462,7 +460,7 @@ export async function onRequest(context) {
           await supabaseRest('chat_history', 'POST', '', {
             id: generateId(), user_id: userId, role: 'assistant',
             content: fullContent,
-            model: body.model || 'openrouter/auto',
+            model: MODEL,
             tokens_used: 0, created_at: now,
           });
         }
