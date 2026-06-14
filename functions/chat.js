@@ -132,6 +132,57 @@ export async function onRequest(context) {
     },
   };
 
+  // ---------------------------------------------------------------------------
+  // RAG retrieval: turn the question into an embedding, then fetch the 3 most
+  // relevant source chunks from Supabase so the model can answer from real,
+  // citable material. FAILS OPEN — if anything here errors (key missing,
+  // Supabase down, empty library), it returns '' and the chat just answers
+  // normally instead of breaking.
+  //
+  // Embeddings use OpenAI text-embedding-3-small @ 512 dims — this MUST match
+  // the ingester in rag/ingest-live.mjs. Set OPENAI_API_KEY in the EdgeOne
+  // dashboard env vars; if it's missing, retrieval simply skips itself.
+  // ---------------------------------------------------------------------------
+  async function retrieveContext(query) {
+    // 1. Embed the question (text -> a list of 512 numbers).
+    let queryEmbedding;
+    try {
+      const r = await fetch('https://api.openai.com/v1/embeddings', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ model: 'text-embedding-3-small', input: query, dimensions: 512 }),
+      });
+      if (!r.ok) return '';
+      queryEmbedding = (await r.json()).data[0].embedding;
+    } catch { return ''; }
+
+    // 2. Ask Supabase (the match_documents function) for the 3 closest chunks.
+    let chunks;
+    try {
+      const r = await fetch(`${supabaseUrl}/rest/v1/rpc/match_documents`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': supabaseKey,
+        },
+        body: JSON.stringify({ query_embedding: queryEmbedding, match_count: 3 }),
+      });
+      if (!r.ok) return '';
+      chunks = await r.json();
+    } catch { return ''; }
+
+    // 3. Build a text block, keeping each chunk's name + real URL so the model
+    //    can cite real primary sources.
+    if (!Array.isArray(chunks) || chunks.length === 0) return '';
+    return chunks
+      .map((c, i) => `[${i + 1}] ${c.source_name} — ${c.source_url}\n${c.content}`)
+      .join('\n\n');
+  }
+
   // CORS preflight
   if (request.method === 'OPTIONS') {
     return corsPreflightResponse(ALLOWED_ORIGIN);
@@ -293,9 +344,23 @@ export async function onRequest(context) {
   // Step 4: Forward request to OpenRouter (with system prompt + validated model + sanitized messages)
   let upstream;
   try {
-    // Add system prompt at the beginning
+    // RAG: fetch relevant sources for the latest question and prepend them to
+    // the system prompt so the model answers from real, citable material.
+    // retrieveContext fails open ('') if retrieval is unavailable, so the chat
+    // still works even if the library/embeddings are down.
+    let systemPrompt = SYSTEM_PROMPT;
+    if (latestUserMsg) {
+      const context = await retrieveContext(latestUserMsg.content);
+      if (context) {
+        systemPrompt +=
+          `\n\nSOURCES — answer from these and cite them as [Name](url). ` +
+          `If they don't cover the question, say so, then use general knowledge:\n\n${context}`;
+      }
+    }
+
+    // Add the (possibly source-augmented) system prompt at the beginning
     const messagesWithSystem = [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt },
       ...sanitizedMessages
     ];
 

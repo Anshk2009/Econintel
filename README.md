@@ -10,19 +10,16 @@ Static frontend for EconIntel: a polished, animated economics-analysis interface
 
 No build step. Pure HTML/CSS/JS.
 
-## Deploy to Vercel (static)
+## Deploy (EdgeOne Pages)
 
-1. Import this repo at https://vercel.com/new
-2. **Framework Preset: `Other`** (it's a static site — there is no build)
-3. Leave Build Command and Output Directory **empty**
-4. Deploy
-
-Vercel serves `index.html` at `/` and `chat.html` at `/chat.html`.
+No build step. Upload the files to the EdgeOne Pages dashboard (or connect this
+repo). EdgeOne serves `index.html` at `/` and `chat.html` at `/chat.html`, and
+runs everything in `functions/` as Edge Functions.
 
 ## Backend
 
 `config.js` targets the EdgeOne backend (`econintel.edgeone.app`) for auth, chat, and history.
-For auth/chat to work from the Vercel domain, that domain must be included in the
+For auth/chat to work from the deployed domain, that domain must be included in the
 backend's `ALLOWED_ORIGIN` environment variable (CORS).
 
 ## License

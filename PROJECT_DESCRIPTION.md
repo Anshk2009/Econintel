@@ -69,8 +69,7 @@ Unlike news aggregators, EconIntel doesn't report *what* happened. It explains *
 - **JWT + PBKDF2** — Stateless authentication with secure password hashing
 
 ### Deployment
-- **Vercel** — Next.js frontend hosting (auto-deploy on git push)
-- **EdgeOne** — Backend functions (auth, chat, history)
+- **EdgeOne Pages** — Static frontend + Edge Functions (auth, chat, history)
 - **GitHub** — Source control with secrets protection
 
 ---
@@ -90,13 +89,11 @@ Unlike news aggregators, EconIntel doesn't report *what* happened. It explains *
 
 ### Architecture
 ```
-User Browser (Vercel)
+User Browser
     ↓
-Next.js Frontend (landing + chat)
+Static Frontend (landing + chat)
     ↓
-/api/chat endpoint (Vercel serverless)
-    ↓
-EdgeOne backend (/functions/chat)
+EdgeOne Edge Function (/functions/chat)
     ↓
 OpenRouter API (Claude, GPT-4, etc.)
 ```
@@ -139,28 +136,18 @@ OpenRouter API (Claude, GPT-4, etc.)
 
 ## Deployment
 
-### Quick Deploy to Vercel (3 steps)
+### Deploy to EdgeOne Pages
 
-1. **Push to GitHub**
-   ```bash
-   git init && git add . && git commit -m "Initial commit"
-   git remote add origin https://github.com/YOUR_USERNAME/econintel.git
-   git push -u origin main
+1. Upload the files to the EdgeOne Pages dashboard (or connect this GitHub repo).
+2. Set environment variables in the EdgeOne dashboard:
    ```
-
-2. **Import to Vercel**
-   - Visit https://vercel.com/new
-   - Select your GitHub repo
-   - Add environment variables:
-     ```
-     NEXT_PUBLIC_API_URL=https://your-edgeone-domain.app
-     OPENROUTER_API_KEY=***
-     JWT_SECRET=***
-     ```
-
-3. **Deploy**
-   - Click "Deploy"
-   - App goes live at `your-project.vercel.app`
+   OPENROUTER_API_KEY=***
+   JWT_SECRET=***
+   SUPABASE_URL=***
+   SUPABASE_ANON_KEY=***
+   ALLOWED_ORIGIN=https://your-domain.edgeone.app
+   ```
+3. No build step — EdgeOne serves the static files and runs `functions/` as Edge Functions.
 
 ---
 
@@ -199,7 +186,6 @@ econintel/
 │   └── middleware.js        # Shared auth utilities
 ├── package.json             # Dependencies
 ├── next.config.js
-├── vercel.json              # Vercel deployment config
 ├── tsconfig.json
 ├── tailwind.config.js
 ├── .env.example             # Environment template (safe to commit)
@@ -211,7 +197,7 @@ econintel/
 ## Team
 
 👨‍💻 **Built by:** Ansh Kashyap  
-⚙️ **Powered by:** Anthropic Claude, Cloudflare EdgeOne, Vercel, Supabase  
+⚙️ **Powered by:** Anthropic Claude, Cloudflare EdgeOne, Supabase  
 🎨 **UI/UX:** ShaderGradient, Tailwind CSS  
 
 ---
@@ -240,9 +226,8 @@ Proprietary — EconIntel Inc. 2026
 - JWT auth + rate limiting implemented
 - Chat, auth, and history endpoints live
 
-🚀 **Deployed to Vercel**
-- Auto-deploys on git push
-- EdgeOne backend running
+🚀 **Deployed on EdgeOne Pages**
+- Static frontend + Edge Functions
 - OpenRouter integration active
 
 📋 **Roadmap**
