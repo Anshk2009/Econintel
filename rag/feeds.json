@@ -12,6 +12,14 @@
     { "name": "US Federal Reserve",  "url": "https://www.federalreserve.gov/feeds/press_all.xml",            "category": "institution" },
     { "name": "The Guardian Business","url": "https://www.theguardian.com/uk/business/rss",                  "category": "news" },
     { "name": "NYT Economy",         "url": "https://rss.nytimes.com/services/xml/rss/nyt/Economy.xml",      "category": "news" },
-    { "name": "Project Syndicate",   "url": "https://www.project-syndicate.org/rss",                         "category": "analysis" }
+    { "name": "Project Syndicate",   "url": "https://www.project-syndicate.org/rss",                         "category": "analysis" },
+    { "name": "NYT World",            "url": "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",        "category": "news" },
+    { "name": "NYT Business",         "url": "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml",     "category": "news" },
+    { "name": "Guardian World",       "url": "https://www.theguardian.com/world/rss",                         "category": "news" },
+    { "name": "CNBC Economy",         "url": "https://www.cnbc.com/id/20910258/device/rss/rss.html",          "category": "news" },
+    { "name": "Moneycontrol Economy", "url": "https://www.moneycontrol.com/rss/economy.xml",                  "category": "india" },
+    { "name": "Moneycontrol Business","url": "https://www.moneycontrol.com/rss/business.xml",                 "category": "india" },
+    { "name": "Financial Express",    "url": "https://www.financialexpress.com/economy/feed/",                "category": "india" },
+    { "name": "The Hindu Economy",    "url": "https://www.thehindu.com/business/Economy/feeder/default.rss",  "category": "india" }
   ]
 }
