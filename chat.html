@@ -2009,9 +2009,9 @@ window.addEventListener('load', async () => {
   // window.history explicitly — `history` here is our messages array (shadows the global)
   if (fromOAuth) window.history.replaceState({}, '', window.location.pathname);
   loadRecentChats();
-  setTimeout(() => {
-    loadChatHistory();
-  }, 300); // Small delay to ensure auth is set up
+  // Fresh chat on every entry: do NOT auto-load past history into the active
+  // conversation. Loading it merged every past chat into one long thread on
+  // reload. Past prompts stay available in the Recents sidebar + Library overlay.
 });
 
 // ── THEME TOGGLE ──
