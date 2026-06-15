@@ -22,13 +22,6 @@ const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 // which has higher rate limits.
 const MODEL = 'openai/gpt-oss-120b:free';
 
-// Phase 7: Model allowlist per plan tier (prevent expensive model abuse)
-const MODEL_ALLOWLIST = {
-  free: ['openrouter/auto'],
-  pro: ['openrouter/auto', 'gpt-4-turbo', 'gpt-4', 'claude-3-opus', 'claude-3-sonnet'],
-  enterprise: [], // empty = all allowed
-};
-
 // Per-IP daily message limits enforced server-side.
 // Guests use a separate 15-msg/day bucket (GUEST_LIMIT below).
 // Authenticated users get a larger daily bucket keyed by their IP hash.

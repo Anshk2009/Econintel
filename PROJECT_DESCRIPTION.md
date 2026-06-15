@@ -65,7 +65,7 @@ Unlike news aggregators, EconIntel doesn't report *what* happened. It explains *
 ### Backend
 - **EdgeOne** — Cloudflare edge functions for low-latency API responses
 - **Supabase PostgreSQL** — User data, chat history, API usage tracking
-- **OpenRouter** — LLM API with model flexibility (GPT-4, Claude, etc.)
+- **OpenRouter** — LLM API with model flexibility across providers
 - **JWT + PBKDF2** — Stateless authentication with secure password hashing
 
 ### Deployment
@@ -95,7 +95,7 @@ Static Frontend (landing + chat)
     ↓
 EdgeOne Edge Function (/functions/chat)
     ↓
-OpenRouter API (Claude, GPT-4, etc.)
+OpenRouter API
 ```
 
 ---
@@ -197,7 +197,7 @@ econintel/
 ## Team
 
 👨‍💻 **Built by:** Ansh Kashyap  
-⚙️ **Powered by:** Anthropic Claude, Cloudflare EdgeOne, Supabase  
+⚙️ **Powered by:** OpenRouter, Cloudflare EdgeOne, Supabase  
 🎨 **UI/UX:** ShaderGradient, Tailwind CSS  
 
 ---
