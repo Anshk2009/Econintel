@@ -66,10 +66,12 @@ async function embed(text) {
   return (await res.json()).data[0].embedding;
 }
 
-// Upsert one chunk row. merge-duplicates means re-running a file UPDATES its rows
-// (matched on the unique source_url) instead of erroring on a duplicate.
+// Upsert one chunk row. on_conflict=source_url + merge-duplicates makes Postgres
+// UPDATE the existing row (matched on the unique source_url) instead of 409-ing.
+// Without on_conflict, PostgREST targets the primary key, so re-seeding any doc
+// whose URL is already stored throws a duplicate-key 409.
 async function upsertChunk(row) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/documents`, {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/documents?on_conflict=source_url`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -88,32 +90,40 @@ async function main() {
     (f.endsWith('.md') || f.endsWith('.txt')) && !f.startsWith('_') && f !== 'case-studies-to-seed.md'
   );
 
-  let total = 0;
+  let total = 0, failed = 0;
   for (const file of files) {
-    const raw = await readFile(join(DOCS_DIR, file), 'utf8');
-    const { meta, body } = parseDoc(raw);
-    if (!body) { console.warn(`Skipping empty: ${file}`); continue; }
+    // Per-doc resilience: one bad doc logs and is skipped instead of killing the
+    // whole run, so a single hiccup never blocks the rest of the library.
+    try {
+      const raw = await readFile(join(DOCS_DIR, file), 'utf8');
+      const { meta, body } = parseDoc(raw);
+      if (!body) { console.warn(`Skipping empty: ${file}`); continue; }
 
-    const baseUrl = meta.source_url || file;
-    const chunks = chunkText(body);
-    console.log(`${file}: ${chunks.length} chunks`);
+      const baseUrl = meta.source_url || file;
+      const chunks = chunkText(body);
+      console.log(`${file}: ${chunks.length} chunks`);
 
-    for (let i = 0; i < chunks.length; i++) {
-      const embedding = await embed(chunks[i]);
-      await upsertChunk({
-        content:      chunks[i],
-        source_name:  meta.source_name || file.replace(/\.(md|txt)$/, ''),
-        // Make the URL unique per chunk so the source_url unique index doesn't
-        // clash when one doc becomes several chunks. The "#0/#1" still opens the page.
-        source_url:   chunks.length > 1 ? `${baseUrl}#${i}` : baseUrl,
-        category:     meta.category || 'reference',
-        published_at: meta.published_at || null,
-        embedding,
-      });
-      total++;
+      for (let i = 0; i < chunks.length; i++) {
+        const embedding = await embed(chunks[i]);
+        await upsertChunk({
+          content:      chunks[i],
+          source_name:  meta.source_name || file.replace(/\.(md|txt)$/, ''),
+          // Make the URL unique per chunk so the source_url unique index doesn't
+          // clash when one doc becomes several chunks. The "#0/#1" still opens the page.
+          source_url:   chunks.length > 1 ? `${baseUrl}#${i}` : baseUrl,
+          category:     meta.category || 'reference',
+          published_at: meta.published_at || null,
+          embedding,
+        });
+        total++;
+      }
+    } catch (err) {
+      failed++;
+      console.warn(`Skipping ${file}: ${err.message}`);
     }
   }
-  console.log(`Done. Upserted ${total} chunks from ${files.length} files.`);
+  console.log(`Done. Upserted ${total} chunks from ${files.length} files (${failed} failed).`);
+  if (total === 0 && failed > 0) process.exit(1); // total failure → mark the run red
 }
 
 main().catch(err => { console.error(err); process.exit(1); });
