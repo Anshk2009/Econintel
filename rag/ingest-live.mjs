@@ -95,17 +95,36 @@ async function insertItem(row) {
 }
 
 async function main() {
+  // Fail loud if a required secret is missing. Without this, a blank key sends
+  // "Bearer undefined" to OpenRouter/Supabase, every request 401s, and the run
+  // still finishes "successfully" having added nothing — a silent green failure.
+  const missing = [];
+  if (!OPENROUTER_EMBED_KEY) missing.push('OPENROUTER_EMBED_KEY');
+  if (!SUPABASE_URL)         missing.push('SUPABASE_URL');
+  if (!SUPABASE_KEY)         missing.push('SUPABASE_ANON_KEY');
+  if (missing.length) {
+    console.error(`Missing required env var(s): ${missing.join(', ')}. Set them as GitHub repo Secrets.`);
+    process.exit(1);
+  }
+
   const { feeds } = JSON.parse(await readFile('./feeds.json', 'utf8'));
-  let added = 0, skipped = 0;
+  let added = 0, skipped = 0, failed = 0;
 
   for (const feed of feeds) {
+    let items;
     try {
-      const xml   = await (await fetch(feed.url)).text();
-      const items = parseRss(xml);
+      const xml = await (await fetch(feed.url)).text();
+      items = parseRss(xml);
       console.log(`${feed.name}: ${items.length} items`);
+    } catch (err) {
+      // A dead/unreachable feed shouldn't stop the whole run — skip just it.
+      console.warn(`Feed fetch failed, skipping ${feed.name}: ${err.message}`);
+      continue;
+    }
 
-      for (const item of items) {
-        if (!item.url || !item.title) continue;        // skip malformed entries
+    for (const item of items) {
+      if (!item.url || !item.title) continue;          // skip malformed entries
+      try {
         if (await alreadyStored(item.url)) { skipped++; continue; }
 
         // The text we embed = headline + summary. Enough for the chat to find
@@ -122,14 +141,27 @@ async function main() {
           embedding,
         });
         added++;
+      } catch (err) {
+        // Per-ITEM catch (was per-feed): one failed embed/insert no longer
+        // skips the rest of that feed's items. Count failures so a dead
+        // embeddings key/model surfaces instead of passing silently.
+        failed++;
+        console.warn(`  item failed (${item.url}): ${err.message}`);
       }
-    } catch (err) {
-      // One bad feed shouldn't stop the whole run.
-      console.warn(`Skipping ${feed.name}: ${err.message}`);
     }
   }
 
-  console.log(`Done. Added ${added} new items, skipped ${skipped} already stored.`);
+  console.log(`Done. Added ${added}, skipped ${skipped} (already stored), failed ${failed}.`);
+
+  // If items failed AND nothing new was added, ingestion is genuinely broken
+  // (embeddings key/model dead, Supabase unreachable, etc.) — exit non-zero so
+  // the GitHub Actions run shows RED and notifies you, instead of a green check
+  // that quietly added zero news. (0 added with 0 failed = simply no new items,
+  // which is fine and stays green.)
+  if (failed > 0 && added === 0) {
+    console.error('Every attempted item failed and nothing was added — failing the run so it is visible.');
+    process.exit(1);
+  }
 }
 
 main().catch(err => { console.error(err); process.exit(1); });

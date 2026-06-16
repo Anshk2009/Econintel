@@ -1,13 +1,16 @@
 name: RAG live news ingest
 
 # Keeps the EconIntel knowledge base current by running the live RSS ingester
-# on a schedule. It calls OpenAI (embeddings) + Supabase using repo secrets —
+# on a schedule. It calls OpenRouter (embeddings) + Supabase using repo secrets —
 # no website files are touched, so this never affects the live site.
 
 on:
   schedule:
-    - cron: "0 */3 * * *"   # every 3 hours, on the hour. NOTE: times are UTC,
-                            # and GitHub may start scheduled runs a few minutes late.
+    # Every 3 hours at :27 past — deliberately NOT on the hour. GitHub heavily
+    # delays or DROPS scheduled runs queued at the top of the hour (:00) because
+    # that is its busiest slot, so an off-peak minute is far more reliable.
+    # Times are UTC; GitHub may still start a run a few minutes late.
+    - cron: "27 */3 * * *"
   workflow_dispatch: {}      # also adds a "Run workflow" button in the Actions tab
                             # so you can trigger it manually to test.
 
