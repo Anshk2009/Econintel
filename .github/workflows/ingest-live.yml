@@ -17,6 +17,11 @@ on:
 jobs:
   ingest:
     runs-on: ubuntu-latest
+    # Safety net: a healthy run finishes in 1-3 min. If anything wedges, kill the
+    # whole job at 15 min instead of letting it hang for GitHub's default 6 HOURS
+    # (the "stuck" run). The per-request timeouts in ingest-live.mjs are the real
+    # fix; this is the backstop.
+    timeout-minutes: 15
     steps:
       - name: Check out repo
         uses: actions/checkout@v4

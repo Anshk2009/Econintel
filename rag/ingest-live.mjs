@@ -18,6 +18,21 @@ const OPENROUTER_EMBED_KEY = process.env.OPENROUTER_EMBED_KEY; // OpenRouter key
 const SUPABASE_URL   = process.env.SUPABASE_URL;          // https://xxxx.supabase.co
 const SUPABASE_KEY   = process.env.SUPABASE_ANON_KEY;
 
+// Hard per-request timeout. Node's built-in fetch() waits FOREVER by default, so
+// a single slow RSS feed or a hung OpenRouter/Supabase call freezes the whole run
+// until GitHub kills the job hours later (the "stuck run" symptom). AbortController
+// guarantees every request gives up after TIMEOUT_MS so the loop keeps moving.
+const TIMEOUT_MS = 15000;
+async function fetchWithTimeout(url, options = {}, ms = TIMEOUT_MS) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...options, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer); // always clear so the timer can't keep the process alive
+  }
+}
+
 // Read one RSS/XML feed and pull out its items as {title, url, description, date}.
 // This is a lightweight regex parser — good enough for standard RSS, no library.
 function parseRss(xml) {
@@ -57,7 +72,7 @@ function stripTags(s) {
 
 // Turn text into a 2048-number embedding via OpenRouter (NVIDIA model, free).
 async function embed(text) {
-  const res = await fetch('https://openrouter.ai/api/v1/embeddings', {
+  const res = await fetchWithTimeout('https://openrouter.ai/api/v1/embeddings', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${OPENROUTER_EMBED_KEY}`,
@@ -71,7 +86,7 @@ async function embed(text) {
 
 // Has this article URL already been stored? (dedupe — don't embed the same news twice)
 async function alreadyStored(url) {
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `${SUPABASE_URL}/rest/v1/documents?source_url=eq.${encodeURIComponent(url)}&select=id&limit=1`,
     { headers: { 'Authorization': `Bearer ${SUPABASE_KEY}`, 'apikey': SUPABASE_KEY } },
   );
@@ -82,7 +97,7 @@ async function alreadyStored(url) {
 
 // Save one news item as a row in the documents table.
 async function insertItem(row) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/documents`, {
+  const res = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/documents`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -113,11 +128,12 @@ async function main() {
   for (const feed of feeds) {
     let items;
     try {
-      const xml = await (await fetch(feed.url)).text();
+      const xml = await (await fetchWithTimeout(feed.url)).text();
       items = parseRss(xml);
       console.log(`${feed.name}: ${items.length} items`);
     } catch (err) {
-      // A dead/unreachable feed shouldn't stop the whole run — skip just it.
+      // A dead/unreachable/slow feed shouldn't stop the whole run — the timeout
+      // turns a hang into a quick error, and we skip just this feed.
       console.warn(`Feed fetch failed, skipping ${feed.name}: ${err.message}`);
       continue;
     }
