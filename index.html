@@ -2575,9 +2575,20 @@ async function submitSignIn(e) {
       setTimeout(() => {
         window.location.href = 'chat.html';
       }, 300);
+    } else if (data.message) {
+      // Server returned its generic anti-enumeration message — typically the
+      // email/username is already registered. Signup deliberately does NOT
+      // confirm which (so attackers can't probe for valid accounts), so instead
+      // of a scary "error" we nudge the user toward signing in.
+      alert(isSignupMode
+        ? 'That email may already be registered. Try signing in instead.'
+        : data.message);
+      if (isSignupMode) toggleSignupMode(); // flip the form to sign-in mode
+      btn.disabled = false;
+      btn.textContent = originalText;
     } else {
-      // Server said OK but didn't send the expected payload — don't leave
-      // the button stuck on "Signing in..."
+      // Genuinely unexpected: OK status but neither a session token nor a
+      // message — don't leave the button stuck on "Signing in..."
       alert('Unexpected server response. Please try again.');
       btn.disabled = false;
       btn.textContent = originalText;

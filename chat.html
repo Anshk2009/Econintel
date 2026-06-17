@@ -1408,13 +1408,23 @@ async function sendMessage() {
       return;
     }
 
-    // Streaming: remove the "Thinking…" spinner and show an empty assistant bubble
-    // immediately. OpenRouter sends tokens as SSE (text/event-stream) events, and
-    // we append each delta to the bubble in real time so the user sees text appear
-    // token-by-token instead of waiting for the full response.
-    thinkingEl.remove();
-    const msgEl = addMessage('assistant', ''); // empty bubble — filled as tokens arrive
+    // Streaming: KEEP the "Thinking…" bubble on screen and reuse it as the reply
+    // bubble. We only swap the bouncing dots for text when the FIRST token
+    // actually arrives. Previously we removed the dots and dropped an EMPTY
+    // assistant bubble immediately — so during the wait (RAG lookup + first byte)
+    // a blank pill flashed on screen, which looked broken.
+    // OpenRouter sends tokens as SSE (text/event-stream) events; we append each
+    // delta in real time so text appears token-by-token.
+    const msgEl = thinkingEl;        // reuse the dots bubble instead of a new empty one
     let fullReply = '';
+    let started = false;             // flips true the moment the first real token lands
+
+    // Drop the dots and switch the bubble into text mode. Runs exactly once.
+    const beginReply = () => {
+      msgEl.classList.remove('thinking');
+      msgEl.innerHTML = '';
+      started = true;
+    };
 
     const reader = res.body.getReader();
     const dec = new TextDecoder();
@@ -1435,6 +1445,7 @@ async function sendMessage() {
           try {
             const delta = JSON.parse(payload)?.choices?.[0]?.delta?.content;
             if (delta) {
+              if (!started) beginReply(); // first token: clear the dots, keep the bubble
               fullReply += delta;
               msgEl.textContent = fullReply; // live update — user sees text as it arrives
               scrollChatToBottom(); // follow the stream (unless user scrolled up)
@@ -1444,9 +1455,11 @@ async function sendMessage() {
       }
     } catch (err) {
       // Network dropped mid-stream — keep whatever arrived
+      if (!started) beginReply();
       if (!fullReply) msgEl.textContent = 'Stream interrupted. Try again.';
     }
-    if (!fullReply && !msgEl.textContent) msgEl.textContent = 'No response.';
+    // Stream produced nothing — make sure the dots don't spin forever.
+    if (!started) { beginReply(); if (!fullReply) msgEl.textContent = 'No response.'; }
     // Stream done — switch from plain textContent to rendered HTML.
     // We stream as text so partial tokens don't break mid-tag, then
     // render once the full response is received.
@@ -1883,7 +1896,37 @@ function openAccountModal(which) {
     const clearHistoryBtn = u
       ? `<button class="acct-btn" style="margin:0;background:#f87171" onclick="clearChatHistory(); closeAccountModal();">Delete All</button>`
       : `<span class="acct-row-value">Sign in to save chats</span>`;
+
+    // ── PLAN ROW ──
+    // Shows the signed-in user's current plan as a colour-coded badge. The plan
+    // lives in localStorage (econintel:user.plan) and is refreshed from the
+    // server on every page load via silentRefresh — so if an admin changes it in
+    // the database, reloading the page updates what's shown here.
+    const PLAN_META = {
+      free:       { label: 'Free',       text: '#9aa0aa', bg: 'rgba(154,160,170,0.14)', border: 'rgba(154,160,170,0.32)' },
+      pro:        { label: 'Pro',        text: '#f08a5d', bg: 'rgba(240,138,93,0.16)',  border: 'rgba(240,138,93,0.36)' },
+      enterprise: { label: 'Enterprise', text: '#ffc850', bg: 'rgba(255,200,80,0.16)',  border: 'rgba(255,200,80,0.36)' },
+    };
+    let planRow;
+    if (u) {
+      // Unknown/legacy plan values fall back to a neutral grey badge.
+      const meta = PLAN_META[u.plan] || { label: (u.plan || 'Free'), text: '#9aa0aa', bg: 'rgba(154,160,170,0.14)', border: 'rgba(154,160,170,0.32)' };
+      const badge = `<span style="display:inline-block;padding:3px 11px;border-radius:999px;font-size:0.72rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:${meta.text};background:${meta.bg};border:1px solid ${meta.border}">${escapeHTML(meta.label)}</span>`;
+      // Free/Pro see an Upgrade nudge to the pricing page; Enterprise is already top tier.
+      const upgrade = u.plan === 'enterprise'
+        ? ''
+        : ` <a href="index.html#pricing" style="margin-left:8px;font-size:0.78rem;color:var(--accent);text-decoration:none">Upgrade →</a>`;
+      planRow = `<span class="acct-row-value" style="display:flex;align-items:center">${badge}${upgrade}</span>`;
+    } else {
+      // Guest — no account, so no plan. Nudge them to sign in.
+      planRow = `<button class="acct-btn" style="margin:0" onclick="openAccountModal('signin')">Sign in</button>`;
+    }
+
     body.innerHTML = `
+      <div class="acct-row">
+        <span class="acct-row-label">Plan</span>
+        ${planRow}
+      </div>
       <div class="acct-row">
         <span class="acct-row-label">Theme</span>
         <button class="acct-btn" style="margin:0" onclick="toggleTheme(); openAccountModal('settings');">${isLight ? 'Switch to Dark' : 'Switch to Light'}</button>

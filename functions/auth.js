@@ -439,9 +439,28 @@ async function handleLogin(request, env, jwtSecret, allowedOrigin) {
  * Returns: { message: string }
  */
 async function handleLogout(request, env, jwtSecret, allowedOrigin) {
-  // Validate CSRF token (double-submit + KV server-issuance check)
+  // Helper: headers that wipe all three auth cookies regardless of outcome below.
+  // Defined early so we can reuse it on CSRF failure — logging someone out is
+  // harmless, so clearing cookies even on a failed CSRF check is the right call.
+  // Failing to clear means the HttpOnly refresh_token lingers for 30 days.
+  function makeClearCookieHeaders() {
+    const h = new Headers({
+      'Content-Type': 'application/json; charset=utf-8',
+      'Access-Control-Allow-Origin': allowedOrigin,
+      'Access-Control-Allow-Credentials': 'true',
+    });
+    h.append('Set-Cookie', 'access_token=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');
+    h.append('Set-Cookie', 'refresh_token=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');
+    h.append('Set-Cookie', 'csrf_token=; Path=/; Secure; SameSite=Strict; Max-Age=0');
+    return h;
+  }
+
+  // Validate CSRF token (double-submit + KV server-issuance check).
+  // CSRF cookie has a 24h TTL — if it expires before the user signs out, the
+  // check fails and we used to return 403 without clearing cookies. Now we
+  // clear cookies anyway (the session is dead either way) and return 200.
   if (!await validateCSRFToken(request, TOKENS)) {
-    return jsonResponse({ error: 'Invalid or missing CSRF token' }, 403, allowedOrigin);
+    return new Response(JSON.stringify({ message: 'Logged out' }), { status: 200, headers: makeClearCookieHeaders() });
   }
 
   const token = getBearerToken(request);
@@ -607,8 +626,13 @@ async function handleResetPasswordRequest(request, env, allowedOrigin) {
 
     // Send reset email via Resend (https://resend.com).
     // Requires RESEND_API_KEY in EdgeOne env vars.
-    // When you buy a domain: verify it in Resend dashboard and update the
-    // `from` field below to something like: EconIntel <noreply@yourdomain.com>
+    //
+    // IMPORTANT — works for YOUR own inbox only, until you own a domain:
+    // the test sender below (onboarding@resend.dev) can ONLY deliver to the
+    // email of the Resend account owner. To email any real user, buy a domain,
+    // verify it in the Resend dashboard, and change the `from` field to e.g.
+    // EconIntel <noreply@yourdomain.com>. Until then, real users won't receive
+    // the reset email (the request still succeeds; the token is stored).
     const resetLink = `https://econintel.edgeone.app/reset-password.html?token=${resetToken}`;
     if (env.RESEND_API_KEY) {
       try {
