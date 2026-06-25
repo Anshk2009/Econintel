@@ -12,7 +12,7 @@
 //   - Supabase PostgreSQL database for chat history and API usage
 //   - Functions: middleware.js with crypto utilities
 
-import { verifyJWT, jsonResponse, corsPreflightResponse, hashIP } from './middleware.js';
+import { verifyJWT, jsonResponse, corsPreflightResponse, hashIP, resolveSupabaseKey } from './middleware.js';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -47,7 +47,7 @@ SCOPE: Economics, geopolitics, central banking, markets, trade, currencies, fisc
 GREETINGS & SMALL TALK: Always welcome. Reply warmly in one or two lines and invite them to ask about the economy or markets. The scope rule never applies to greetings. Never decline or redirect a casual hello.
 
 DEPTH CALIBRATION:
-- Simple question → tight, punchy answer. 3–4 bullets max.
+- Simple question → tight, punchy answer. 4–5 bullets max.
 - Complex / multi-part question → go deeper, but never exceed 5 bullets. No padding.
 - Follow-up question → assume context from prior exchange. Don't re-explain what was already established.
 
@@ -72,8 +72,18 @@ HARD RULES:
 - Never repeat the user's question back to them.
 - Never end with "Let me know if you have questions" or similar.`;
 
-// Content filter
-const BLOCKED = [/\b(bomb|weapon|kill|murder|hack|exploit|drug|porn|sex|nude|naked|terrorist|suicide|self.harm)\b/i];
+// Content filter — deliberately NARROW.
+// The previous list (bomb|weapon|kill|murder|hack|exploit|drug|terrorist|sex…)
+// blocked legitimate economics & geopolitics questions: "weaponization of the
+// dollar", "killing inflation", "debt bomb", "sanctions exploit", "drug-trade
+// economics", "sex-disaggregated labour data" — all core to this product. That
+// made the filter a UX bug, not a security control. It now catches only a few
+// clearly harmful, non-economic requests as a cheap first pass; genuinely unsafe
+// prompts are also refused by the model itself and the scoped system prompt.
+const BLOCKED = [
+  /\bchild\s*(porn|sexual|abuse)/i,                                   // CSAM
+  /\b(how\s+(to|do\s+i)|ways?\s+to)\b.{0,40}\b(kill\s+myself|commit\s+suicide|end\s+my\s+life|self.?harm)\b/i, // self-harm how-to
+];
 function isBlocked(text) {
   return BLOCKED.some(pattern => pattern.test(text));
 }
@@ -94,7 +104,9 @@ export async function onRequest(context) {
 
   // Supabase REST API helper (no npm packages)
   const supabaseUrl = env.SUPABASE_URL;
-  const supabaseKey = env.SUPABASE_ANON_KEY; // service_role key rejected by EdgeOne — anon key only
+  // Service-role key (base64-wrapped) if configured, else anon key. See
+  // resolveSupabaseKey() in middleware.js — required for the RLS-on path.
+  const supabaseKey = resolveSupabaseKey(env);
 
   async function supabaseRest(table, method = 'GET', filters = '', body = null) {
     let url = `${supabaseUrl}/rest/v1/${table}`;
@@ -418,13 +430,19 @@ export async function onRequest(context) {
     );
   }
 
-  // Headers sent back on every streaming response
+  // Headers sent back on every streaming response.
+  // The security headers (nosniff / frame-deny / referrer) mirror what
+  // jsonResponse() sets — the streaming path was missing them, so add them here
+  // too so the SSE responses get the same baseline hardening as JSON responses.
   const sseHeaders = {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
   };
 
   // Guests: pipe the SSE stream straight through — no history to save
@@ -462,25 +480,46 @@ export async function onRequest(context) {
     },
 
     async flush() {
-      // Stream finished — persist to chat_history (best-effort)
+      // Stream finished — persist to chat_history.
       try {
-        const now = new Date().toISOString();
+        // conversation_id groups the user+assistant rows into one thread so the
+        // sidebar can reopen them together. The client generates it; we accept a
+        // plain string (≤64 chars) and otherwise store null (legacy/flat).
+        const cid = (typeof body.conversation_id === 'string' && body.conversation_id.length <= 64)
+          ? body.conversation_id
+          : null;
         const userMessage = body.messages[body.messages.length - 1];
+        const base = Date.now();
+        const rows = [];
         if (userMessage?.role === 'user') {
-          await supabaseRest('chat_history', 'POST', '', {
+          rows.push({
             id: generateId(), user_id: userId, role: 'user',
             content: userMessage.content,
             model: MODEL,
-            tokens_used: 0, created_at: now,
+            conversation_id: cid,
+            tokens_used: 0, created_at: new Date(base).toISOString(),
           });
         }
         if (fullContent) {
-          await supabaseRest('chat_history', 'POST', '', {
+          rows.push({
             id: generateId(), user_id: userId, role: 'assistant',
             content: fullContent,
             model: MODEL,
-            tokens_used: 0, created_at: now,
+            conversation_id: cid,
+            // +1ms so the reply always sorts AFTER its question when a thread is
+            // reopened (otherwise both share an identical timestamp and the order
+            // is undefined).
+            tokens_used: 0, created_at: new Date(base + 1).toISOString(),
           });
+        }
+        // ONE batch insert (PostgREST accepts an array) instead of two awaits:
+        // both rows save together or not at all, and it finishes in a single
+        // round-trip — important because the runtime can reclaim the function
+        // right after the stream ends. Previously the second (assistant) await
+        // was getting cut off, so a reopened thread showed the question but no
+        // answer. context.waitUntil below also keeps the isolate alive until here.
+        if (rows.length) {
+          await supabaseRest('chat_history', 'POST', '', rows);
         }
       } catch (err) {
         console.warn('[chat] Failed to save streamed history:', err);
@@ -488,7 +527,17 @@ export async function onRequest(context) {
     },
   });
 
-  upstream.body.pipeTo(writable);
+  // Keep the isolate alive until the stream is fully piped AND flush()'s DB write
+  // finishes. Without this, the edge runtime can tear the function down the moment
+  // the client finishes reading the response — dropping the history save.
+  // .catch keeps a mid-stream client disconnect from becoming an unhandled
+  // rejection (and gives waitUntil a promise that always resolves).
+  const pipePromise = upstream.body.pipeTo(writable).catch(err => {
+    console.warn('[chat] stream pipe ended early:', err);
+  });
+  if (typeof context.waitUntil === 'function') {
+    context.waitUntil(pipePromise);
+  }
   return new Response(readable, { status: 200, headers: sseHeaders });
 }
 

@@ -1205,8 +1205,19 @@ function renderMarkdown(raw) {
     blocks.push(`<pre><code>${escHtml(code.trim())}</code></pre>`);
     return `\x00B${blocks.length - 1}\x00`; // placeholder
   });
-  // Step 2: Inline code
-  t = t.replace(/`([^`\n]+)`/g, (_, c) => `<code>${escHtml(c)}</code>`);
+  // Step 1b: SECURITY — escape ALL remaining text BEFORE any other transform.
+  // The assistant reply can contain UNTRUSTED content (e.g. text pulled from
+  // live RSS sources via RAG, which a poisoned feed could use to inject HTML).
+  // Without this, raw HTML such as <img src=x onerror=...> would be written
+  // straight into innerHTML further down and execute in the user's browser
+  // (stored XSS). Escaping here turns every < > & into a harmless entity; the
+  // markdown rules below only re-introduce the safe tags WE generate.
+  // Fenced code blocks are already safe — escaped and swapped for \x00
+  // placeholders in Step 1 — so this does not touch them.
+  t = escHtml(t);
+  // Step 2: Inline code (content is already escaped by Step 1b — just wrap it,
+  // do NOT escape again or it would double-encode into &amp;lt; etc.)
+  t = t.replace(/`([^`\n]+)`/g, (_, c) => `<code>${c}</code>`);
   // Step 3: Bold+italic, bold, italic
   t = t.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
   t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
@@ -1272,8 +1283,56 @@ function handleKey(e) {
 const CHAT_ENDPOINT = CONFIG.chat;
 const MODEL = 'openrouter/auto';
 const history = [
-  { role: 'system', content: 'You are EconIntel, an economic-reasoning assistant. Be concise, structured, and ground claims in mechanisms (causes, channels, second-order effects). Avoid news-style summary.' }
+  // NOTE: the AI's personality is enforced SERVER-SIDE in functions/chat.js — it
+  // strips any client-supplied system message and prepends its own authoritative
+  // SYSTEM_PROMPT. This mirror is kept in sync so the two never contradict, but
+  // editing it alone does NOT change behaviour; the real copy lives in chat.js.
+  { role: 'system', content: `You are EconIntel — a Bloomberg-trained analyst with a Wharton degree and a dry sense of humour. You've seen every market cycle, read every central-bank statement, and have zero patience for vague answers or bad takes.
+
+PERSONA DEPTH: You think in frameworks, not opinions. You connect current events to historical precedent instinctively. You are confident but not reckless — you distinguish between what the data shows, what history suggests, and what is genuinely uncertain. You never bluff.
+
+SCOPE: Economics, geopolitics, central banking, markets, trade, currencies, fiscal/monetary policy, sanctions, and anything closely connected. If someone asks something genuinely off-topic, one dry witty line maximum — then find the economics angle if one exists. If none exists, invite them back. Never be cold.
+
+GREETINGS & SMALL TALK: Always welcome. Reply warmly in one or two lines and invite them to ask about the economy or markets. The scope rule never applies to greetings. Never decline or redirect a casual hello.
+
+DEPTH CALIBRATION:
+- Simple question → tight, punchy answer. 4–5 bullets max.
+- Complex / multi-part question → go deeper, but never exceed 5 bullets. No padding.
+- Follow-up question → assume context from prior exchange. Don't re-explain what was already established.
+
+TONE: Sharp, witty, confident. Less academic paper, more senior analyst who also reads history books and has strong opinions about central bankers. A well-placed quip is welcome. Condescension is not. Never open with "Great question", "Certainly", "Of course" or any filler phrase.
+
+FORMAT: Bullets only. No headers, no labels, no walls of text. Each bullet maximum 2 lines — claim, evidence, implication in one clean flow.
+
+STRUCTURE (invisible — never label these):
+- One sharp bullet with the core take
+- 2–3 bullets of evidence, mechanism, or second-order effects
+- One bullet with a historical parallel (only where genuinely relevant — skip if forced)
+- 1–2 bullets on what to watch next or what would change the thesis
+
+UNCERTAINTY HANDLING: When something is genuinely uncertain or contested, say so in one clean bullet — "The honest answer is X is unclear because Y." Never speculate beyond what a senior analyst would confidently state on record. Never fabricate a number, statistic, or precedent.
+
+SOURCES POLICY: Say nothing about sources unprompted — no citations, no links, no disclaimers. Only when the user explicitly asks ("source?", "where's that from?", "any link?") do you address sources. If provided sources back the claim, cite as [Source Name](url). If not, say plainly you don't have a specific source for it — once, briefly, only in direct reply. Never invent a source.
+
+HARD RULES:
+- Bullets only. Always.
+- Never fabricate sources, statistics, or historical events.
+- Never tack disclaimers onto answers unless directly asked.
+- Never repeat the user's question back to them.
+- Never end with "Let me know if you have questions" or similar.` }
 ];
+
+// ── CONVERSATION THREADS ──
+// Each chat thread has its own id. The client generates it and sends it with
+// every message so the backend can group a thread's messages together; clicking
+// a thread in Recents reopens it and keeps the SAME id so new replies append to
+// it ("reopen and continue"). A fresh page load or "New chat" starts a new id.
+function genConversationId() {
+  // crypto.randomUUID is supported in all modern browsers; fall back just in case.
+  try { return crypto.randomUUID(); }
+  catch { return 'c-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10); }
+}
+let currentConversationId = genConversationId();
 
 function addMessage(role, content, opts = {}) {
   const messages = document.getElementById('messages');
@@ -1338,7 +1397,7 @@ async function sendMessage() {
         'X-CSRF-Token': localStorage.getItem('econintel:csrf') || ''
       },
       credentials: 'include', // cookies (access_token) sent automatically
-      body: JSON.stringify({ model: MODEL, messages: history })
+      body: JSON.stringify({ model: MODEL, messages: history, conversation_id: currentConversationId })
     });
 
     let res = await fireRequest();
@@ -1484,6 +1543,7 @@ function newChat() {
   document.getElementById('chat-greeting').style.display = '';
   document.getElementById('chat-greeting-sub').style.display = '';
   history.length = 1; // keep system prompt
+  currentConversationId = genConversationId(); // start a brand-new thread
   const input = document.getElementById('prompt-input');
   input.value = ''; input.style.height = 'auto'; input.focus();
 }
@@ -1649,7 +1709,8 @@ async function loadRecentChats() {
   const csrfToken = localStorage.getItem('econintel:csrf');
 
   try {
-    const res = await fetch(CONFIG.chatHistory.get + '&limit=20', {
+    // Fetch the user's conversation THREADS (grouped, newest first).
+    const res = await fetch(CONFIG.chatHistory.conversations, {
       method: 'GET',
       headers: {
         'X-CSRF-Token': csrfToken || ''
@@ -1660,28 +1721,76 @@ async function loadRecentChats() {
     if (!res.ok) { showEmpty(); return; } // couldn't load — clear the skeletons
 
     const data = await res.json();
-    const userMessages = data.messages.filter(m => m.role === 'user');
+    const conversations = data.conversations || [];
 
-    if (userMessages.length > 0 && recentsContainer) {
-      const recentsList = userMessages
-        .slice(0, 8)
-        .map(msg => {
-          const preview = msg.content.substring(0, 35) + (msg.content.length > 35 ? '…' : '');
-          const date = new Date(msg.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-          // Escape user-controlled content before inserting into innerHTML (prevents stored XSS)
-          return `<div class="recent-chat-item" title="${escapeHTML(msg.content)}"><span class="recent-preview">${escapeHTML(preview)}</span><span class="recent-date">${escapeHTML(date)}</span></div>`;
+    if (conversations.length > 0 && recentsContainer) {
+      const recentsList = conversations
+        .slice(0, 12)
+        .map(c => {
+          const title = c.title || 'Untitled chat';
+          const preview = title.substring(0, 35) + (title.length > 35 ? '…' : '');
+          const date = c.last_at ? new Date(c.last_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+          // Escape user-controlled content before inserting into innerHTML (prevents stored XSS).
+          // data-cid carries the conversation id so a click can reopen that whole thread.
+          return `<div class="recent-chat-item" data-cid="${escapeHTML(c.conversation_id)}" title="${escapeHTML(title)}"><span class="recent-preview">${escapeHTML(preview)}</span><span class="recent-date">${escapeHTML(date)}</span></div>`;
         })
         .join('');
       recentsContainer.innerHTML = recentsList; // replaces the skeletons
       recentsContainer.classList.add('has-recents');
+      // Clicking a thread reopens its FULL conversation and continues it in place:
+      // openConversation() loads the messages and sets currentConversationId so any
+      // new reply appends to the same thread ("reopen and continue").
+      recentsContainer.querySelectorAll('.recent-chat-item').forEach(item => {
+        item.addEventListener('click', () => openConversation(item.dataset.cid));
+      });
     } else {
-      // Signed in but no history yet — replace skeletons with the empty label
+      // Signed in but no threads yet — replace skeletons with the empty label
       showEmpty();
     }
   } catch (err) {
     console.warn('[recents] Failed to load:', err);
     showEmpty(); // network error — don't leave skeletons shimmering forever
   }
+}
+
+// ── OPEN A CONVERSATION THREAD (reopen + continue) ──
+// Loads a past thread's messages into the view and sets currentConversationId so
+// the user can keep chatting in that same thread. Requires the conversation_id
+// column (migration 0005) + the threaded chat.js/chat-history.js deployed.
+async function openConversation(id) {
+  if (!id) return;
+  const csrfToken = localStorage.getItem('econintel:csrf');
+  let data;
+  try {
+    const res = await fetch(CONFIG.chatHistory.get + '&conversation_id=' + encodeURIComponent(id) + '&limit=200', {
+      method: 'GET',
+      headers: { 'X-CSRF-Token': csrfToken || '' },
+      credentials: 'include'
+    });
+    if (!res.ok) { alert('Could not open this chat.'); return; }
+    data = await res.json();
+  } catch { alert('Could not open this chat.'); return; }
+
+  // Backend returns newest-first; reverse to show oldest-first like a real chat.
+  const msgs = (data.messages || []).slice().reverse();
+  if (!msgs.length) { alert('This chat is empty.'); return; }
+
+  // Reset the view + in-memory history (keep the system prompt at index 0).
+  document.getElementById('messages').innerHTML = '';
+  history.length = 1;
+
+  for (const m of msgs) {
+    if (m.role !== 'user' && m.role !== 'assistant') continue;
+    // For assistant messages, render markdown (same as a live reply); user
+    // messages stay plain text. addMessage already escapes user text safely.
+    const el = addMessage(m.role, m.role === 'assistant' ? '' : m.content);
+    if (m.role === 'assistant') el.innerHTML = renderMarkdown(m.content);
+    history.push({ role: m.role, content: m.content });
+  }
+
+  currentConversationId = id;   // continue in THIS thread
+  closeMobileSidebar();         // on mobile, close the drawer to reveal the chat
+  scrollChatToBottom(true);
 }
 
 // ════════════════════════════════════════════════════════════════════

@@ -28,7 +28,8 @@ const CONFIG = {
 
   // Chat history endpoints — dispatch via ?action=
   chatHistory: {
-    get: `${BASE}/chat-history?action=get`,
+    get: `${BASE}/chat-history?action=get`,                     // flat history, or one thread with &conversation_id=
+    conversations: `${BASE}/chat-history?action=conversations`, // grouped thread list for the sidebar
     delete: `${BASE}/chat-history?action=delete`,
   },
 

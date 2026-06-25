@@ -13,8 +13,16 @@ create table if not exists documents (
   source_url   text,            -- the real link, so the chat can cite it
   category     text,            -- "news" | "report" | "case-study" | ...
   published_at timestamptz,     -- when the source was published (news freshness)
+  -- LICENSE/USAGE LINE: true  = original/curated/primary, safe to REPUBLISH on a
+  -- public blog or category page. false = scraped commercial full-text/snippets,
+  -- RETRIEVAL-ONLY (the chat may read it and link to it, but it must NOT be
+  -- republished). The chat searches ALL rows; only blog/page generation filters
+  -- on publishable = true.
+  publishable  boolean not null default false,
   embedding    vector(2048)     -- the "meaning fingerprint" (2048 numbers)
 );
+-- Fast "give me only the publishable rows" lookups for page generation.
+create index if not exists documents_publishable_idx on documents (publishable);
 
 -- 3. Stop the same article being stored twice (dedupe by its URL).
 create unique index if not exists documents_source_url_key on documents (source_url);

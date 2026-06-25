@@ -113,6 +113,10 @@ async function main() {
           source_url:   chunks.length > 1 ? `${baseUrl}#${i}` : baseUrl,
           category:     meta.category || 'reference',
           published_at: meta.published_at || null,
+          // These are YOUR original/curated docs (case studies, references you
+          // wrote/verified) → safe to republish. Front-matter can override with
+          // `publishable: false` for anything you only want used for retrieval.
+          publishable:  meta.publishable ? meta.publishable !== 'false' : true,
           embedding,
         });
         total++;

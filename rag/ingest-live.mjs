@@ -154,6 +154,11 @@ async function main() {
           source_url:   item.url,
           category:     feed.category || 'news',
           published_at: item.date ? new Date(item.date).toISOString() : null,
+          // Scraped commercial headline+snippet = RETRIEVAL-ONLY. The chat may
+          // read it and link to the source, but it must never be republished on
+          // a blog/category page. (Promote specific public-domain sources like
+          // the US Federal Reserve later if you want.)
+          publishable:  false,
           embedding,
         });
         added++;

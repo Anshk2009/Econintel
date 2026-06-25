@@ -2,7 +2,7 @@
 // Handles retrieving and managing user chat history.
 // Deploy to: functions/chat-history.js in your EdgeOne project.
 
-import { verifyJWT, jsonResponse, corsPreflightResponse } from './middleware.js';
+import { verifyJWT, jsonResponse, corsPreflightResponse, resolveSupabaseKey } from './middleware.js';
 
 // Hoisted to module scope so the top-level handlers (handleGetHistory,
 // handleDeleteHistory) can use them — assigned at the top of onRequest.
@@ -22,7 +22,9 @@ export async function onRequest(context) {
 
   // Supabase REST API helper (no npm packages)
   const supabaseUrl = env.SUPABASE_URL;
-  const supabaseKey = env.SUPABASE_ANON_KEY; // service_role key rejected by EdgeOne — anon key only
+  // Service-role key (base64-wrapped) if configured, else anon key. See
+  // resolveSupabaseKey() in middleware.js — required for the RLS-on path.
+  const supabaseKey = resolveSupabaseKey(env);
 
   supabaseRest = async function supabaseRest(table, method = 'GET', filters = '', body = null) {
     let url = `${supabaseUrl}/rest/v1/${table}`;
@@ -101,6 +103,9 @@ export async function onRequest(context) {
   try {
     if (action === 'get' && request.method === 'GET') {
       return await handleGetHistory(request, env, JWT_SECRET, ALLOWED_ORIGIN);
+    } else if (action === 'conversations' && request.method === 'GET') {
+      // Grouped thread list for the sidebar (one entry per conversation_id)
+      return await handleListConversations(request, env, JWT_SECRET, ALLOWED_ORIGIN);
     } else if (action === 'delete' && request.method === 'DELETE') {
       return await handleDeleteHistory(request, env, JWT_SECRET, ALLOWED_ORIGIN);
     } else {
@@ -148,14 +153,21 @@ async function handleGetHistory(request, env, jwtSecret, allowedOrigin) {
   const url = new URL(request.url);
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 500); // Cap at 500
   const offset = parseInt(url.searchParams.get('offset') || '0');
+  // Optional: restrict to a single conversation thread. Only the threaded UI
+  // sends this; it requires the conversation_id column (migration 0005).
+  const conversationId = url.searchParams.get('conversation_id');
 
   try {
     // Get messages (ordered newest first), excluding soft-deleted rows
-    const filters = `user_id=eq.${encodeURIComponent(userId)}`
+    let filters = `user_id=eq.${encodeURIComponent(userId)}`
       + `&select=id,role,content,model,tokens_used,created_at`
       + `&deleted_at=is.null`
       + `&order=created_at.desc`
       + `&limit=${limit}&offset=${offset}`;
+    // Scope to one thread when requested
+    if (conversationId) {
+      filters += `&conversation_id=eq.${encodeURIComponent(conversationId)}`;
+    }
     const { data: messages, error: messagesError } = await supabaseRest('chat_history', 'GET', filters);
 
     if (messagesError) throw new Error(messagesError);
@@ -169,6 +181,84 @@ async function handleGetHistory(request, env, jwtSecret, allowedOrigin) {
   } catch (err) {
     console.error('[chat-history] Failed to retrieve history:', err);
     return jsonResponse({ error: 'Failed to retrieve chat history' }, 500, allowedOrigin);
+  }
+}
+
+// ============================================================================
+// LIST CONVERSATIONS (grouped threads for the sidebar)
+// ============================================================================
+
+/**
+ * GET /functions/chat-history?action=conversations
+ * Returns one entry per conversation thread, newest first:
+ *   { conversations: [{ conversation_id, title, last_at, count }] }
+ * title = the thread's FIRST user question. PostgREST has no easy GROUP BY over
+ * REST, so we fetch the user's recent rows and group them here in JS (volumes
+ * are small). Requires the conversation_id column (migration 0005).
+ */
+async function handleListConversations(request, env, jwtSecret, allowedOrigin) {
+  // Authenticate (same as handleGetHistory)
+  let token = getBearerToken(request);
+  if (!token) {
+    const cookies = parseCookies(request);
+    token = cookies.access_token;
+  }
+  if (!token) {
+    return jsonResponse({ error: 'Missing Authorization header' }, 401, allowedOrigin);
+  }
+
+  const userPayload = await verifyJWT(token, jwtSecret, {
+    TOKENS,
+    dbCheck: async (uid, tv) => {
+      const { data } = await supabaseRest('users', 'GET', `id=eq.${encodeURIComponent(uid)}&select=token_version`);
+      return data?.[0]?.token_version === tv;
+    },
+  });
+  if (!userPayload) {
+    return jsonResponse({ error: 'Invalid or expired token' }, 401, allowedOrigin);
+  }
+
+  const userId = userPayload.userId;
+
+  try {
+    // Pull the user's recent threaded rows, newest first. conversation_id=not.is.null
+    // skips legacy flat history (which has no thread to reopen).
+    const filters = `user_id=eq.${encodeURIComponent(userId)}`
+      + `&select=role,content,conversation_id,created_at`
+      + `&deleted_at=is.null`
+      + `&conversation_id=not.is.null`
+      + `&order=created_at.desc`
+      + `&limit=400`;
+    const { data: rows, error } = await supabaseRest('chat_history', 'GET', filters);
+    if (error) throw new Error(error);
+
+    // Group in JS. Rows are DESC (newest first), so:
+    //  - the first row seen for a thread carries its latest timestamp (last_at)
+    //  - overwriting title on every user row leaves the EARLIEST user message
+    //    (the original question) as the final title.
+    const byThread = new Map();
+    for (const r of (rows || [])) {
+      const cid = r.conversation_id;
+      if (!byThread.has(cid)) {
+        byThread.set(cid, { conversation_id: cid, title: '', last_at: r.created_at, count: 0 });
+      }
+      const t = byThread.get(cid);
+      t.count += 1;
+      if (r.role === 'user' && typeof r.content === 'string') {
+        t.title = r.content.slice(0, 200); // overwritten down to the earliest question
+      }
+    }
+
+    // Map → array, newest thread first, cap the list.
+    const conversations = Array.from(byThread.values())
+      .map(t => ({ ...t, title: t.title || 'Untitled chat' }))
+      .sort((a, b) => new Date(b.last_at) - new Date(a.last_at))
+      .slice(0, 30);
+
+    return jsonResponse({ conversations }, 200, allowedOrigin);
+  } catch (err) {
+    console.error('[chat-history] Failed to list conversations:', err);
+    return jsonResponse({ error: 'Failed to list conversations' }, 500, allowedOrigin);
   }
 }
 

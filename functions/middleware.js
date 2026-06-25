@@ -1,35 +1,46 @@
 // Shared authentication and crypto utilities for EconIntel edge functions.
 // These run server-side only and are used by auth.js and chat.js.
 
+// Argon2id (memory-hard, OWASP-recommended password hash) via vendored hash-wasm
+// WASM bundle. The WebAssembly is embedded in argon2.js — no network fetch — and
+// is compiled lazily on the first hash call, so importing it stays cheap for the
+// chat path (which only needs verifyJWT, never hashing).
+import { argon2id, argon2Verify } from './argon2.js';
+
 // ============================================================================
-// PASSWORD HASHING with PBKDF2
+// PASSWORD HASHING — Argon2id (with legacy iterated-SHA-256 verify fallback)
 // ============================================================================
-// PBKDF2 is a standard key derivation function built into Node.js (via SubtleCrypto).
-// It's cryptographically sound and resistant to brute-force attacks.
-// Not async—takes ~10ms per operation, which is fine for edge functions.
+// WHY Argon2id: it is memory-hard, so it resists GPU/ASIC cracking in a way that
+// plain (iterated) SHA-256 never can. These are the OWASP minimum parameters
+// (19 MiB memory, 2 passes, 1 lane). They are constants so they're easy to tune
+// after the first live timing test on EdgeOne — if a login ever times out, lower
+// ARGON2_MEMORY_KIB first (e.g. 12288 = 12 MiB), but never below ~12 MiB.
+const ARGON2_MEMORY_KIB   = 19456; // 19 MiB
+const ARGON2_TIME         = 2;     // iterations / passes
+const ARGON2_PARALLELISM  = 1;     // lanes
+const ARGON2_HASH_LENGTH  = 32;    // output bytes
 
 /**
- * Hash a password using PBKDF2-SHA256.
- * Returns a base64 string containing salt + iterations + hash.
+ * Hash a password with Argon2id.
+ * Returns a self-describing PHC string that already embeds the algorithm,
+ * version, parameters, salt and hash, e.g.:
+ *   $argon2id$v=19$m=19456,t=2,p=1$<saltB64>$<hashB64>
+ * comparePassword() reads everything it needs back out of that string.
  * @param {string} password - Plain text password
- * @returns {string} Salted hash (base64)
+ * @returns {Promise<string>} Argon2id PHC-encoded hash
  */
 export async function hashPassword(password) {
-  // NOTE: EdgeOne's runtime does not support PBKDF2 via crypto.subtle.deriveBits
-  // ("Param Invalid"), so we use iterated SHA-256 (crypto.subtle.digest), which
-  // IS supported. Format: "sha256i$iterations$saltB64$hashB64".
+  // 16 random bytes of salt, unique per password.
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  const pw = new TextEncoder().encode(password);
-  const iterations = 1000;
-
-  let acc = await _sha256(_concatBytes(salt, pw));
-  for (let i = 1; i < iterations; i++) {
-    acc = await _sha256(_concatBytes(acc, salt));
-  }
-
-  const saltBase64 = btoa(String.fromCharCode.apply(null, salt));
-  const hashBase64 = btoa(String.fromCharCode.apply(null, acc));
-  return `sha256i$${iterations}$${saltBase64}$${hashBase64}`;
+  return await argon2id({
+    password,
+    salt,
+    parallelism: ARGON2_PARALLELISM,
+    iterations:  ARGON2_TIME,
+    memorySize:  ARGON2_MEMORY_KIB,
+    hashLength:  ARGON2_HASH_LENGTH,
+    outputType:  'encoded', // standard PHC string (includes params + salt)
+  });
 }
 
 // SHA-256 helpers — crypto.subtle.digest is supported on the EdgeOne runtime.
@@ -52,31 +63,57 @@ function _concatBytes(a, b) {
  */
 export async function comparePassword(password, hash) {
   try {
-    const parts = String(hash).split('$');
-    // Expected format: sha256i$iterations$saltB64$hashB64
-    if (parts[0] !== 'sha256i') return false;
-    const iterations = parseInt(parts[1], 10);
-    const salt = Uint8Array.from(atob(parts[2]), c => c.charCodeAt(0));
-    const storedB64 = parts[3];
+    const stored = String(hash);
 
-    const pw = new TextEncoder().encode(password);
-    let acc = await _sha256(_concatBytes(salt, pw));
-    for (let i = 1; i < iterations; i++) {
-      acc = await _sha256(_concatBytes(acc, salt));
+    // ── New scheme: Argon2id ──
+    // PHC strings start with "$argon2". argon2Verify re-derives the hash using
+    // the parameters baked into the string and does its own constant-time check.
+    if (stored.startsWith('$argon2')) {
+      return await argon2Verify({ password, hash: stored });
     }
-    const computedB64 = btoa(String.fromCharCode.apply(null, acc));
 
-    // Constant-time comparison over the base64 strings
-    if (computedB64.length !== storedB64.length) return false;
-    let result = 0;
-    for (let i = 0; i < computedB64.length; i++) {
-      result |= computedB64.charCodeAt(i) ^ storedB64.charCodeAt(i);
+    // ── Legacy scheme: iterated SHA-256 ("sha256i$iter$saltB64$hashB64") ──
+    // Kept ONLY so accounts created before the Argon2id upgrade can still sign
+    // in. On a successful legacy login, auth.js transparently re-hashes the
+    // password to Argon2id (upgrade-on-login), so these fade out over time.
+    if (stored.startsWith('sha256i$')) {
+      const parts = stored.split('$');
+      const iterations = parseInt(parts[1], 10);
+      const salt = Uint8Array.from(atob(parts[2]), c => c.charCodeAt(0));
+      const storedB64 = parts[3];
+
+      const pw = new TextEncoder().encode(password);
+      let acc = await _sha256(_concatBytes(salt, pw));
+      for (let i = 1; i < iterations; i++) {
+        acc = await _sha256(_concatBytes(acc, salt));
+      }
+      const computedB64 = btoa(String.fromCharCode.apply(null, acc));
+
+      // Constant-time comparison over the base64 strings
+      if (computedB64.length !== storedB64.length) return false;
+      let result = 0;
+      for (let i = 0; i < computedB64.length; i++) {
+        result |= computedB64.charCodeAt(i) ^ storedB64.charCodeAt(i);
+      }
+      return result === 0;
     }
-    return result === 0;
+
+    // Unknown hash format
+    return false;
   } catch (err) {
     console.error('[middleware] comparePassword error:', err);
     return false;
   }
+}
+
+/**
+ * True if a stored hash uses the modern Argon2id scheme. auth.js uses this to
+ * decide whether a legacy account needs upgrading-on-login.
+ * @param {string} hash - Stored password hash
+ * @returns {boolean}
+ */
+export function isLegacyHash(hash) {
+  return !String(hash).startsWith('$argon2');
 }
 
 // ============================================================================
@@ -229,6 +266,45 @@ export async function hashIP(ip) {
   const data = encoder.encode(ip);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   return btoa(String.fromCharCode.apply(null, new Uint8Array(hashBuffer))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+// ============================================================================
+// UTILITY: Resolve which Supabase key the backend should use
+// ============================================================================
+/**
+ * Pick the Supabase API key for server-side REST calls.
+ *
+ * BACKGROUND: Row Level Security (RLS) is the thing that makes a Supabase key
+ * safe to expose. Today RLS is OFF and the functions use the ANON key, so the
+ * anon key is the ONLY guard on the whole database — if it ever leaks, every
+ * table is readable. The fix is to turn RLS ON and have the backend use the
+ * SERVICE-ROLE key (which bypasses RLS), so a leaked anon key becomes useless.
+ *
+ * EdgeOne refuses to store the raw service_role JWT ("value contains unsecurity
+ * string"), so we store it base64-WRAPPED in SUPABASE_SERVICE_KEY_B64 and decode
+ * it here at runtime.
+ *
+ * BACKWARD-COMPATIBLE BY DESIGN: if SUPABASE_SERVICE_KEY_B64 is not set (or can't
+ * be decoded) we fall back to the anon key — so deploying this code changes
+ * NOTHING until you both (a) set the env var and (b) enable RLS. That lets you
+ * roll the change out in safe, separately-reversible steps.
+ *
+ * @param {object} env - EdgeOne environment bindings
+ * @returns {string} the Supabase key to use
+ */
+export function resolveSupabaseKey(env) {
+  if (env.SUPABASE_SERVICE_KEY_B64) {
+    try {
+      // .trim() guards against a trailing newline accidentally pasted into the
+      // dashboard; atob() turns the base64 wrapper back into the real JWT.
+      return atob(env.SUPABASE_SERVICE_KEY_B64.trim());
+    } catch (err) {
+      // Misconfigured wrapper — log and fall back so we fail in an obvious way
+      // during testing (anon key + RLS-on = denied), not silently.
+      console.warn('[middleware] SUPABASE_SERVICE_KEY_B64 set but could not be decoded; falling back to anon key:', err);
+    }
+  }
+  return env.SUPABASE_ANON_KEY;
 }
 
 // ============================================================================

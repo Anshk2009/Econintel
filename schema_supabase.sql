@@ -55,19 +55,21 @@ CREATE INDEX IF NOT EXISTS idx_email_tokens_expires_at ON email_tokens(expires_a
 
 -- Chat history ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS chat_history (
-  id          TEXT PRIMARY KEY,
-  user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  role        TEXT NOT NULL CHECK (role IN ('user','assistant')),
-  content     TEXT NOT NULL,
-  model       TEXT DEFAULT 'openrouter/auto',
-  tokens_used INTEGER DEFAULT 0,
-  deleted_at  TIMESTAMPTZ,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id              TEXT PRIMARY KEY,
+  user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role            TEXT NOT NULL CHECK (role IN ('user','assistant')),
+  content         TEXT NOT NULL,
+  model           TEXT DEFAULT 'openrouter/auto',
+  conversation_id TEXT,   -- groups a user+assistant exchange into one thread (NULL = legacy flat)
+  tokens_used     INTEGER DEFAULT 0,
+  deleted_at      TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_chat_history_user_id      ON chat_history(user_id);
 CREATE INDEX IF NOT EXISTS idx_chat_history_created_at   ON chat_history(created_at);
 CREATE INDEX IF NOT EXISTS idx_chat_history_user_created ON chat_history(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_chat_history_deleted      ON chat_history(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_chat_history_conversation ON chat_history(user_id, conversation_id, created_at);
 
 -- Login event audit -----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS login_events (

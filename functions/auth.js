@@ -10,12 +10,14 @@
 import {
   hashPassword,
   comparePassword,
+  isLegacyHash,
   generateJWT,
   verifyJWT,
   generateId,
   hashIP,
   jsonResponse,
   corsPreflightResponse,
+  resolveSupabaseKey,
 } from './middleware.js';
 
 // Rate limiting thresholds
@@ -65,9 +67,11 @@ export async function onRequest(context) {
 
   // Supabase REST API helper (no npm packages needed)
   const supabaseUrl = env.SUPABASE_URL;
-  // EdgeOne rejects service_role key ("value contains unsecurity string") — anon key only.
-  // RLS is disabled on all tables so anon key has full access server-side.
-  const supabaseKey = env.SUPABASE_ANON_KEY;
+  // Use the service-role key (base64-wrapped in SUPABASE_SERVICE_KEY_B64) if it's
+  // configured, else fall back to the anon key. See resolveSupabaseKey() in
+  // middleware.js. This is the key that lets us enable RLS later without breaking
+  // the backend; until the env var is set it behaves exactly as before (anon key).
+  const supabaseKey = resolveSupabaseKey(env);
 
   // REST API helper function (assigned to the module-scoped binding above)
   supabaseRest = async function supabaseRest(table, method = 'GET', filters = '', body = null) {
@@ -361,7 +365,17 @@ async function handleLogin(request, env, jwtSecret, allowedOrigin) {
 
     if (fetchError) throw fetchError;
 
-    if (!user || !(await comparePassword(password, user.password_hash))) {
+    // SECURITY (timing oracle): always run a password comparison, even when no
+    // account matched. If we skipped the hash work for unknown emails, the
+    // response would return measurably faster for non-existent accounts, letting
+    // an attacker enumerate which emails are registered. Comparing against a
+    // valid dummy hash (same Argon2id cost) keeps the timing uniform. The dummy
+    // is a well-formed Argon2id PHC string that no real password matches, so the
+    // no-account path runs the same memory-hard work as a real verification.
+    const DUMMY_HASH = '$argon2id$v=19$m=19456,t=2,p=1$a9FcV0ds4b6CIRGHqB7lwg$RCHCM69x9qt6fWuVkW/M9ZE+t+9naWWqxaPboM2GYao';
+    const passwordOK = await comparePassword(password, user ? user.password_hash : DUMMY_HASH);
+
+    if (!user || !passwordOK) {
       // Increment failed login counter
       const emailKey = `rl:login:email:${normalizedEmail}`;
       await incrementRateLimit(TOKENS, emailKey, RATE_LIMITS.failedLogin.window);
@@ -383,6 +397,20 @@ async function handleLogin(request, env, jwtSecret, allowedOrigin) {
     const { error: updateError } = await supabaseRest('users', 'PATCH', `id=eq.${encodeURIComponent(user.id)}`, { last_login_at: new Date().toISOString() });
 
     if (updateError) console.warn('[auth] Failed to update login time:', updateError);
+
+    // SECURITY (upgrade-on-login): if this account still carries a legacy
+    // iterated-SHA-256 hash, transparently re-hash the password we JUST verified
+    // with Argon2id and store it. This migrates old accounts to strong hashing
+    // the next time they sign in. Best-effort only — wrapped in its own try/catch
+    // so a re-hash failure can never block an otherwise-valid login.
+    if (isLegacyHash(user.password_hash)) {
+      try {
+        const upgradedHash = await hashPassword(password);
+        await supabaseRest('users', 'PATCH', `id=eq.${encodeURIComponent(user.id)}`, { password_hash: upgradedHash });
+      } catch (err) {
+        console.warn('[auth] Password rehash-on-login failed (non-fatal):', err);
+      }
+    }
 
     // Phase 6: Generate JWT with 15-minute expiry + refresh token
     const jwt = await generateJWT(
@@ -453,6 +481,22 @@ async function handleLogout(request, env, jwtSecret, allowedOrigin) {
     h.append('Set-Cookie', 'refresh_token=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');
     h.append('Set-Cookie', 'csrf_token=; Path=/; Secure; SameSite=Strict; Max-Age=0');
     return h;
+  }
+
+  // SECURITY: revoke the server-side refresh token so logout actually ends the
+  // session everywhere — not just in this browser. Clearing the cookie alone
+  // only hides the token from the client; the 30-day refresh token stayed valid
+  // in KV, so anyone who had captured it could keep minting new access tokens
+  // after the user "logged out". We do this BEFORE the CSRF check so the token
+  // is killed even on the cookie-expired path below (the session is dead either
+  // way, and revoking is always the safe thing to do on a logout request).
+  const refreshTokenToRevoke = parseCookies(request).refresh_token;
+  if (refreshTokenToRevoke) {
+    try {
+      await TOKENS.delete(`refresh:${refreshTokenToRevoke}`);
+    } catch (err) {
+      console.warn('[auth] Failed to revoke refresh token on logout:', err);
+    }
   }
 
   // Validate CSRF token (double-submit + KV server-issuance check).
@@ -1233,10 +1277,20 @@ async function checkHaveIBeenPwned(password) {
     const prefix = hashHex.slice(0, 5);
     const suffix = hashHex.slice(5);
 
-    const response = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`, {
-      method: 'GET',
-      timeout: 5000, // 5 second timeout
-    });
+    // The `timeout` option on fetch() is NOT part of the Web/EdgeOne fetch API —
+    // it was silently ignored, so a slow HIBP response could hang signup. Use a
+    // real AbortController so the request is actually cancelled after 5 seconds.
+    const hibpController = new AbortController();
+    const hibpTimer = setTimeout(() => hibpController.abort(), 5000);
+    let response;
+    try {
+      response = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`, {
+        method: 'GET',
+        signal: hibpController.signal,
+      });
+    } finally {
+      clearTimeout(hibpTimer);
+    }
 
     if (!response.ok) {
       console.warn('[auth] HIBP API returned', response.status);
