@@ -37,13 +37,14 @@ create unique index if not exists documents_source_url_key on documents (source_
 --    Takes a question's embedding, returns the closest `match_count` rows.
 create or replace function match_documents (
   query_embedding vector(2048),
-  match_count     int default 3
+  match_count     int default 5
 )
 returns table (
   id          bigint,
   content     text,
   source_name text,
   source_url  text,
+  publishable boolean,   -- lets the chat split CITEABLE (true) from BACKGROUND (false)
   similarity  float
 )
 language sql stable
@@ -53,6 +54,7 @@ as $$
     documents.content,
     documents.source_name,
     documents.source_url,
+    documents.publishable,
     1 - (documents.embedding <=> query_embedding) as similarity   -- cosine similarity
   from documents
   order by documents.embedding <=> query_embedding                -- closest first

@@ -97,16 +97,31 @@ async function alreadyStored(url) {
 
 // Save one news item as a row in the documents table.
 async function insertItem(row) {
-  const res = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/documents`, {
+  const post = (body) => fetchWithTimeout(`${SUPABASE_URL}/rest/v1/documents`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${SUPABASE_KEY}`,
       'apikey': SUPABASE_KEY,
     },
-    body: JSON.stringify(row),
+    body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`Insert failed: ${res.status} ${await res.text()}`);
+
+  let res = await post(row);
+  if (!res.ok) {
+    const errText = await res.text();
+    // A citeable feed sends publishable=true, which needs the publishable column
+    // (migration-add-publishable.sql). If that column isn't there yet, retry once
+    // WITHOUT the flag so ingestion never breaks — the row just stores as
+    // non-citeable until the migration + backfill run.
+    if (row.publishable !== undefined && /publishable|does not exist|PGRST204/i.test(errText)) {
+      const { publishable, ...rest } = row;
+      const res2 = await post(rest);
+      if (res2.ok) return;
+      throw new Error(`Insert failed (retry without publishable): ${res2.status} ${await res2.text()}`);
+    }
+    throw new Error(`Insert failed: ${res.status} ${errText}`);
+  }
 }
 
 async function main() {
@@ -154,12 +169,14 @@ async function main() {
           source_url:   item.url,
           category:     feed.category || 'news',
           published_at: item.date ? new Date(item.date).toISOString() : null,
-          // Scraped commercial headline+snippet = RETRIEVAL-ONLY (must never be
-          // republished on a blog/category page). We deliberately do NOT send a
-          // `publishable` field: retrieval-only is exactly the column's DEFAULT
-          // (false), so relying on the default keeps this insert working whether
-          // or not migration-add-publishable.sql has been applied yet. (Sending
-          // the column explicitly broke ingestion on DBs missing the column.)
+          // CITEABLE primary/open-data feeds (feeds.json "citeable": true) are the
+          // only ones marked publishable=true, so the chat may cite them when a
+          // user asks. Everything else OMITS the field (undefined keys are dropped
+          // by JSON.stringify) and stays retrieval-only via the column DEFAULT
+          // (false) — never cited, and works even before the publishable column
+          // exists. insertItem() also retries without the flag if the column is
+          // missing, so a citeable feed can never break ingestion either.
+          publishable:  feed.citeable === true ? true : undefined,
           embedding,
         });
         added++;

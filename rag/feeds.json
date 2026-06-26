@@ -1,5 +1,5 @@
 {
-  "_comment": "RSS feeds the live ingester (ingest-live.mjs) polls. Verify each URL in a browser before relying on it — if you see XML, it works. Remove any that 404 or stop returning XML.",
+  "_comment": "RSS feeds the live ingester (ingest-live.mjs) polls. Verify each URL in a browser before relying on it — if you see XML, it works. Remove any that 404 or stop returning XML. Add \"citeable\": true ONLY to primary/open-data sources that are safe to cite to users (IMF, US Federal Reserve, World Bank, etc.) — those rows become publishable=true and may be cited when asked; everything else is retrieval-only BACKGROUND and is never cited. This list is PIPELINE-ONLY and is never shown anywhere on the website/frontend.",
   "feeds": [
     { "name": "BBC Business",        "url": "http://feeds.bbci.co.uk/news/business/rss.xml",                 "category": "news" },
     { "name": "BBC World",           "url": "http://feeds.bbci.co.uk/news/world/rss.xml",                    "category": "news" },
@@ -8,8 +8,8 @@
     { "name": "LiveMint Economy",    "url": "https://www.livemint.com/rss/economy",                          "category": "india" },
     { "name": "Business Standard",   "url": "https://www.business-standard.com/rss/economy-policy-103.rss",   "category": "india" },
     { "name": "Economic Times",      "url": "https://economictimes.indiatimes.com/rssfeedstopstories.cms",    "category": "india" },
-    { "name": "IMF News",            "url": "https://www.imf.org/en/News/RSS?Language=ENG",                   "category": "institution" },
-    { "name": "US Federal Reserve",  "url": "https://www.federalreserve.gov/feeds/press_all.xml",            "category": "institution" },
+    { "name": "IMF News",            "url": "https://www.imf.org/en/News/RSS?Language=ENG",                   "category": "institution", "citeable": true },
+    { "name": "US Federal Reserve",  "url": "https://www.federalreserve.gov/feeds/press_all.xml",            "category": "institution", "citeable": true },
     { "name": "The Guardian Business","url": "https://www.theguardian.com/uk/business/rss",                  "category": "news" },
     { "name": "NYT Economy",         "url": "https://rss.nytimes.com/services/xml/rss/nyt/Economy.xml",      "category": "news" },
     { "name": "Project Syndicate",   "url": "https://www.project-syndicate.org/rss",                         "category": "analysis" },

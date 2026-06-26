@@ -69,3 +69,33 @@ URLs to pull from are in `documents/case-studies-to-seed.md`.
 - 1979–82 Volcker disinflation
 - Japan's "Lost Decade" (1990s)
 - 2018 Turkey & Argentina currency crises
+
+---
+
+## F. Citeable open-data / primary sources (PIPELINE-ONLY — never shown on the site)
+
+> These are the sources allowed to be **cited to users** (they become
+> `publishable = true`). Everything else in the library (commercial news) is
+> retrieval-only BACKGROUND and is **never cited**. This list lives only in the
+> pipeline — it is never listed or mentioned anywhere on the website/frontend,
+> and the chat only emits a citation inline when a user explicitly asks.
+>
+> Two ingestion paths, because most of these are **data APIs, not RSS**:
+
+**RSS / press-release feeds** — add to `feeds.json` with `"citeable": true`
+(verify each URL returns XML first; the existing RSS ingester handles them):
+- World Bank, OECD, Our World in Data, BLS, BEA, EIA (Today in Energy),
+  WHO (news), NOAA, USGS, SEC EDGAR (latest-filings Atom feeds)
+- Already wired and citeable: **IMF News**, **US Federal Reserve**
+
+**Data APIs** — need a small dedicated ingester each (fetch indicator/dataset
+metadata + a citeable URL, embed that as the "document"; not articles):
+- World Bank Open Data, FRED, BEA/BLS/EIA data APIs, Eurostat, UNData,
+  UN Comtrade, FAOSTAT, Data.gov, Data.gov.uk, OGD India (data.gov.in),
+  NASA EarthData, WHO GHO (OData), Wikidata (SPARQL), GDELT, OpenStreetMap
+
+How citeable gating works end to end:
+1. `feeds.json` `"citeable": true`  ->  ingester writes `publishable = true`
+2. `match_documents` returns `publishable`
+3. chat.js puts publishable=true chunks in a CITEABLE block (may cite when asked)
+   and everything else in a BACKGROUND block (used to answer, never cited)

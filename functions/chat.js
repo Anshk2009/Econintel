@@ -63,7 +63,7 @@ STRUCTURE (invisible — never label these):
 
 UNCERTAINTY HANDLING: When something is genuinely uncertain or contested, say so in one clean bullet — "The honest answer is X is unclear because Y." Never speculate beyond what a senior analyst would confidently state on record. Never fabricate a number, statistic, or precedent.
 
-SOURCES POLICY: Say nothing about sources unprompted — no citations, no links, no disclaimers. Only when the user explicitly asks ("source?", "where's that from?", "any link?") do you address sources. If provided sources back the claim, cite as [Source Name](url). If not, say plainly you don't have a specific source for it — once, briefly, only in direct reply. Never invent a source.
+SOURCES POLICY: Say nothing about sources unprompted — no citations, no links, no disclaimers. Only when the user explicitly asks ("source?", "where's that from?", "any link?") do you address sources. You may cite ONLY from a "CITEABLE SOURCES" block if one is provided below, as [Source Name](url). Anything under "BACKGROUND CONTEXT" is for your understanding only — never cite, name, link, quote, or attribute it. If no citeable source backs the claim, say plainly you don't have a specific source for it — once, briefly, only in direct reply. Never invent a source.
 
 HARD RULES:
 - Bullets only. Always.
@@ -180,7 +180,15 @@ export async function onRequest(context) {
   // OPENROUTER_EMBED_KEY (set in EdgeOne env vars), so chat and embeddings have
   // independent keys/quota. Optional — if it's missing, retrieval just skips.
   // ---------------------------------------------------------------------------
+  // Returns { citeable, background } — two text blocks (either may be ''):
+  //   citeable   = primary/open-data sources (publishable=true) the model MAY
+  //                cite, with name + real URL, but only when the user asks.
+  //   background = everything else (scraped commercial news, publishable=false):
+  //                fed in to inform the answer but WITHOUT any name/url, so the
+  //                model has nothing to attribute and can never cite it.
+  // Fails open to { citeable:'', background:'' } so chat never breaks.
   async function retrieveContext(query) {
+    const EMPTY = { citeable: '', background: '' };
     // 1. Embed the question (text -> a list of 2048 numbers) via OpenRouter.
     let queryEmbedding;
     try {
@@ -192,11 +200,13 @@ export async function onRequest(context) {
         },
         body: JSON.stringify({ model: 'nvidia/llama-nemotron-embed-vl-1b-v2:free', input: query }),
       });
-      if (!r.ok) return '';
+      if (!r.ok) return EMPTY;
       queryEmbedding = (await r.json()).data[0].embedding;
-    } catch { return ''; }
+    } catch { return EMPTY; }
 
-    // 2. Ask Supabase (the match_documents function) for the 3 closest chunks.
+    // 2. Ask Supabase (match_documents) for the closest chunks. Pull a few extra
+    //    (5) so a citeable source has a chance to surface alongside the news that
+    //    dominates the library. match_documents now also returns `publishable`.
     let chunks;
     try {
       const r = await fetch(`${supabaseUrl}/rest/v1/rpc/match_documents`, {
@@ -206,18 +216,25 @@ export async function onRequest(context) {
           'Authorization': `Bearer ${supabaseKey}`,
           'apikey': supabaseKey,
         },
-        body: JSON.stringify({ query_embedding: queryEmbedding, match_count: 3 }),
+        body: JSON.stringify({ query_embedding: queryEmbedding, match_count: 5 }),
       });
-      if (!r.ok) return '';
+      if (!r.ok) return EMPTY;
       chunks = await r.json();
-    } catch { return ''; }
+    } catch { return EMPTY; }
 
-    // 3. Build a text block, keeping each chunk's name + real URL so the model
-    //    can cite real primary sources.
-    if (!Array.isArray(chunks) || chunks.length === 0) return '';
-    return chunks
+    // 3. Split into citeable vs background. publishable===true is the ONLY thing
+    //    that makes a chunk citeable; anything else (false / null / missing) is
+    //    treated as background and is never given a source handle.
+    if (!Array.isArray(chunks) || chunks.length === 0) return EMPTY;
+    const citeable = chunks
+      .filter(c => c.publishable === true)
       .map((c, i) => `[${i + 1}] ${c.source_name} — ${c.source_url}\n${c.content}`)
       .join('\n\n');
+    const background = chunks
+      .filter(c => c.publishable !== true)
+      .map(c => c.content)            // content ONLY — no source name, no url
+      .join('\n\n');
+    return { citeable, background };
   }
 
   // CORS preflight
@@ -379,10 +396,18 @@ export async function onRequest(context) {
     // still works even if the library/embeddings are down.
     let systemPrompt = SYSTEM_PROMPT;
     if (latestUserMsg) {
-      const context = await retrieveContext(latestUserMsg.content);
-      if (context) {
+      const { citeable, background } = await retrieveContext(latestUserMsg.content);
+      // CITEABLE block: the ONLY material the model is ever allowed to cite, and
+      // only when the user explicitly asks for a source.
+      if (citeable) {
         systemPrompt +=
-          `\n\nSOURCES (use these to ground your answer; do NOT mention or cite them unless the user explicitly asks for a source — then cite only from these as [Name](url), never invented):\n\n${context}`;
+          `\n\nCITEABLE SOURCES — the ONLY sources you may ever cite, and only when the user explicitly asks for a source. Cite as [Name](url). Never cite, name, or link anything that is not in this list:\n\n${citeable}`;
+      }
+      // BACKGROUND block: improves the answer but is off-limits for attribution —
+      // no name/url is even provided, so it cannot be cited.
+      if (background) {
+        systemPrompt +=
+          `\n\nBACKGROUND CONTEXT — use this only to inform your answer. NEVER cite, name, link, quote verbatim, or attribute it in any way. It is not a citeable source:\n\n${background}`;
       }
     }
 
