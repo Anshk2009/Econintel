@@ -924,6 +924,338 @@
 
   body.light .msg.user { background: var(--bg-input); border-color: rgba(0,0,0,0.08); }
 
+  /* ── PROJECTS OVERLAY ── */
+  .proj-overlay {
+    position: fixed; inset: 0; z-index: 600;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 1.5rem;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .proj-overlay.open { opacity: 1; pointer-events: all; }
+
+  .proj-panel {
+    width: 100%; max-width: 740px; height: min(82vh, 620px);
+    background: #0e1525;
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 20px;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.75);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    transform: translateY(12px) scale(0.98);
+    transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  .proj-overlay.open .proj-panel { transform: none; }
+
+  /* Top bar */
+  .proj-topbar {
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    flex-shrink: 0;
+  }
+  .proj-topbar h2 {
+    font-family: 'Syne', sans-serif; font-weight: 800;
+    font-size: 1.1rem; letter-spacing: -0.02em; color: #fff; flex: 1;
+  }
+  .proj-new-btn {
+    display: flex; align-items: center; gap: 0.4rem;
+    background: var(--accent); border: none; cursor: pointer;
+    color: #000; padding: 0.45rem 0.85rem;
+    border-radius: 9px; font-size: 0.82rem; font-weight: 700;
+    font-family: 'DM Sans', sans-serif;
+    transition: opacity 0.15s;
+  }
+  .proj-new-btn:hover { opacity: 0.85; }
+  .proj-new-btn svg { width: 13px; height: 13px; }
+  .proj-close-btn {
+    background: none; border: none; cursor: pointer;
+    color: rgba(255,255,255,0.35); font-size: 1rem;
+    width: 30px; height: 30px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.12s, color 0.12s;
+  }
+  .proj-close-btn:hover { background: rgba(255,255,255,0.07); color: #fff; }
+
+  /* Two-pane body */
+  .proj-body { display: flex; flex: 1; overflow: hidden; }
+
+  /* Left: project list */
+  .proj-list-pane {
+    width: 220px; flex-shrink: 0;
+    border-right: 1px solid rgba(255,255,255,0.07);
+    overflow-y: auto; padding: 0.5rem 0;
+  }
+  .proj-list-item {
+    display: flex; align-items: center; gap: 0.55rem;
+    padding: 0.65rem 1rem;
+    cursor: pointer; border: none; background: none; width: 100%;
+    font-family: 'DM Sans', sans-serif; font-size: 0.87rem; font-weight: 500;
+    color: rgba(255,255,255,0.62); text-align: left;
+    transition: background 0.12s, color 0.12s;
+    position: relative;
+  }
+  .proj-list-item:hover { background: rgba(255,255,255,0.05); color: #fff; }
+  .proj-list-item.active { background: rgba(14,165,233,0.1); color: #fff; }
+  .proj-list-item.active::before {
+    content: '';
+    position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: var(--accent); border-radius: 0 3px 3px 0;
+  }
+  .proj-dot {
+    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+  }
+  .proj-list-name { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .proj-list-count {
+    font-size: 0.7rem; background: rgba(255,255,255,0.08);
+    border-radius: 10px; padding: 0.1rem 0.45rem;
+    color: rgba(255,255,255,0.45); flex-shrink: 0;
+  }
+  .proj-list-empty {
+    padding: 1.5rem 1rem;
+    font-size: 0.8rem; color: rgba(255,255,255,0.25);
+    text-align: center; font-style: italic;
+  }
+
+  /* Right: project detail */
+  .proj-detail-pane {
+    flex: 1; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .proj-detail-header {
+    display: flex; align-items: center; gap: 0.6rem;
+    padding: 0.85rem 1.1rem;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    flex-shrink: 0;
+  }
+  .proj-detail-dot { width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0; }
+  .proj-detail-name {
+    font-family: 'Syne', sans-serif; font-weight: 700;
+    font-size: 1rem; color: #fff; flex: 1;
+    border: none; background: none; outline: none;
+    padding: 2px 4px; border-radius: 5px;
+    transition: background 0.12s;
+  }
+  .proj-detail-name:focus { background: rgba(255,255,255,0.07); }
+  .proj-add-chat-btn {
+    display: flex; align-items: center; gap: 0.35rem;
+    background: rgba(14,165,233,0.12); border: 1px solid rgba(14,165,233,0.3);
+    color: #7dcfff; padding: 0.35rem 0.7rem;
+    border-radius: 8px; font-size: 0.78rem; font-weight: 600;
+    font-family: 'DM Sans', sans-serif; cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .proj-add-chat-btn:hover { background: rgba(14,165,233,0.22); border-color: rgba(14,165,233,0.5); }
+  .proj-add-chat-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .proj-add-chat-btn svg { width: 12px; height: 12px; }
+  .proj-delete-proj-btn {
+    background: none; border: none; cursor: pointer;
+    color: rgba(248,113,113,0.5); padding: 0.3rem;
+    border-radius: 7px; display: flex; align-items: center;
+    transition: background 0.12s, color 0.12s;
+  }
+  .proj-delete-proj-btn:hover { background: rgba(239,68,68,0.1); color: #f87171; }
+  .proj-delete-proj-btn svg { width: 15px; height: 15px; }
+
+  /* Color picker row */
+  .proj-color-row {
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.55rem 1.1rem;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    flex-shrink: 0;
+  }
+  .proj-color-label { font-size: 0.72rem; color: rgba(255,255,255,0.35); }
+  .proj-color-swatch {
+    width: 18px; height: 18px; border-radius: 50%; cursor: pointer;
+    border: 2px solid transparent;
+    transition: transform 0.15s, border-color 0.15s;
+  }
+  .proj-color-swatch:hover { transform: scale(1.2); }
+  .proj-color-swatch.selected { border-color: #fff; transform: scale(1.15); }
+
+  /* Chat list inside a project */
+  .proj-chat-list { flex: 1; overflow-y: auto; padding: 0.4rem 0; }
+  .proj-chat-item {
+    display: flex; align-items: center; gap: 0.6rem;
+    padding: 0.7rem 1.1rem;
+    cursor: pointer;
+    border-left: 2px solid transparent;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .proj-chat-item:hover { background: rgba(255,255,255,0.04); }
+  .proj-chat-item:hover { border-left-color: rgba(14,165,233,0.4); }
+  .proj-chat-info { flex: 1; min-width: 0; }
+  .proj-chat-preview {
+    font-size: 0.85rem; color: #dfe6f5;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .proj-chat-date { font-size: 0.72rem; color: rgba(255,255,255,0.32); margin-top: 2px; }
+  .proj-chat-remove {
+    background: none; border: none; cursor: pointer;
+    color: rgba(255,255,255,0.2); padding: 0.2rem;
+    border-radius: 5px; display: flex; align-items: center;
+    flex-shrink: 0; opacity: 0;
+    transition: background 0.12s, color 0.12s, opacity 0.12s;
+  }
+  .proj-chat-item:hover .proj-chat-remove { opacity: 1; }
+  .proj-chat-remove:hover { background: rgba(239,68,68,0.1); color: #f87171; }
+  .proj-chat-remove svg { width: 13px; height: 13px; }
+  .proj-chat-empty {
+    padding: 2.5rem 1.5rem; text-align: center;
+    color: rgba(255,255,255,0.25); font-size: 0.85rem; font-style: italic;
+  }
+
+  /* Empty state (no projects yet) */
+  .proj-welcome {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 0.75rem;
+    color: rgba(255,255,255,0.25); padding: 2rem;
+    text-align: center;
+  }
+  .proj-welcome svg { width: 44px; height: 44px; opacity: 0.2; }
+  .proj-welcome p { font-size: 0.88rem; line-height: 1.5; }
+
+  /* New project inline form */
+  .proj-new-form {
+    display: none; flex-direction: column; gap: 0.65rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    background: rgba(14,165,233,0.04);
+  }
+  .proj-new-form.open { display: flex; }
+  .proj-new-form input {
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 9px; padding: 0.55rem 0.75rem;
+    color: #fff; font-family: 'DM Sans', sans-serif; font-size: 0.88rem;
+    outline: none; transition: border-color 0.15s;
+  }
+  .proj-new-form input:focus { border-color: var(--accent); }
+  .proj-new-form input::placeholder { color: rgba(255,255,255,0.25); }
+  .proj-new-form-colors { display: flex; align-items: center; gap: 0.5rem; }
+  .proj-new-form-actions { display: flex; gap: 0.5rem; }
+  .proj-create-btn {
+    flex: 1; background: var(--accent); border: none; cursor: pointer;
+    color: #000; padding: 0.5rem; border-radius: 8px;
+    font-family: 'DM Sans', sans-serif; font-size: 0.82rem; font-weight: 700;
+    transition: opacity 0.15s;
+  }
+  .proj-create-btn:hover { opacity: 0.85; }
+  .proj-cancel-btn {
+    background: rgba(255,255,255,0.06); border: none; cursor: pointer;
+    color: rgba(255,255,255,0.5); padding: 0.5rem 0.75rem;
+    border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 0.82rem;
+    transition: background 0.12s;
+  }
+  .proj-cancel-btn:hover { background: rgba(255,255,255,0.1); }
+
+  /* Light theme */
+  body.light .proj-panel { background: #f7f0e8; border-color: rgba(0,0,0,0.1); }
+  body.light .proj-topbar { border-color: rgba(0,0,0,0.08); }
+  body.light .proj-topbar h2 { color: #1a1a2a; }
+  body.light .proj-close-btn { color: rgba(0,0,0,0.35); }
+  body.light .proj-close-btn:hover { background: rgba(0,0,0,0.06); color: #000; }
+  body.light .proj-list-pane { border-color: rgba(0,0,0,0.08); }
+  body.light .proj-list-item { color: rgba(0,0,0,0.55); }
+  body.light .proj-list-item:hover { background: rgba(0,0,0,0.05); color: #000; }
+  body.light .proj-list-item.active { background: rgba(14,165,233,0.08); color: #000; }
+  body.light .proj-list-count { background: rgba(0,0,0,0.07); color: rgba(0,0,0,0.4); }
+  body.light .proj-detail-pane, body.light .proj-detail-header { border-color: rgba(0,0,0,0.07); }
+  body.light .proj-detail-name { color: #1a1a2a; }
+  body.light .proj-detail-name:focus { background: rgba(0,0,0,0.04); }
+  body.light .proj-chat-preview { color: #2a1810; }
+  body.light .proj-chat-date { color: rgba(0,0,0,0.38); }
+  body.light .proj-chat-item:hover { background: rgba(0,0,0,0.04); }
+  body.light .proj-new-form { background: rgba(14,165,233,0.04); border-color: rgba(0,0,0,0.07); }
+  body.light .proj-new-form input { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.1); color: #1a1a2a; }
+  body.light .proj-cancel-btn { background: rgba(0,0,0,0.06); color: rgba(0,0,0,0.5); }
+  body.light .proj-cancel-btn:hover { background: rgba(0,0,0,0.1); }
+  body.light .proj-welcome { color: rgba(0,0,0,0.25); }
+  body.light .proj-chat-empty { color: rgba(0,0,0,0.25); }
+  body.light .proj-color-label { color: rgba(0,0,0,0.35); }
+  body.light .proj-list-empty { color: rgba(0,0,0,0.25); }
+  body.light .proj-color-row { border-color: rgba(0,0,0,0.06); }
+
+  /* ── SEARCH OVERLAY ── */
+  .search-overlay {
+    position: fixed; inset: 0; z-index: 600;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    display: flex; align-items: flex-start; justify-content: center;
+    padding-top: 9vh;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.18s;
+  }
+  .search-overlay.open { opacity: 1; pointer-events: all; }
+  .search-modal {
+    width: 100%; max-width: 540px;
+    background: #111827;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.7);
+    transform: translateY(-10px) scale(0.98);
+    transition: transform 0.2s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  .search-overlay.open .search-modal { transform: none; }
+  .search-input-row {
+    display: flex; align-items: center; gap: 0.6rem;
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+  }
+  .search-input-row svg { width: 17px; height: 17px; color: rgba(255,255,255,0.35); flex-shrink: 0; }
+  .search-input-row input {
+    flex: 1; background: none; border: none; outline: none;
+    color: #fff; font-family: 'DM Sans', sans-serif;
+    font-size: 0.95rem; font-weight: 400;
+  }
+  .search-input-row input::placeholder { color: rgba(255,255,255,0.3); }
+  .search-close-btn {
+    background: none; border: none; cursor: pointer;
+    color: rgba(255,255,255,0.35); font-size: 0.9rem;
+    width: 26px; height: 26px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.12s, color 0.12s; flex-shrink: 0;
+  }
+  .search-close-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
+  .search-results {
+    max-height: 340px; overflow-y: auto;
+    padding: 0.4rem 0;
+  }
+  .search-result-item {
+    display: flex; flex-direction: column; gap: 0.2rem;
+    padding: 0.7rem 1rem;
+    cursor: pointer;
+    transition: background 0.12s;
+    border-left: 2px solid transparent;
+  }
+  .search-result-item:hover {
+    background: rgba(14,165,233,0.08);
+    border-left-color: var(--accent);
+  }
+  .search-result-preview {
+    font-size: 0.85rem; color: #dfe6f5; line-height: 1.35;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .search-result-date { font-size: 0.72rem; color: rgba(255,255,255,0.35); }
+  .search-empty {
+    padding: 1.5rem 1rem;
+    text-align: center;
+    font-size: 0.85rem; color: rgba(255,255,255,0.3);
+    font-style: italic;
+  }
+  body.light .search-modal { background: #fff; border-color: rgba(0,0,0,0.1); box-shadow: 0 20px 50px rgba(0,0,0,0.15); }
+  body.light .search-input-row { border-color: rgba(0,0,0,0.08); }
+  body.light .search-input-row svg { color: rgba(0,0,0,0.35); }
+  body.light .search-input-row input { color: #0d0d12; }
+  body.light .search-input-row input::placeholder { color: rgba(0,0,0,0.3); }
+  body.light .search-close-btn { color: rgba(0,0,0,0.35); }
+  body.light .search-close-btn:hover { background: rgba(0,0,0,0.06); color: #000; }
+  body.light .search-result-preview { color: #1a1a2a; }
+  body.light .search-result-date { color: rgba(0,0,0,0.35); }
+  body.light .search-result-item:hover { background: rgba(14,165,233,0.07); }
+  body.light .search-empty { color: rgba(0,0,0,0.3); }
+
   /* ── VOICE BUTTON RECORDING STATE ── */
   @keyframes mic-pulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.55); }
@@ -1046,7 +1378,7 @@
         </svg>
         <span class="nav-item-label">Library</span>
       </button>
-      <button class="nav-item">
+      <button class="nav-item" onclick="openProjects()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
         </svg>
@@ -1318,6 +1650,51 @@
     color: #0d0d12;
   }
 </style>
+
+<!-- PROJECTS OVERLAY -->
+<div id="proj-overlay" class="proj-overlay" onclick="closeProjOverlay(event)">
+  <div class="proj-panel" onclick="event.stopPropagation()">
+    <div class="proj-topbar">
+      <h2>Projects</h2>
+      <button class="proj-new-btn" onclick="toggleNewProjForm()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New Project
+      </button>
+      <button class="proj-close-btn" onclick="closeProjOverlay()" aria-label="Close">✕</button>
+    </div>
+    <!-- Inline create form -->
+    <div class="proj-new-form" id="proj-new-form">
+      <input id="proj-name-input" placeholder="Project name…" maxlength="48" onkeydown="if(event.key==='Enter')confirmNewProject();if(event.key==='Escape')toggleNewProjForm();" />
+      <div class="proj-new-form-colors" id="proj-color-picker"></div>
+      <div class="proj-new-form-actions">
+        <button class="proj-create-btn" onclick="confirmNewProject()">Create</button>
+        <button class="proj-cancel-btn" onclick="toggleNewProjForm()">Cancel</button>
+      </div>
+    </div>
+    <!-- Body: list + detail -->
+    <div class="proj-body">
+      <div class="proj-list-pane" id="proj-list-pane"></div>
+      <div class="proj-detail-pane" id="proj-detail-pane">
+        <div class="proj-welcome">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          <p>Create a project to group related chats together.<br>Click <strong>+ New Project</strong> to get started.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SEARCH OVERLAY -->
+<div id="search-overlay" class="search-overlay" onclick="closeSearchModal(event)">
+  <div class="search-modal" onclick="event.stopPropagation()">
+    <div class="search-input-row">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="search-modal-input" placeholder="Search your recent chats…" oninput="filterSearchResults(this.value)" />
+      <button class="search-close-btn" onclick="closeSearchModal()" aria-label="Close search">✕</button>
+    </div>
+    <div class="search-results" id="search-results"></div>
+  </div>
+</div>
 
 <!-- THEME TOGGLE -->
 <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">
@@ -1845,15 +2222,268 @@ function newChat() {
 // ── SEARCH CHATS (filters the Recents list) ──
 function searchChats() {
   const items = document.querySelectorAll('.recent-chat-item');
-  if (!items.length) { alert('No recent chats to search yet.'); return; }
-  const term = (prompt('Search your recent chats:') || '').toLowerCase().trim();
-  let shown = 0;
-  items.forEach(it => {
-    const match = !term || it.textContent.toLowerCase().includes(term);
-    it.style.display = match ? '' : 'none';
-    if (match) shown++;
-  });
-  if (term && shown === 0) alert('No chats match "' + term + '".');
+  if (!items.length) {
+    /* show overlay with empty state instead of alert() */
+    openSearchModal([]);
+    return;
+  }
+  /* snapshot the current sidebar items into plain data */
+  const data = Array.from(items).map(el => ({
+    preview: el.querySelector('.recent-preview')?.textContent.trim() || '',
+    date:    el.querySelector('.recent-date')?.textContent.trim() || '',
+    el,
+  }));
+  openSearchModal(data);
+}
+
+function openSearchModal(data) {
+  window._searchData = data;
+  const overlay = document.getElementById('search-overlay');
+  overlay.classList.add('open');
+  const input = document.getElementById('search-modal-input');
+  input.value = '';
+  filterSearchResults('');
+  requestAnimationFrame(() => input.focus());
+  /* close on Escape */
+  overlay._keyHandler = (e) => { if (e.key === 'Escape') closeSearchModal(); };
+  document.addEventListener('keydown', overlay._keyHandler);
+}
+
+function closeSearchModal(e) {
+  /* if called from the backdrop click, only close when clicking the backdrop itself */
+  if (e && e.target !== document.getElementById('search-overlay')) return;
+  const overlay = document.getElementById('search-overlay');
+  overlay.classList.remove('open');
+  if (overlay._keyHandler) {
+    document.removeEventListener('keydown', overlay._keyHandler);
+    overlay._keyHandler = null;
+  }
+}
+
+function filterSearchResults(term) {
+  const box = document.getElementById('search-results');
+  const data = window._searchData || [];
+  const q = term.toLowerCase().trim();
+  const matches = q ? data.filter(d => d.preview.toLowerCase().includes(q)) : data;
+  if (!matches.length) {
+    box.innerHTML = `<div class="search-empty">${q ? `No chats matching "<strong>${escapeHTML(q)}</strong>"` : 'No recent chats yet.'}</div>`;
+    return;
+  }
+  box.innerHTML = matches.map((d, i) => `
+    <div class="search-result-item" data-idx="${i}" onclick="pickSearchResult(${data.indexOf(d)})">
+      <div class="search-result-preview">${escapeHTML(d.preview)}</div>
+      <div class="search-result-date">${escapeHTML(d.date)}</div>
+    </div>`).join('');
+}
+
+function pickSearchResult(idx) {
+  const data = window._searchData || [];
+  const item = data[idx];
+  if (item?.el) item.el.click(); /* trigger the same handler as clicking in the sidebar */
+  closeSearchModal();
+}
+
+// ── PROJECTS ──
+const PROJECT_COLORS = ['#0ea5e9','#6366f1','#f08a5d','#4cefb3','#ffc850','#f87171'];
+let _projNewColor = PROJECT_COLORS[0];
+let _activeProjectId = null;
+
+function loadProjects() {
+  try { return JSON.parse(localStorage.getItem('econintel:projects') || '[]'); }
+  catch { return []; }
+}
+function saveProjects(projects) {
+  localStorage.setItem('econintel:projects', JSON.stringify(projects));
+}
+
+function openProjects() {
+  const overlay = document.getElementById('proj-overlay');
+  overlay.classList.add('open');
+  _activeProjectId = null;
+  renderProjColorPicker('proj-color-picker');
+  renderProjList();
+  renderProjWelcome();
+  overlay._keyHandler = (e) => { if (e.key === 'Escape') closeProjOverlay(); };
+  document.addEventListener('keydown', overlay._keyHandler);
+}
+function closeProjOverlay(e) {
+  if (e && e.target !== document.getElementById('proj-overlay')) return;
+  const overlay = document.getElementById('proj-overlay');
+  overlay.classList.remove('open');
+  document.getElementById('proj-new-form').classList.remove('open');
+  if (overlay._keyHandler) { document.removeEventListener('keydown', overlay._keyHandler); overlay._keyHandler = null; }
+}
+
+function renderProjColorPicker(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = '<span class="proj-color-label">Color</span>' +
+    PROJECT_COLORS.map(c =>
+      `<span class="proj-color-swatch${c === _projNewColor ? ' selected' : ''}"
+        style="background:${c}" onclick="selectProjColor('${c}','${containerId}')"></span>`
+    ).join('');
+}
+function selectProjColor(color, containerId) {
+  _projNewColor = color;
+  renderProjColorPicker(containerId);
+}
+
+function toggleNewProjForm() {
+  const form = document.getElementById('proj-new-form');
+  const isOpen = form.classList.toggle('open');
+  if (isOpen) { document.getElementById('proj-name-input').value = ''; document.getElementById('proj-name-input').focus(); }
+}
+function confirmNewProject() {
+  const name = document.getElementById('proj-name-input').value.trim();
+  if (!name) { document.getElementById('proj-name-input').focus(); return; }
+  const projects = loadProjects();
+  const proj = { id: 'proj-' + Date.now(), name, color: _projNewColor, createdAt: new Date().toISOString(), chats: [] };
+  projects.unshift(proj);
+  saveProjects(projects);
+  document.getElementById('proj-new-form').classList.remove('open');
+  _activeProjectId = proj.id;
+  renderProjList();
+  renderProjDetail(proj);
+}
+
+function renderProjList() {
+  const pane = document.getElementById('proj-list-pane');
+  const projects = loadProjects();
+  if (!projects.length) {
+    pane.innerHTML = '<div class="proj-list-empty">No projects yet</div>';
+    return;
+  }
+  pane.innerHTML = projects.map(p => `
+    <button class="proj-list-item${p.id === _activeProjectId ? ' active' : ''}" onclick="selectProject('${p.id}')">
+      <span class="proj-dot" style="background:${p.color}"></span>
+      <span class="proj-list-name">${escapeHTML(p.name)}</span>
+      <span class="proj-list-count">${p.chats.length}</span>
+    </button>`).join('');
+}
+
+function selectProject(id) {
+  _activeProjectId = id;
+  renderProjList();
+  const projects = loadProjects();
+  const proj = projects.find(p => p.id === id);
+  if (proj) renderProjDetail(proj);
+}
+
+function renderProjWelcome() {
+  document.getElementById('proj-detail-pane').innerHTML = `
+    <div class="proj-welcome">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+      </svg>
+      <p>Select a project or create one to group related chats together.</p>
+    </div>`;
+}
+
+function renderProjDetail(proj) {
+  const hasActiveChat = history.length > 1;
+  const alreadyAdded = proj.chats.some(c => c.id === currentConversationId);
+  const detail = document.getElementById('proj-detail-pane');
+  detail.innerHTML = `
+    <div class="proj-detail-header">
+      <span class="proj-detail-dot" style="background:${proj.color}"></span>
+      <input class="proj-detail-name" value="${escapeHTML(proj.name)}" maxlength="48"
+        onblur="renameProject('${proj.id}', this.value)"
+        onkeydown="if(event.key==='Enter')this.blur()" />
+      ${hasActiveChat && !alreadyAdded
+        ? `<button class="proj-add-chat-btn" onclick="addCurrentChat('${proj.id}')">
+             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+             Add current chat
+           </button>`
+        : alreadyAdded
+          ? `<span style="font-size:.75rem;color:rgba(76,239,179,.7);padding:.35rem .6rem">✓ Chat added</span>`
+          : ''
+      }
+      <div class="proj-color-row" id="detail-color-row" style="padding:0;border:none;gap:.4rem">
+        ${PROJECT_COLORS.map(c =>
+          `<span class="proj-color-swatch${c === proj.color ? ' selected' : ''}"
+            style="background:${c};width:14px;height:14px"
+            onclick="recolorProject('${proj.id}','${c}')"></span>`
+        ).join('')}
+      </div>
+      <button class="proj-delete-proj-btn" onclick="deleteProject('${proj.id}')" title="Delete project">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+      </button>
+    </div>
+    <div class="proj-chat-list">
+      ${proj.chats.length
+        ? proj.chats.map(ch => `
+          <div class="proj-chat-item" onclick="openProjChat('${ch.id}')">
+            <div class="proj-chat-info">
+              <div class="proj-chat-preview">${escapeHTML(ch.preview)}</div>
+              <div class="proj-chat-date">${escapeHTML(ch.addedAt)}</div>
+            </div>
+            <button class="proj-chat-remove" onclick="event.stopPropagation();removeChatFromProject('${proj.id}','${ch.id}')"
+              title="Remove from project">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>`).join('')
+        : '<div class="proj-chat-empty">No chats yet — start a conversation and add it here.</div>'
+      }
+    </div>`;
+}
+
+function addCurrentChat(projId) {
+  if (history.length <= 1) return;
+  const preview = (typeof history[1]?.content === 'string' ? history[1].content : 'Chat').substring(0, 60);
+  const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const projects = loadProjects();
+  const proj = projects.find(p => p.id === projId);
+  if (!proj) return;
+  if (proj.chats.some(c => c.id === currentConversationId)) return;
+  proj.chats.unshift({ id: currentConversationId, preview, addedAt: date });
+  saveProjects(projects);
+  renderProjList();
+  renderProjDetail(proj);
+}
+
+function removeChatFromProject(projId, chatId) {
+  const projects = loadProjects();
+  const proj = projects.find(p => p.id === projId);
+  if (!proj) return;
+  proj.chats = proj.chats.filter(c => c.id !== chatId);
+  saveProjects(projects);
+  renderProjList();
+  renderProjDetail(proj);
+}
+
+function renameProject(projId, newName) {
+  const name = newName.trim();
+  if (!name) return;
+  const projects = loadProjects();
+  const proj = projects.find(p => p.id === projId);
+  if (!proj || proj.name === name) return;
+  proj.name = name;
+  saveProjects(projects);
+  renderProjList();
+}
+
+function recolorProject(projId, color) {
+  const projects = loadProjects();
+  const proj = projects.find(p => p.id === projId);
+  if (!proj) return;
+  proj.color = color;
+  saveProjects(projects);
+  renderProjList();
+  renderProjDetail(proj);
+}
+
+function deleteProject(projId) {
+  if (!confirm('Delete this project? Chats inside are not deleted.')) return;
+  const projects = loadProjects().filter(p => p.id !== projId);
+  saveProjects(projects);
+  _activeProjectId = null;
+  renderProjList();
+  renderProjWelcome();
+}
+
+function openProjChat(chatId) {
+  closeProjOverlay();
+  openConversation(chatId);
 }
 
 // ── LIBRARY (all past prompts in a quick overlay) ──

@@ -23,7 +23,7 @@ const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const MODEL = 'openai/gpt-oss-120b:free';
 
 // Per-IP daily message limits enforced server-side.
-// Guests use a separate 15-msg/day bucket (GUEST_LIMIT below).
+// Guests use a separate 5-msg/2-hour bucket (GUEST_LIMIT below).
 // Authenticated users get a larger daily bucket keyed by their IP hash.
 const RATE_LIMITS = {
   free:       { dailyPerIP: 50,   queriesPerMinute: 1,        maxBodySize: 16384  },
@@ -268,8 +268,8 @@ export async function onRequest(context) {
     token = cookies.access_token;
   }
 
-  // Guest quota: 15 messages per IP per day, then require sign-up
-  const GUEST_LIMIT = 15;
+  // Guest quota: 5 messages per IP per 2 hours, then require sign-up
+  const GUEST_LIMIT = 5;
   let userId, userPlan;
 
   if (!token) {
@@ -281,13 +281,13 @@ export async function onRequest(context) {
 
     if (used >= GUEST_LIMIT) {
       return jsonResponse({
-        error: `You've used all ${GUEST_LIMIT} free messages. Sign up for 100 free queries/month — no credit card needed.`,
+        error: `You've used all ${GUEST_LIMIT} free messages for this 2-hour window. Sign up for 100 free queries/month — no credit card needed.`,
         code: 'GUEST_QUOTA_EXCEEDED'
       }, 401, ALLOWED_ORIGIN);
     }
 
-    // Increment counter (resets after 24 hours)
-    await TOKENS.put(guestKey, String(used + 1), { expirationTtl: 86400 });
+    // Increment counter (resets after 2 hours)
+    await TOKENS.put(guestKey, String(used + 1), { expirationTtl: 7200 });
     userId = `guest:${ipHash.slice(0, 12)}`;
     userPlan = 'free';
   } else {
