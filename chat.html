@@ -1526,6 +1526,10 @@ async function sendMessage() {
     // Final scroll so the rendered reply sits just above the prompt box
     scrollChatToBottom();
     history.push({ role: 'assistant', content: fullReply });
+    // First exchange in this thread just saved to DB — refresh Recents so the
+    // new chat appears immediately without needing a page reload.
+    // history.length === 3 = system(1) + user(2) + assistant(3) = first reply.
+    if (history.length === 3 && getUser()) loadRecentChats();
   } catch (err) {
     thinkingEl.remove();
     addMessage('assistant',
@@ -2043,6 +2047,12 @@ function openAccountModal(which) {
       <div class="acct-row">
         <span class="acct-row-label">Chat history</span>
         ${clearHistoryBtn}
+      </div>
+      <div class="acct-row" style="align-items:flex-start">
+        <span class="acct-row-label">Sources &amp; data</span>
+        <span class="acct-row-value" style="font-weight:400;font-size:.76rem;line-height:1.5;color:var(--text2);text-align:right;max-width:240px">
+          World Bank Open Data (CC&nbsp;BY&nbsp;4.0), FRED®, U.S. SEC&nbsp;EDGAR, data.gov.in (GODL&nbsp;India) &amp; other primary sources.
+        </span>
       </div>`;
   }
   document.getElementById('acct-modal').classList.add('open');
