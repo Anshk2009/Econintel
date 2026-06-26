@@ -71,7 +71,7 @@ async function embed(text) {
 // Without on_conflict, PostgREST targets the primary key, so re-seeding any doc
 // whose URL is already stored throws a duplicate-key 409.
 async function upsertChunk(row) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/documents?on_conflict=source_url`, {
+  const post = (body) => fetch(`${SUPABASE_URL}/rest/v1/documents?on_conflict=source_url`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -79,9 +79,24 @@ async function upsertChunk(row) {
       'apikey': SUPABASE_KEY,
       'Prefer': 'resolution=merge-duplicates',
     },
-    body: JSON.stringify(row),
+    body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`Insert failed: ${res.status} ${await res.text()}`);
+
+  let res = await post(row);
+  if (!res.ok) {
+    const errText = await res.text();
+    // The `publishable` column only exists after migration-add-publishable.sql is
+    // run. If it isn't there yet, Supabase 400s mentioning the column — retry once
+    // WITHOUT the flag so seeding still works; the migration's backfill sets the
+    // right value (case-study/reference/report -> true) afterwards.
+    if (row.publishable !== undefined && /publishable|does not exist|PGRST204/i.test(errText)) {
+      const { publishable, ...rest } = row;
+      const res2 = await post(rest);
+      if (res2.ok) return;
+      throw new Error(`Insert failed (retry without publishable): ${res2.status} ${await res2.text()}`);
+    }
+    throw new Error(`Insert failed: ${res.status} ${errText}`);
+  }
 }
 
 async function main() {
