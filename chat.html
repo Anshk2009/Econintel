@@ -527,6 +527,53 @@
   .prompt-attach:hover { background: rgba(255,255,255,0.08); color: #fff; }
   .prompt-attach svg { width: 18px; height: 18px; }
 
+  /* ── ATTACH MENU & FILE CHIP ── */
+  .attach-wrap { position: relative; flex-shrink: 0; align-self: flex-end; }
+  .attach-menu {
+    position: absolute; bottom: calc(100% + 10px); left: 0;
+    background: #1a1a2a; border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px; padding: 6px; min-width: 188px;
+    opacity: 0; transform: translateY(6px) scale(0.97);
+    transform-origin: bottom left; pointer-events: none;
+    transition: opacity 0.15s, transform 0.18s cubic-bezier(0.34,1.56,0.64,1);
+    z-index: 200; box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+  }
+  .attach-menu.open { opacity: 1; transform: none; pointer-events: all; }
+  .attach-menu-item {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%; padding: 9px 12px; border: none; background: none;
+    cursor: pointer; color: rgba(255,255,255,0.75);
+    font-size: 0.84rem; font-weight: 500;
+    font-family: 'DM Sans', sans-serif; border-radius: 8px; text-align: left;
+    transition: background 0.12s, color 0.12s;
+  }
+  .attach-menu-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
+  .attach-menu-item svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--text2); transition: color 0.12s; }
+  .attach-menu-item:hover svg { color: var(--accent); }
+  .attach-chip-area { display: none; padding: 0 0.25rem 0.45rem; }
+  .attach-chip-area.has-chip { display: flex; }
+  .attach-chip {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    background: rgba(14,165,233,0.12); border: 1px solid rgba(14,165,233,0.3);
+    border-radius: 8px; padding: 0.28rem 0.55rem 0.28rem 0.45rem;
+    font-size: 0.78rem; font-weight: 500; font-family: 'DM Sans', sans-serif;
+    color: #c0d8f5;
+  }
+  .attach-chip img { width: 24px; height: 24px; border-radius: 4px; object-fit: cover; }
+  .attach-chip > svg { width: 14px; height: 14px; flex-shrink: 0; color: var(--accent); }
+  .attach-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
+  .attach-chip-remove {
+    background: none; border: none; cursor: pointer;
+    color: rgba(255,255,255,0.35); padding: 0 1px; margin-left: 2px;
+    display: flex; align-items: center; transition: color 0.12s;
+  }
+  .attach-chip-remove:hover { color: #f87171; }
+  .attach-chip-remove svg { width: 12px; height: 12px; }
+  body.light .attach-menu { background: #fff; border-color: rgba(0,0,0,0.1); box-shadow: 0 8px 28px rgba(0,0,0,0.1); }
+  body.light .attach-menu-item { color: rgba(0,0,0,0.7); }
+  body.light .attach-menu-item:hover { background: rgba(0,0,0,0.06); color: #000; }
+  body.light .attach-chip { background: rgba(14,165,233,0.08); border-color: rgba(14,165,233,0.25); color: #1a5fa8; }
+
   .prompt-input {
     flex: 1;
     background: none; border: none; outline: none;
@@ -823,6 +870,58 @@
     background: rgba(248,113,113,0.06);
     border: 1px solid rgba(248,113,113,0.25);
   }
+
+  /* ── MESSAGE ACTION BUTTONS (copy / share) ── */
+  .msg-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+    margin-top: 0.65rem;
+    padding-top: 0.55rem;
+    border-top: 1px solid rgba(255,255,255,0.07);
+  }
+  .msg-action-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text2);
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.75rem;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+  }
+  .msg-action-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
+  .msg-action-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+  /* Toast */
+  .action-toast {
+    position: fixed;
+    bottom: 5.5rem;
+    left: 50%;
+    transform: translateX(-50%) translateY(8px);
+    background: rgba(14,165,233,0.92);
+    color: #fff;
+    padding: 0.38rem 1rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    font-family: 'DM Sans', sans-serif;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.18s, transform 0.18s;
+    z-index: 999;
+    box-shadow: 0 4px 14px rgba(14,165,233,0.35);
+  }
+  .action-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  body.light .msg-actions { border-top-color: rgba(0,0,0,0.07); }
+  body.light .msg-action-btn:hover { background: rgba(0,0,0,0.07); color: #000; }
+  body.light .action-toast { background: rgba(14,165,233,0.88); }
+
   body.light .msg.user { background: var(--bg-input); border-color: rgba(0,0,0,0.08); }
 
   /* ── ACCESSIBLE FOCUS RINGS ──
@@ -986,12 +1085,29 @@
       <div class="messages" id="messages"></div>
 
       <div class="prompt-wrap">
+        <!-- Attachment chip (visible when a file is staged) -->
+        <div class="attach-chip-area" id="attach-chip-area"></div>
+        <!-- Hidden file pickers -->
+        <input type="file" id="img-file-input" accept="image/*" style="display:none" onchange="handleImgInput(this)">
+        <input type="file" id="doc-file-input" accept=".txt,.md,.csv,.js,.ts,.py,.json,.html,.css,.xml" style="display:none" onchange="handleDocInput(this)">
         <div class="prompt-box">
-          <button class="prompt-attach" title="Attach">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-          </button>
+          <div class="attach-wrap">
+            <button class="prompt-attach" title="Attach" onclick="toggleAttachMenu(event)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+            </button>
+            <div class="attach-menu" id="attach-menu">
+              <button class="attach-menu-item" onclick="triggerImageAttach()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                Image
+              </button>
+              <button class="attach-menu-item" onclick="triggerDocAttach()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                Document
+              </button>
+            </div>
+          </div>
 
           <textarea
             class="prompt-input"
@@ -1296,7 +1412,7 @@ SCOPE: Economics, geopolitics, central banking, markets, trade, currencies, fisc
 GREETINGS & SMALL TALK: Always welcome. Reply warmly in one or two lines and invite them to ask about the economy or markets. The scope rule never applies to greetings. Never decline or redirect a casual hello.
 
 DEPTH CALIBRATION:
-- Simple question → tight, punchy answer. 4–5 bullets max.
+- Simple question → tight, punchy answer. 4 to 5 bullets max.
 - Complex / multi-part question → go deeper, but never exceed 5 bullets. No padding.
 - Follow-up question → assume context from prior exchange. Don't re-explain what was already established.
 
@@ -1348,8 +1464,26 @@ function addMessage(role, content, opts = {}) {
   el.className = 'msg ' + role + (opts.thinking ? ' thinking' : '') + (opts.error ? ' error' : '');
   if (opts.thinking) {
     el.innerHTML = '<span class="think-dots"><i></i><i></i><i></i></span>';
+  } else if (opts.imageDataUrl) {
+    // User bubble with an image attachment + optional text
+    el.innerHTML = `<img src="${opts.imageDataUrl}" style="max-width:220px;max-height:160px;border-radius:8px;display:block${content ? ';margin-bottom:0.5rem' : ''}">${content ? escapeHTML(content) : ''}`;
   } else {
     el.textContent = content;
+  }
+  // Add copy + share buttons to final assistant messages (not thinking spinners or errors)
+  if (role === 'assistant' && !opts.thinking && !opts.error) {
+    const actions = document.createElement('div');
+    actions.className = 'msg-actions';
+    actions.innerHTML = `
+      <button class="msg-action-btn" onclick="copyMsgText(this)" title="Copy response">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copy
+      </button>
+      <button class="msg-action-btn" onclick="shareMsgLink(this)" title="Share link">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        Share link
+      </button>`;
+    el.appendChild(actions);
   }
   messages.appendChild(el);
   // Scroll the container so the new message lands just above the sticky prompt
@@ -1380,12 +1514,33 @@ async function sendMessage() {
   if (isSending) return; // a reply is already streaming — ignore double-fires
   const input = document.getElementById('prompt-input');
   const text = input.value.trim();
-  if (!text) return;
+  const att = pendingAttachment; // capture before clearAttachment() wipes it
+  if (!text && !att) return;
   input.value = ''; input.style.height = 'auto';
   setSending(true); // disable the send button until the reply finishes
+  clearAttachment(); // remove the chip immediately
 
-  addMessage('user', text);
-  history.push({ role: 'user', content: text });
+  // Display the user bubble
+  if (att?.type === 'image') {
+    addMessage('user', text, { imageDataUrl: att.dataUrl });
+  } else if (att?.type === 'text') {
+    addMessage('user', `[${att.name}]\n${text || '(no additional text)'}`.trim());
+  } else {
+    addMessage('user', text);
+  }
+
+  // Build the API content (multimodal array for images, prefixed string for docs)
+  let userContent;
+  if (att?.type === 'image') {
+    const parts = [{ type: 'image_url', image_url: { url: att.dataUrl } }];
+    if (text) parts.push({ type: 'text', text });
+    userContent = parts;
+  } else if (att?.type === 'text') {
+    userContent = `[Attached file: ${att.name}]\n\n${att.textContent}\n\n${text || ''}`.trim();
+  } else {
+    userContent = text;
+  }
+  history.push({ role: 'user', content: userContent });
 
   const thinkingEl = addMessage('assistant', 'Thinking…', { thinking: true });
 
@@ -1539,6 +1694,116 @@ async function sendMessage() {
       { error: true });
   } finally {
     setSending(false); // re-enable the send button on every exit path (success, error, early return)
+  }
+}
+
+// ── ATTACH MENU ──
+let pendingAttachment = null; // { type:'image'|'text', name, dataUrl|textContent }
+
+function toggleAttachMenu(e) {
+  e.stopPropagation();
+  document.getElementById('attach-menu').classList.toggle('open');
+}
+function triggerImageAttach() {
+  document.getElementById('attach-menu').classList.remove('open');
+  document.getElementById('img-file-input').click();
+}
+function triggerDocAttach() {
+  document.getElementById('attach-menu').classList.remove('open');
+  document.getElementById('doc-file-input').click();
+}
+
+function handleImgInput(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+  if (file.size > 5 * 1024 * 1024) { showToast('Image must be under 5 MB'); return; }
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    pendingAttachment = { type: 'image', name: file.name, dataUrl: ev.target.result };
+    renderChip();
+    document.getElementById('prompt-input').focus();
+  };
+  reader.readAsDataURL(file);
+}
+
+function handleDocInput(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+  if (file.size > 200 * 1024) { showToast('Document must be under 200 KB'); return; }
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    pendingAttachment = { type: 'text', name: file.name, textContent: ev.target.result };
+    renderChip();
+    document.getElementById('prompt-input').focus();
+  };
+  reader.readAsText(file);
+}
+
+function renderChip() {
+  const area = document.getElementById('attach-chip-area');
+  if (!pendingAttachment) { area.innerHTML = ''; area.classList.remove('has-chip'); return; }
+  const isImg = pendingAttachment.type === 'image';
+  const preview = isImg
+    ? `<img src="${pendingAttachment.dataUrl}" alt="preview">`
+    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+  area.innerHTML = `<div class="attach-chip">${preview}<span class="attach-chip-name">${escapeHTML(pendingAttachment.name)}</span><button class="attach-chip-remove" onclick="clearAttachment()" title="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>`;
+  area.classList.add('has-chip');
+}
+
+function clearAttachment() {
+  pendingAttachment = null;
+  renderChip();
+}
+
+// ── MESSAGE ACTIONS (copy / share) ──
+function showToast(msg) {
+  let toast = document.getElementById('action-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'action-toast';
+    toast.className = 'action-toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => toast.classList.remove('show'), 1800);
+}
+
+function copyMsgText(btn) {
+  const msgEl = btn.closest('.msg');
+  const clone = msgEl.cloneNode(true);
+  clone.querySelector('.msg-actions')?.remove();
+  const text = (clone.textContent || clone.innerText || '').trim();
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('Copied!');
+  }).catch(() => {
+    // fallback for older browsers
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('Copied!');
+  });
+}
+
+function shareMsgLink(btn) {
+  const url = window.location.href;
+  if (navigator.share) {
+    const msgEl = btn.closest('.msg');
+    const clone = msgEl.cloneNode(true);
+    clone.querySelector('.msg-actions')?.remove();
+    const text = (clone.textContent || '').trim().slice(0, 280);
+    navigator.share({ title: 'EconIntel', text, url }).catch(() => {});
+  } else {
+    navigator.clipboard.writeText(url).then(() => {
+      showToast('Link copied!');
+    }).catch(() => showToast('Link: ' + url));
   }
 }
 
@@ -1949,6 +2214,7 @@ function toggleAccountMenu(e) {
 }
 document.addEventListener('click', () => {
   document.getElementById('account-menu')?.classList.remove('open');
+  document.getElementById('attach-menu')?.classList.remove('open');
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
