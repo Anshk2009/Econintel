@@ -1,0 +1,41 @@
+name: RAG open-data ingest
+
+# Pulls CITEABLE open-data sources (World Bank, SEC EDGAR, FRED, OGD India) into
+# the knowledge base. Calls OpenRouter (embeddings) + Supabase via repo secrets —
+# no website files are touched, so this never affects the live site.
+#
+# World Bank + SEC EDGAR run with NO key. FRED and OGD India only run if their
+# API-key secrets are set (otherwise they skip cleanly). Add as repo Secrets:
+#   FRED_API_KEY, DATA_GOV_IN_KEY   (optional)
+#   INGEST_CONTACT  (recommended: "EconIntel you@domain.com" — SEC asks for it)
+
+on:
+  schedule:
+    # Once a day, off the hour (see ingest-live.yml for why :00 is unreliable).
+    # Data series update slowly, so daily is plenty. UTC.
+    - cron: "41 6 * * *"
+  workflow_dispatch: {}   # "Run workflow" button for manual test runs
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"   # built-in fetch() — no npm install needed
+
+      - name: Run open-data ingester
+        working-directory: rag
+        env:
+          OPENROUTER_EMBED_KEY: ${{ secrets.OPENROUTER_EMBED_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          DATA_GOV_IN_KEY: ${{ secrets.DATA_GOV_IN_KEY }}
+          INGEST_CONTACT: ${{ secrets.INGEST_CONTACT }}
+        run: node ingest-data.mjs
