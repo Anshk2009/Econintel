@@ -1277,6 +1277,14 @@
   }
   /* Lift all direct children of chat-main above the canvas */
   .chat-main > :not(#particles-js) { position: relative; z-index: 1; }
+  /* FIX — account dropdown was unclickable: .chat-content is ALSO z-index:1 and
+     comes AFTER .chat-header in the DOM, so it painted on top of the open account
+     menu (transparently) and swallowed every click on the menu items. The avatar
+     still worked because it sits inside the 60px header band that content doesn't
+     cover. Lifting the header's stacking context above the content fixes it.
+     !important is required: the rule above counts as ID-level specificity (the
+     :not(#particles-js) carries an ID's weight), which a plain selector can't beat. */
+  .chat-header { z-index: 20 !important; }
 
   /* ── ACCESSIBLE FOCUS RINGS ──
      Visible outline for keyboard / assistive-tech users only (not on every
@@ -3079,7 +3087,39 @@ function handleEditProfile(e) {
   closeAccountModal();
 }
 
-async function signOut() {
+// Sign Out is a two-step action now: tapping it (from ANYWHERE that calls
+// signOut()) first shows a centered confirmation popup, so an accidental tap
+// can't end the session. Confirming runs performSignOut() below.
+function signOut() {
+  // Close the account dropdown so it isn't left open behind the popup.
+  document.getElementById('account-menu')?.classList.remove('open');
+
+  // Don't stack a second popup if Sign Out is tapped again.
+  if (document.getElementById('signout-confirm')) return;
+
+  const ov = document.createElement('div');
+  ov.id = 'signout-confirm';
+  // Full-screen, centered, above everything (modals/overlays top out at ~9999).
+  ov.style.cssText = 'position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:rgba(4,8,20,.62);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);padding:1rem;';
+  ov.innerHTML = `
+    <div role="dialog" aria-modal="true" style="background:#0e1426;border:1px solid rgba(90,130,230,.28);border-radius:16px;max-width:380px;width:100%;padding:1.5rem 1.5rem 1.25rem;box-shadow:0 24px 60px -20px rgba(0,0,0,.7);text-align:center;">
+      <div style="font-family:'Syne',sans-serif;font-size:1.15rem;font-weight:700;color:#fff;margin-bottom:.5rem;">Sign out?</div>
+      <div style="font-size:.9rem;color:rgba(255,255,255,.6);line-height:1.5;margin-bottom:1.25rem;">You'll need to sign in again to access your chats.</div>
+      <div style="display:flex;gap:.6rem;">
+        <button id="signout-cancel" style="flex:1;padding:.7rem;border-radius:10px;border:1px solid rgba(255,255,255,.14);background:none;color:#dfe6f5;font-family:'DM Sans',sans-serif;font-size:.9rem;font-weight:500;cursor:pointer;">Cancel</button>
+        <button id="signout-go" style="flex:1;padding:.7rem;border-radius:10px;border:none;background:#f87171;color:#1a0a0a;font-family:'DM Sans',sans-serif;font-size:.9rem;font-weight:600;cursor:pointer;">Sign out</button>
+      </div>
+    </div>`;
+  // Clicking the dim backdrop (outside the card) cancels.
+  ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
+  document.body.appendChild(ov);
+  ov.querySelector('#signout-cancel').onclick = () => ov.remove();
+  ov.querySelector('#signout-go').onclick = () => { ov.remove(); performSignOut(); };
+}
+
+// The actual sign-out — this is the original signOut() body, now run only after
+// the user confirms in the popup above.
+async function performSignOut() {
   // Phase 6: Call /auth/logout endpoint to invalidate session
   const csrfToken = localStorage.getItem('econintel:csrf');
   if (csrfToken) {
