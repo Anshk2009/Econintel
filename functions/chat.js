@@ -273,8 +273,12 @@ export async function onRequest(context) {
   let userId, userPlan;
 
   if (!token) {
-    // Unauthenticated — check IP-based guest quota
-    const clientIP = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
+    // Unauthenticated — check IP-based guest quota.
+    // SECURITY (H1): use EdgeOne's trusted EO-Connecting-IP header (the client
+    // cannot spoof it). The old CF-Connecting-IP || X-Forwarded-For fallback let an
+    // attacker rotate X-Forwarded-For to mint unlimited fresh guest buckets — i.e.
+    // unmetered free LLM calls on your OpenRouter key. No X-Forwarded-For fallback.
+    const clientIP = request.headers.get('EO-Connecting-IP') || 'unknown';
     const ipHash = await hashIP(clientIP);
     const guestKey = `guest:quota:${ipHash}`;
     const used = parseInt(await TOKENS.get(guestKey) || '0', 10);
@@ -310,7 +314,8 @@ export async function onRequest(context) {
   // Guests use the separate GUEST_LIMIT bucket above.
   // Key is keyed by IP hash so shared-IP scenarios degrade gracefully per network.
   if (token) {
-    const authClientIP = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
+    // SECURITY (H1): trusted client IP only — never the spoofable X-Forwarded-For.
+    const authClientIP = request.headers.get('EO-Connecting-IP') || 'unknown';
     const authIPHash = await hashIP(authClientIP);
     const rlKey = `chat:rl:auth:ip:${authIPHash}`;
     const dailyLimit = (RATE_LIMITS[userPlan] || RATE_LIMITS.free).dailyPerIP;

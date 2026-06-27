@@ -30,7 +30,15 @@ const RATE_LIMITS = {
 
 // Get client IP from request
 function getClientIP(request) {
-  return request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
+  // SECURITY (H1): use EdgeOne's trusted EO-Connecting-IP header. EdgeOne sets it
+  // to the real client IP on every request and — per Tencent's docs — it CANNOT be
+  // overridden by the client. The old code read CF-Connecting-IP (a Cloudflare
+  // header that does not exist on EdgeOne) and then fell back to X-Forwarded-For,
+  // which IS attacker-controlled — so anyone could rotate XFF to mint a fresh
+  // rate-limit / quota bucket on every request. We deliberately do NOT fall back
+  // to X-Forwarded-For. If EO-Connecting-IP is somehow absent we use a single
+  // shared 'unknown' bucket, which fails safe (over-restrictive) rather than open.
+  return request.headers.get('EO-Connecting-IP') || 'unknown';
 }
 
 // Check rate limit using KV
@@ -292,9 +300,15 @@ async function handleSignup(request, env, jwtSecret, allowedOrigin) {
       900
     );
     const refreshToken = generateId();
-    await TOKENS.put(`refresh:${refreshToken}`, userId, { expirationTtl: 2592000 });
+    // SECURITY (C1): store the token_version alongside the refresh token so it can
+    // be invalidated later by a password reset / logout-all (both bump the version).
+    // New accounts start at token_version 1.
+    await TOKENS.put(`refresh:${refreshToken}`, JSON.stringify({ userId, tv: 1 }), { expirationTtl: 2592000 });
     const csrfToken = generateId();
-    await TOKENS.put(`csrf:${csrfToken}`, csrfToken, { expirationTtl: 86400 });
+    // SECURITY (M3): bind the CSRF token to this user (store the userId, not the
+    // token itself) so a token issued to one account can't authorise a
+    // state-changing request for another.
+    await TOKENS.put(`csrf:${csrfToken}`, JSON.stringify({ userId }), { expirationTtl: 86400 });
 
     const responseBody = JSON.stringify({
       userId,
@@ -376,8 +390,15 @@ async function handleLogin(request, env, jwtSecret, allowedOrigin) {
     const passwordOK = await comparePassword(password, user ? user.password_hash : DUMMY_HASH);
 
     if (!user || !passwordOK) {
-      // Increment failed login counter
-      const emailKey = `rl:login:email:${normalizedEmail}`;
+      // Increment failed login counter.
+      // SECURITY (M2): scope the per-email failed-login lock to the client IP too.
+      // A pure per-email lock let anyone lock ANY account out of logging in for
+      // 15 min just by sending 5 bad passwords for that email (targeted DoS). The
+      // per-IP counter (ipKey, 20/hr) still bounds a single attacker's total
+      // guesses, while this IP+email key stops a remote attacker from locking out
+      // a victim they aren't co-located with. clientIP is the trusted
+      // EO-Connecting-IP value (see getClientIP / H1).
+      const emailKey = `rl:login:email:${normalizedEmail}:${clientIP}`;
       await incrementRateLimit(TOKENS, emailKey, RATE_LIMITS.failedLogin.window);
       await incrementRateLimit(TOKENS, ipKey, RATE_LIMITS.loginAttempts.window);
 
@@ -421,11 +442,13 @@ async function handleLogin(request, env, jwtSecret, allowedOrigin) {
 
     // Phase 6: Generate long-lived refresh token (opaque, stored in KV)
     const refreshToken = generateId();
-    await TOKENS.put(`refresh:${refreshToken}`, user.id, { expirationTtl: 2592000 }); // 30 days
+    // SECURITY (C1): persist the user's current token_version with the refresh
+    // token so a later password reset / logout-all invalidates it on next refresh.
+    await TOKENS.put(`refresh:${refreshToken}`, JSON.stringify({ userId: user.id, tv: user.token_version }), { expirationTtl: 2592000 }); // 30 days
 
-    // Phase 6: Generate CSRF token
+    // Phase 6: Generate CSRF token — bound to the user (M3)
     const csrfToken = generateId();
-    await TOKENS.put(`csrf:${csrfToken}`, csrfToken, { expirationTtl: 86400 }); // 24 hours
+    await TOKENS.put(`csrf:${csrfToken}`, JSON.stringify({ userId: user.id }), { expirationTtl: 86400 }); // 24 hours
 
     // Phase 6: Set secure cookies + return response
     const responseBody = JSON.stringify({
@@ -507,10 +530,18 @@ async function handleLogout(request, env, jwtSecret, allowedOrigin) {
     return new Response(JSON.stringify({ message: 'Logged out' }), { status: 200, headers: makeClearCookieHeaders() });
   }
 
-  const token = getBearerToken(request);
+  // SECURITY (M5): read the access token from the HttpOnly cookie when there's no
+  // Authorization header. JS can't read that cookie, so the real client never
+  // sends a Bearer header — meaning the old getBearerToken-only path returned 401
+  // on every genuine logout and never reached the blacklist step below. With the
+  // cookie fallback we can actually blacklist the access token so it dies before
+  // its 15-minute expiry.
+  let token = getBearerToken(request);
+  if (!token) token = parseCookies(request).access_token;
 
   if (!token) {
-    return jsonResponse({ error: 'Missing token' }, 401, allowedOrigin);
+    // Nothing to blacklist — but logout is idempotent. Clear cookies and succeed.
+    return new Response(JSON.stringify({ message: 'Logged out' }), { status: 200, headers: makeClearCookieHeaders() });
   }
 
   // Verify token — includes token_version DB check to catch revoked sessions immediately
@@ -563,18 +594,18 @@ async function handleLogout(request, env, jwtSecret, allowedOrigin) {
  * Returns: { message: string }
  */
 async function handleLogoutAll(request, env, jwtSecret, allowedOrigin) {
-  // Validate CSRF token (double-submit + KV server-issuance check)
-  if (!await validateCSRFToken(request, TOKENS)) {
-    return jsonResponse({ error: 'Invalid or missing CSRF token' }, 403, allowedOrigin);
-  }
-
-  const token = getBearerToken(request);
+  // SECURITY (M5): read the access token from the cookie (JS can't read the
+  // HttpOnly cookie to send a Bearer header).
+  let token = getBearerToken(request);
+  if (!token) token = parseCookies(request).access_token;
 
   if (!token) {
     return jsonResponse({ error: 'Missing token' }, 401, allowedOrigin);
   }
 
-  // Verify token — includes token_version DB check to catch revoked sessions immediately
+  // Verify the token FIRST so we know who is calling — needed to bind the CSRF
+  // check to this user (M3). Includes the token_version DB check to catch already
+  // revoked sessions immediately.
   const payload = await verifyJWT(token, jwtSecret, {
     TOKENS,
     dbCheck: async (uid, tv) => {
@@ -584,6 +615,11 @@ async function handleLogoutAll(request, env, jwtSecret, allowedOrigin) {
   });
   if (!payload) {
     return jsonResponse({ error: 'Invalid or expired token' }, 401, allowedOrigin);
+  }
+
+  // Validate CSRF token (double-submit + KV server-issuance + bound to THIS user, M3)
+  if (!await validateCSRFToken(request, TOKENS, payload.userId)) {
+    return jsonResponse({ error: 'Invalid or missing CSRF token' }, 403, allowedOrigin);
   }
 
   const userId = payload.userId;
@@ -799,9 +835,12 @@ async function handleVerifyReset(request, env, jwtSecret, allowedOrigin) {
       900
     );
     const refreshToken = generateId();
-    await TOKENS.put(`refresh:${refreshToken}`, updatedUser.id, { expirationTtl: 2592000 });
+    // SECURITY (C1): store the NEW token_version (we just bumped it above) so any
+    // refresh tokens issued before this reset are now stale and get rejected on
+    // their next refresh.
+    await TOKENS.put(`refresh:${refreshToken}`, JSON.stringify({ userId: updatedUser.id, tv: updatedUser.token_version }), { expirationTtl: 2592000 });
     const csrfToken = generateId();
-    await TOKENS.put(`csrf:${csrfToken}`, csrfToken, { expirationTtl: 86400 });
+    await TOKENS.put(`csrf:${csrfToken}`, JSON.stringify({ userId: updatedUser.id }), { expirationTtl: 86400 });
 
     // JWT goes in an HttpOnly cookie — NOT the response body — so it can't be
     // read by JavaScript even if there's an XSS. Previous code returned { jwt }
@@ -896,19 +935,46 @@ async function handleRefreshToken(request, env, jwtSecret, allowedOrigin) {
   }
 
   try {
-    // Look up refresh token in KV
-    const userId = await TOKENS.get(`refresh:${refreshToken}`);
+    // Look up refresh token in KV. New format = JSON { userId, tv }; legacy tokens
+    // stored a bare userId string (handled by the parse fallback below).
+    const storedRaw = await TOKENS.get(`refresh:${refreshToken}`);
 
-    if (!userId) {
+    if (!storedRaw) {
       return jsonResponse({ error: 'Invalid or expired refresh token' }, 401, allowedOrigin);
     }
 
+    // Parse the stored value, tolerating the legacy bare-string format.
+    let storedUserId, storedTv = null;
+    try {
+      const parsed = JSON.parse(storedRaw);
+      if (parsed && typeof parsed === 'object' && parsed.userId) {
+        storedUserId = parsed.userId;
+        storedTv = typeof parsed.tv === 'number' ? parsed.tv : null;
+      } else {
+        storedUserId = storedRaw; // legacy: the value WAS the userId
+      }
+    } catch {
+      storedUserId = storedRaw; // legacy non-JSON value
+    }
+
     // Get user from Supabase to fetch token_version
-    const { data: _refreshUsers, error: fetchError } = await supabaseRest('users', 'GET', `id=eq.${encodeURIComponent(userId)}&select=id,email,username,plan,token_version`);
+    const { data: _refreshUsers, error: fetchError } = await supabaseRest('users', 'GET', `id=eq.${encodeURIComponent(storedUserId)}&select=id,email,username,plan,token_version`);
     const user = _refreshUsers?.[0] || null;
 
     if (fetchError || !user) {
       return jsonResponse({ error: 'User not found' }, 401, allowedOrigin);
+    }
+
+    // SECURITY (C1): reject refresh tokens minted before a password reset /
+    // logout-all. Those bump users.token_version; if the version stored with this
+    // refresh token no longer matches, the session was revoked and the token must
+    // die. Legacy tokens (storedTv === null) carry no version, so we revoke them
+    // too — the user just signs in again, after which every new token is
+    // version-bound. Without this, a stolen refresh token kept working for 30 days
+    // even after the victim reset their password.
+    if (storedTv === null || storedTv !== user.token_version) {
+      await TOKENS.delete(`refresh:${refreshToken}`);
+      return jsonResponse({ error: 'Session expired. Please sign in again.' }, 401, allowedOrigin);
     }
 
     // Generate new access token (15 minutes)
@@ -918,9 +984,16 @@ async function handleRefreshToken(request, env, jwtSecret, allowedOrigin) {
       900
     );
 
-    // Generate new CSRF token
+    // SECURITY (L4 — refresh-token rotation): mint a fresh refresh token and revoke
+    // the one just used, so a captured token works at most once. Carries the
+    // current token_version (C1).
+    const newRefreshToken = generateId();
+    await TOKENS.put(`refresh:${newRefreshToken}`, JSON.stringify({ userId: user.id, tv: user.token_version }), { expirationTtl: 2592000 });
+    await TOKENS.delete(`refresh:${refreshToken}`);
+
+    // Generate new CSRF token — bound to the user (M3)
     const csrfToken = generateId();
-    await TOKENS.put(`csrf:${csrfToken}`, csrfToken, { expirationTtl: 86400 });
+    await TOKENS.put(`csrf:${csrfToken}`, JSON.stringify({ userId: user.id }), { expirationTtl: 86400 });
 
     // Return new tokens + user data so the frontend can restore session state
     const responseBody = JSON.stringify({
@@ -935,6 +1008,7 @@ async function handleRefreshToken(request, env, jwtSecret, allowedOrigin) {
       'Access-Control-Allow-Credentials': 'true',
     });
     refreshHeaders.append('Set-Cookie', `access_token=${newAccessToken}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=900`);
+    refreshHeaders.append('Set-Cookie', `refresh_token=${newRefreshToken}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000`);
     refreshHeaders.append('Set-Cookie', `csrf_token=${csrfToken}; Path=/; Secure; SameSite=Strict; Max-Age=86400`);
     return new Response(responseBody, { status: 200, headers: refreshHeaders });
   } catch (err) {
@@ -1004,14 +1078,25 @@ async function handleOAuthDiscord(request, env, jwtSecret, allowedOrigin) {
       '&response_type=code' +
       '&scope=identify%20email' +   // identify = username; email = verified email
       `&state=${newState}`;
-    return redirect(authorizeUrl);
+    // SECURITY (M6): also pin the state to THIS browser via a short-lived cookie.
+    // On callback we require this cookie to equal the ?state= param, so an attacker
+    // can't pre-generate a callback URL and trick a victim into completing a login
+    // into the ATTACKER's account (OAuth login-CSRF / session fixation). The KV
+    // entry proves WE issued the state; the cookie proves it's the SAME browser.
+    // SameSite=Lax (not Strict) so the cookie survives the top-level redirect back.
+    const leg1Headers = new Headers({ 'Location': authorizeUrl });
+    leg1Headers.append('Set-Cookie', `oauth_state=${newState}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`);
+    return new Response(null, { status: 302, headers: leg1Headers });
   }
 
   // ── LEG 2: Discord called back ──
   try {
-    // State check: this value only exists in KV if WE started the flow.
-    // A missing/wrong state means the callback was forged or expired.
-    const stateValid = state && await TOKENS.get(`oauth:state:${state}`);
+    // State check: the value must (a) exist in KV — proving WE started the flow —
+    // AND (b) match the oauth_state cookie set on leg 1 — proving it's the SAME
+    // browser that started it (M6, anti login-CSRF). A missing/wrong state means
+    // the callback was forged, replayed in another browser, or expired.
+    const cookieState = parseCookies(request).oauth_state;
+    const stateValid = state && cookieState && state === cookieState && await TOKENS.get(`oauth:state:${state}`);
     if (!stateValid) {
       return redirect(`${base}/index.html?oauth_error=bad_state`);
     }
@@ -1094,9 +1179,11 @@ async function handleOAuthDiscord(request, env, jwtSecret, allowedOrigin) {
       900
     );
     const refreshToken = generateId();
-    await TOKENS.put(`refresh:${refreshToken}`, user.id, { expirationTtl: 2592000 });
+    // SECURITY (C1 + M3): version-bind the refresh token and user-bind the CSRF
+    // token, exactly like the password-login path (see handleLogin).
+    await TOKENS.put(`refresh:${refreshToken}`, JSON.stringify({ userId: user.id, tv: user.token_version }), { expirationTtl: 2592000 });
     const csrfToken = generateId();
-    await TOKENS.put(`csrf:${csrfToken}`, csrfToken, { expirationTtl: 86400 });
+    await TOKENS.put(`csrf:${csrfToken}`, JSON.stringify({ userId: user.id }), { expirationTtl: 86400 });
 
     // 302 to chat with the cookies attached. ?oauth=1 tells chat.html to call
     // the refresh endpoint on load, which returns the user data it needs for
@@ -1105,6 +1192,8 @@ async function handleOAuthDiscord(request, env, jwtSecret, allowedOrigin) {
     oauthHeaders.append('Set-Cookie', `access_token=${jwt}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=900`);
     oauthHeaders.append('Set-Cookie', `refresh_token=${refreshToken}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000`);
     oauthHeaders.append('Set-Cookie', `csrf_token=${csrfToken}; Path=/; Secure; SameSite=Strict; Max-Age=86400`);
+    // M6: the login is complete — clear the single-use OAuth state cookie.
+    oauthHeaders.append('Set-Cookie', `oauth_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
     return new Response(null, { status: 302, headers: oauthHeaders });
   } catch (err) {
     console.error('[auth] Discord OAuth error:', err);
@@ -1159,12 +1248,19 @@ async function handleOAuthGoogle(request, env, jwtSecret, allowedOrigin) {
       '&scope=openid%20email%20profile' +
       '&prompt=select_account' +    // always show the account picker
       `&state=${newState}`;
-    return redirect(authorizeUrl);
+    // SECURITY (M6): pin the state to this browser with a short-lived cookie (see
+    // the Discord handler for the full rationale — prevents OAuth login-CSRF).
+    const leg1Headers = new Headers({ 'Location': authorizeUrl });
+    leg1Headers.append('Set-Cookie', `oauth_state=${newState}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`);
+    return new Response(null, { status: 302, headers: leg1Headers });
   }
 
   // ── LEG 2: Google called back ──
   try {
-    const stateValid = state && await TOKENS.get(`oauth:state:${state}`);
+    // Require the KV state AND a matching oauth_state cookie from this browser
+    // (M6, anti login-CSRF — see the Discord handler).
+    const cookieState = parseCookies(request).oauth_state;
+    const stateValid = state && cookieState && state === cookieState && await TOKENS.get(`oauth:state:${state}`);
     if (!stateValid) {
       return redirect(`${base}/index.html?oauth_error=bad_state`);
     }
@@ -1239,14 +1335,18 @@ async function handleOAuthGoogle(request, env, jwtSecret, allowedOrigin) {
       900
     );
     const refreshToken = generateId();
-    await TOKENS.put(`refresh:${refreshToken}`, user.id, { expirationTtl: 2592000 });
+    // SECURITY (C1 + M3): version-bind the refresh token and user-bind the CSRF
+    // token, exactly like the password-login path (see handleLogin).
+    await TOKENS.put(`refresh:${refreshToken}`, JSON.stringify({ userId: user.id, tv: user.token_version }), { expirationTtl: 2592000 });
     const csrfToken = generateId();
-    await TOKENS.put(`csrf:${csrfToken}`, csrfToken, { expirationTtl: 86400 });
+    await TOKENS.put(`csrf:${csrfToken}`, JSON.stringify({ userId: user.id }), { expirationTtl: 86400 });
 
     const oauthHeaders = new Headers({ 'Location': `${base}/chat.html?oauth=1` });
     oauthHeaders.append('Set-Cookie', `access_token=${jwt}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=900`);
     oauthHeaders.append('Set-Cookie', `refresh_token=${refreshToken}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000`);
     oauthHeaders.append('Set-Cookie', `csrf_token=${csrfToken}; Path=/; Secure; SameSite=Strict; Max-Age=86400`);
+    // M6: the login is complete — clear the single-use OAuth state cookie.
+    oauthHeaders.append('Set-Cookie', `oauth_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
     return new Response(null, { status: 302, headers: oauthHeaders });
   } catch (err) {
     console.error('[auth] Google OAuth error:', err);
@@ -1354,7 +1454,7 @@ function parseCookies(request) {
  */
 // Now async: double-submit check (header === cookie) PLUS KV lookup to confirm
 // the token was actually issued by this server — not just copied from a stolen cookie.
-async function validateCSRFToken(request, tokens) {
+async function validateCSRFToken(request, tokens, expectedUserId = null) {
   const csrfHeader = request.headers.get('X-CSRF-Token');
   const cookies = parseCookies(request);
   const csrfCookie = cookies.csrf_token;
@@ -1364,5 +1464,20 @@ async function validateCSRFToken(request, tokens) {
 
   // KV check: token must have been issued by the server at login/refresh time
   const stored = await tokens.get(`csrf:${csrfHeader}`);
-  return !!stored;
+  if (!stored) return false;
+
+  // SECURITY (M3): when the caller knows who is authenticated, require the CSRF
+  // token to have been issued to THAT user. New tokens store { userId } as JSON;
+  // legacy tokens stored the bare token string — for those we fall back to the
+  // existence check above so sessions created before this change keep working
+  // until they expire.
+  if (expectedUserId !== null) {
+    try {
+      const parsed = JSON.parse(stored);
+      if (parsed && typeof parsed === 'object' && 'userId' in parsed) {
+        return parsed.userId === expectedUserId;
+      }
+    } catch { /* legacy non-JSON value — fall through to existence-only */ }
+  }
+  return true;
 }

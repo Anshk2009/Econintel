@@ -272,7 +272,7 @@ async function handleListConversations(request, env, jwtSecret, allowedOrigin) {
  * Returns: { success: true, message: string }
  */
 async function handleDeleteHistory(request, env, jwtSecret, allowedOrigin) {
-  // Validate CSRF token: double-submit check (header === cookie) plus KV server-issuance check
+  // Double-submit CSRF check first (header === cookie). Cheap, no DB hit.
   const csrfHeader = request.headers.get('X-CSRF-Token');
   const cookies = parseCookies(request);
   const csrfCookie = cookies.csrf_token;
@@ -280,12 +280,9 @@ async function handleDeleteHistory(request, env, jwtSecret, allowedOrigin) {
   if (!csrfHeader || !csrfCookie || csrfHeader !== csrfCookie) {
     return jsonResponse({ error: 'Invalid or missing CSRF token' }, 403, allowedOrigin);
   }
-  const csrfStored = await TOKENS.get(`csrf:${csrfHeader}`);
-  if (!csrfStored) {
-    return jsonResponse({ error: 'Invalid or missing CSRF token' }, 403, allowedOrigin);
-  }
 
-  // Authenticate (from Authorization header or access_token cookie)
+  // Authenticate (Authorization header or access_token cookie) BEFORE the final
+  // CSRF check, so we know which user to bind the CSRF token to (M3).
   let token = getBearerToken(request);
   if (!token) {
     token = cookies.access_token;
@@ -307,6 +304,21 @@ async function handleDeleteHistory(request, env, jwtSecret, allowedOrigin) {
   }
 
   const userId = userPayload.userId;
+
+  // SECURITY (M3): the CSRF token must have been issued by this server AND belong
+  // to THIS user. New tokens store { userId } as JSON; legacy tokens stored the
+  // bare token string, for which we accept mere existence (back-compat until they
+  // expire). This stops one user's CSRF token authorising another user's delete.
+  const csrfStored = await TOKENS.get(`csrf:${csrfHeader}`);
+  if (!csrfStored) {
+    return jsonResponse({ error: 'Invalid or missing CSRF token' }, 403, allowedOrigin);
+  }
+  try {
+    const parsed = JSON.parse(csrfStored);
+    if (parsed && typeof parsed === 'object' && 'userId' in parsed && parsed.userId !== userId) {
+      return jsonResponse({ error: 'Invalid or missing CSRF token' }, 403, allowedOrigin);
+    }
+  } catch { /* legacy non-JSON value — existence check above is sufficient */ }
 
   try {
     const { error: deleteError } = await supabaseRest(

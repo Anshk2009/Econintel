@@ -229,9 +229,17 @@ export async function verifyJWT(token, secret, options = {}) {
     if (options.dbCheck && payload.userId) {
       try {
         const valid = await options.dbCheck(payload.userId, payload.tv);
-        if (!valid) return null;
+        if (!valid) return null; // token_version mismatch → session was revoked
       } catch (err) {
-        console.warn('[middleware] token_version DB check failed, failing open:', err);
+        // SECURITY (M1 — fail CLOSED): if we cannot confirm the token_version
+        // against the DB, we must NOT assume the token is still valid. The old
+        // code failed OPEN here (swallowed the error and returned the payload),
+        // which meant a revoked session (logout-all / password reset) would still
+        // be accepted during any transient Supabase error. Rejecting instead means
+        // a DB outage logs users out (they just sign in again) rather than
+        // honouring tokens we can no longer verify.
+        console.warn('[middleware] token_version DB check failed, failing closed:', err);
+        return null;
       }
     }
 
