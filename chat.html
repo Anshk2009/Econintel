@@ -1426,7 +1426,7 @@
           </svg>
           <span>Home</span>
         </a>
-        <button class="upgrade-btn">
+        <button class="upgrade-btn" id="header-upgrade">
           <svg viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
           </svg>
@@ -2830,6 +2830,12 @@ function refreshAvatar() {
   const u = getUser();
   av.textContent = u ? initialsOf(u.name) : '··';
   av.classList.toggle('signed-in', !!u);
+  // Hide the header "Upgrade" button for Enterprise users — they're already on the
+  // top tier, so there's nothing to upgrade to. Everyone else (free / pro / guests)
+  // still sees it. Plan comes from getUser().plan, refreshed from the server by
+  // silentRefresh on load, so an admin plan change shows up after a reload.
+  const upgradeBtn = document.getElementById('header-upgrade');
+  if (upgradeBtn) upgradeBtn.style.display = (u && u.plan === 'enterprise') ? 'none' : '';
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -2860,10 +2866,11 @@ function renderAccountMenu() {
           <div class="account-header-email">${escapeHTML(u.email)}</div>
         </div>
       </div>
-      <!-- Edit Profile lives on the landing page — ?profile=1 opens the modal there -->
-      <a href="index.html?profile=1" class="account-menu-item">
+      <!-- Edit Profile opens the in-chat modal (openAccountModal('edit')) so the
+           user STAYS on the chat page instead of being bounced to the landing page. -->
+      <button class="account-menu-item" onclick="openAccountModal('edit')">
         ${ICON.edit} Edit Profile
-      </a>
+      </button>
       <button class="account-menu-item" onclick="openAccountModal('settings')">
         ${ICON.settings} Settings
       </button>
@@ -3084,6 +3091,9 @@ function handleEditProfile(e) {
     username: document.getElementById('ep-username').value.trim(),
     email:    document.getElementById('ep-email').value.trim().toLowerCase()
   });
+  // Reflect the new name/initials in the top-right avatar immediately
+  // (otherwise the change isn't visible until a page reload).
+  refreshAvatar();
   closeAccountModal();
 }
 
@@ -3184,7 +3194,7 @@ function toggleTheme() {
 
 <script src="particles.min.js"></script>
 <script>
-particlesJS('particles-js', {"particles":{"number":{"value":80,"density":{"enable":true,"value_area":800}},"color":{"value":"#ffffff"},"shape":{"type":"circle","stroke":{"width":0,"color":"#000000"},"polygon":{"nb_sides":5},"image":{"src":"img/github.svg","width":100,"height":100}},"opacity":{"value":0.5,"random":false,"anim":{"enable":false,"speed":1,"opacity_min":0.1,"sync":false}},"size":{"value":3,"random":true,"anim":{"enable":false,"speed":40,"size_min":0.1,"sync":false}},"line_linked":{"enable":true,"distance":150,"color":"#ffffff","opacity":0.4,"width":1},"move":{"enable":true,"speed":6,"direction":"none","random":false,"straight":false,"out_mode":"out","bounce":false,"attract":{"enable":false,"rotateX":600,"rotateY":1200}}},"interactivity":{"detect_on":"canvas","events":{"onhover":{"enable":true,"mode":"repulse"},"onclick":{"enable":true,"mode":"push"},"resize":true},"modes":{"grab":{"distance":400,"line_linked":{"opacity":1}},"bubble":{"distance":400,"size":40,"duration":2,"opacity":8,"speed":3},"repulse":{"distance":159.53670540749656,"duration":0.4},"push":{"particles_nb":4},"remove":{"particles_nb":2}}},"retina_detect":true});
+particlesJS('particles-js', {"particles":{"number":{"value":80,"density":{"enable":true,"value_area":800}},"color":{"value":"#ffffff"},"shape":{"type":"circle","stroke":{"width":0,"color":"#000000"},"polygon":{"nb_sides":5},"image":{"src":"img/github.svg","width":100,"height":100}},"opacity":{"value":0.5,"random":false,"anim":{"enable":false,"speed":1,"opacity_min":0.1,"sync":false}},"size":{"value":3,"random":true,"anim":{"enable":false,"speed":40,"size_min":0.1,"sync":false}},"line_linked":{"enable":true,"distance":150,"color":"#ffffff","opacity":0.4,"width":1},"move":{"enable":true,"speed":3,"direction":"none","random":false,"straight":false,"out_mode":"out","bounce":false,"attract":{"enable":false,"rotateX":600,"rotateY":1200}}},"interactivity":{"detect_on":"canvas","events":{"onhover":{"enable":true,"mode":"repulse"},"onclick":{"enable":true,"mode":"push"},"resize":true},"modes":{"grab":{"distance":400,"line_linked":{"opacity":1}},"bubble":{"distance":400,"size":40,"duration":2,"opacity":8,"speed":3},"repulse":{"distance":159.53670540749656,"duration":0.4},"push":{"particles_nb":4},"remove":{"particles_nb":2}}},"retina_detect":true});
 </script>
 
 </body>
