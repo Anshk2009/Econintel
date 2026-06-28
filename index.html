@@ -1721,12 +1721,11 @@
       width: 100vw;
       margin-left: calc(-50vw + 50%);
 
-      gap: 4vw;                    /* space between cards */
+      gap: 9.5vw;                  /* gap = (100vw − 61vw)/2 − 10vw peek */
       /* Vertical padding gives the "Most Popular" badge (top:-12px) and the
-         card glow room to breathe. The 12vw left/right is the empty space that
-         lets the first (Free) and last (Enterprise) card reach the centre —
-         and it IS the empty gap you wanted at the two far ends. */
-      padding: 2rem 12vw;
+         card glow room to breathe. 19.5vw = (100vw − 61vw)/2 so the first
+         (Free) and last (Enterprise) card snap-centre at scrollLeft = 0 / max. */
+      padding: 2rem 19.5vw;
 
       /* Horizontal swipe that snaps each card to the centre, with iOS
          momentum scrolling. */
@@ -1741,8 +1740,8 @@
 
       /* Fade both edges to transparent so neighbours melt away at the sides
          (this is the mask from the Uiverse CSS you shared). */
-      -webkit-mask-image: linear-gradient(to right, transparent 0, #000 14%, #000 86%, transparent 100%);
-              mask-image: linear-gradient(to right, transparent 0, #000 14%, #000 86%, transparent 100%);
+      -webkit-mask-image: linear-gradient(to right, transparent 0, #000 10vw, #000 calc(100% - 10vw), transparent 100%);
+              mask-image: linear-gradient(to right, transparent 0, #000 10vw, #000 calc(100% - 10vw), transparent 100%);
     }
     /* Hide the scrollbar in Chrome / Safari too. */
     #pricing .pricing-grid::-webkit-scrollbar { display: none; }
@@ -1751,8 +1750,8 @@
        shows. scroll-snap-align:center clicks a card into the middle when the
        swipe stops. */
     #pricing .pricing-card {
-      flex: 0 0 76vw;              /* fixed width: don't grow or shrink */
-      width: 76vw;
+      flex: 0 0 61vw;              /* fixed width: don't grow or shrink */
+      width: 61vw;
       scroll-snap-align: center;
       margin: 0;                   /* spacing now comes from the flex `gap` */
 
