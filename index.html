@@ -1693,6 +1693,91 @@
     /* 16px minimum stops iOS Safari from auto-zooming into focused inputs */
     .modal-input { font-size: 16px; }
   }
+
+  /* ════ MOBILE PRICING SLIDER — phones only (≤600px) ════
+     On phones the three plans turn into ONE swipeable, horizontal frame
+     instead of a tall vertical stack. The plan that matters to the visitor
+     sits in the centre (crisp); its neighbours peek in at the edges, blurred
+     and faded. Everything here is wrapped in @media (max-width:600px), and the
+     smallest tablet is 768px wide — so laptops and tablets NEVER enter this
+     block and keep the existing grid / 900px single-column layout untouched. */
+  @media (max-width: 600px) {
+
+    /* The slider track. We override the desktop grid AND the 900px rule
+       (which had capped the grid at 420px and auto-centred it) and turn the
+       container into a horizontal flex scroller. The #pricing prefix gives
+       these rules higher specificity so they reliably win. */
+    #pricing .pricing-grid {
+      display: flex;               /* lay the cards in a row, not a grid */
+      grid-template-columns: none; /* cancel the desktop grid tracks */
+      max-width: none;             /* undo the 900px rule's 420px cap */
+      margin: 0;                   /* undo the 900px rule's auto-centering */
+      position: relative;          /* makes each card's offsetLeft measure from
+                                      this box, so the centering JS is correct */
+
+      /* Break out of #pricing's 1.25rem side padding to span the FULL screen
+         width, so the neighbour cards can peek right up to the screen edge.
+         The page never widens because <body> already has overflow-x:hidden. */
+      width: 100vw;
+      margin-left: calc(-50vw + 50%);
+
+      gap: 4vw;                    /* space between cards */
+      /* Vertical padding gives the "Most Popular" badge (top:-12px) and the
+         card glow room to breathe. The 12vw left/right is the empty space that
+         lets the first (Free) and last (Enterprise) card reach the centre —
+         and it IS the empty gap you wanted at the two far ends. */
+      padding: 2rem 12vw;
+
+      /* Horizontal swipe that snaps each card to the centre, with iOS
+         momentum scrolling. */
+      overflow-x: auto;
+      overflow-y: visible;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+
+      /* Hide the scrollbar — the peeking cards already say "swipe me". */
+      scrollbar-width: none;          /* Firefox */
+      -ms-overflow-style: none;       /* old Edge */
+
+      /* Fade both edges to transparent so neighbours melt away at the sides
+         (this is the mask from the Uiverse CSS you shared). */
+      -webkit-mask-image: linear-gradient(to right, transparent 0, #000 14%, #000 86%, transparent 100%);
+              mask-image: linear-gradient(to right, transparent 0, #000 14%, #000 86%, transparent 100%);
+    }
+    /* Hide the scrollbar in Chrome / Safari too. */
+    #pricing .pricing-grid::-webkit-scrollbar { display: none; }
+
+    /* Each card takes most of the screen so only a sliver of its neighbours
+       shows. scroll-snap-align:center clicks a card into the middle when the
+       swipe stops. */
+    #pricing .pricing-card {
+      flex: 0 0 76vw;              /* fixed width: don't grow or shrink */
+      width: 76vw;
+      scroll-snap-align: center;
+      margin: 0;                   /* spacing now comes from the flex `gap` */
+
+      /* Default state = a SIDE card: blurred, dimmed, slightly shrunk. The JS
+         removes this from whichever card is centred. The transition makes the
+         focus glide smoothly from card to card as you swipe. */
+      filter: blur(3px);
+      opacity: 0.5;
+      transform: scale(0.9);
+      transition: filter 0.45s ease, opacity 0.45s ease, transform 0.45s ease;
+    }
+
+    /* The centred card — sharp, full opacity, full size. */
+    #pricing .pricing-card.in-focus {
+      filter: none;
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    /* On touch screens :hover can "stick" after a tap; stop the desktop
+       hover-lift (translateY) from fighting our scale transforms. The
+       .in-focus rule is more specific, so the centred card stays at scale(1). */
+    #pricing .pricing-card:hover { transform: scale(0.9); }
+    #pricing .pricing-card.in-focus:hover { transform: scale(1); }
+  }
 </style>
 </head>
 <body>
@@ -2853,6 +2938,119 @@ if (!currentCSRFToken) {
     currentUser = JSON.parse(localStorage.getItem('econintel:user') || 'null');
   } catch (e) {}
 }
+</script>
+
+<!-- ── MOBILE PRICING SLIDER (phones ≤600px only) ──
+     Centres the most relevant plan and keeps the side cards' blur in sync with
+     whatever is in the middle as the user swipes. The look (blur, peek, edge
+     fade) lives in the @media (max-width:600px) CSS block; this script only
+     positions the cards and tracks focus, and only on phones. -->
+<script>
+(function () {
+  var grid = document.querySelector('#pricing .pricing-grid');
+  if (!grid) return;                                   // pricing section missing
+  var cards = Array.prototype.slice.call(grid.querySelectorAll('.pricing-card'));
+  if (cards.length < 2) return;                        // nothing to slide
+
+  // Must mirror the CSS breakpoint exactly (@media max-width:600px).
+  var mq = window.matchMedia('(max-width: 600px)');
+  var enabled = false;
+  var raf = 0;
+
+  // Cards are in DOM order: 0 = Free, 1 = Pro, 2 = Enterprise.
+  // Guests / Free users land on Pro (the upsell). Pro & Enterprise users
+  // already have Pro, so they land on Enterprise. Plan comes straight from the
+  // saved login in localStorage (same key the rest of the page uses).
+  function defaultIndex() {
+    var plan = 'guest';
+    try {
+      var u = JSON.parse(localStorage.getItem('econintel:user') || 'null');
+      if (u && u.plan) plan = u.plan;
+    } catch (e) {}
+    var idx = (plan === 'pro' || plan === 'enterprise') ? 2 : 1;
+    return Math.min(idx, cards.length - 1);            // stay in range
+  }
+
+  // Mark whichever card is nearest the centre of the frame as in-focus; the
+  // CSS un-blurs that one and keeps the rest blurred.
+  function updateFocus() {
+    var mid = grid.scrollLeft + grid.clientWidth / 2;
+    var best = 0, bestDist = Infinity;
+    for (var i = 0; i < cards.length; i++) {
+      var cMid = cards[i].offsetLeft + cards[i].offsetWidth / 2;
+      var d = Math.abs(cMid - mid);
+      if (d < bestDist) { bestDist = d; best = i; }
+    }
+    for (var j = 0; j < cards.length; j++) {
+      cards[j].classList.toggle('in-focus', j === best);
+    }
+  }
+
+  // Instantly (no smooth animation) put card `i` in the middle of the frame.
+  // Setting scrollLeft directly is always instant, so the right plan is
+  // centred the moment the section is reached. If the section was still being
+  // skipped by content-visibility its cards can report 0 width — retry a few
+  // frames until they have real sizes to measure.
+  function centerOn(i, tries) {
+    var c = cards[i];
+    if (c.offsetWidth === 0 && (tries || 0) < 5) {
+      requestAnimationFrame(function () { centerOn(i, (tries || 0) + 1); });
+      return;
+    }
+    grid.scrollLeft = c.offsetLeft - (grid.clientWidth - c.offsetWidth) / 2;
+    updateFocus();
+  }
+
+  // rAF-throttle the scroll handler so the blur stays smooth while swiping.
+  function onScroll() {
+    if (raf) return;
+    raf = requestAnimationFrame(function () { raf = 0; updateFocus(); });
+  }
+
+  // Centre the right plan the FIRST time the pricing section comes on-screen.
+  // We can't centre at page load: #pricing has content-visibility:auto, so
+  // while it sits far below the fold its cards aren't laid out and have no
+  // size to measure. So we watch the page scroll and centre once — the moment
+  // the section enters the viewport. centerOn() then waits (via rAF) for the
+  // cards to actually have width before scrolling them. (An IntersectionObserver
+  // would be tidier, but a plain scroll listener is bullet-proof everywhere.)
+  var section = document.getElementById('pricing');
+  var centered = false;
+  function tryCenter() {
+    if (centered) return;
+    var r = section.getBoundingClientRect();          // #pricing always has a box
+    var inView = r.top < window.innerHeight && r.bottom > 0;
+    if (inView) {
+      centered = true;
+      window.removeEventListener('scroll', tryCenter);
+      centerOn(defaultIndex(), 0);
+    }
+  }
+
+  function enable() {
+    if (enabled) return;
+    enabled = true;
+    grid.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('scroll', tryCenter, { passive: true });
+    tryCenter();                       // already visible? (short page / #pricing)
+  }
+
+  function disable() {
+    if (!enabled) return;
+    enabled = false;
+    grid.removeEventListener('scroll', onScroll);
+    window.removeEventListener('scroll', tryCenter);
+    grid.scrollLeft = 0;
+    for (var i = 0; i < cards.length; i++) cards[i].classList.remove('in-focus');
+  }
+
+  // Turn the slider on for phones, off otherwise — and re-check when the phone
+  // is rotated or the window crosses the breakpoint in devtools.
+  function sync() { if (mq.matches) enable(); else disable(); }
+  sync();
+  if (mq.addEventListener) mq.addEventListener('change', sync);
+  else if (mq.addListener) mq.addListener(sync);       // older Safari
+})();
 </script>
 
 
