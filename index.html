@@ -1721,11 +1721,10 @@
       width: 100vw;
       margin-left: calc(-50vw + 50%);
 
-      gap: 9.5vw;                  /* gap = (100vw − 61vw)/2 − 10vw peek */
-      /* Vertical padding gives the "Most Popular" badge (top:-12px) and the
-         card glow room to breathe. 19.5vw = (100vw − 61vw)/2 so the first
-         (Free) and last (Enterprise) card snap-centre at scrollLeft = 0 / max. */
-      padding: 2rem 19.5vw;
+      gap: 2vw;                    /* gap = (100vw − 80vw)/2 − 8vw peek = 2vw */
+      /* padding-x = (100vw − 80vw)/2 = 10vw so Free/Enterprise snap-centre
+         at scrollLeft = 0 / max. Vertical 2rem gives the badge breathing room. */
+      padding: 2rem 10vw;
 
       /* Horizontal swipe that snaps each card to the centre, with iOS
          momentum scrolling. */
@@ -1740,8 +1739,8 @@
 
       /* Fade both edges to transparent so neighbours melt away at the sides
          (this is the mask from the Uiverse CSS you shared). */
-      -webkit-mask-image: linear-gradient(to right, transparent 0, #000 10vw, #000 calc(100% - 10vw), transparent 100%);
-              mask-image: linear-gradient(to right, transparent 0, #000 10vw, #000 calc(100% - 10vw), transparent 100%);
+      -webkit-mask-image: linear-gradient(to right, transparent 0, #000 8vw, #000 calc(100% - 8vw), transparent 100%);
+              mask-image: linear-gradient(to right, transparent 0, #000 8vw, #000 calc(100% - 8vw), transparent 100%);
     }
     /* Hide the scrollbar in Chrome / Safari too. */
     #pricing .pricing-grid::-webkit-scrollbar { display: none; }
@@ -1750,8 +1749,10 @@
        shows. scroll-snap-align:center clicks a card into the middle when the
        swipe stops. */
     #pricing .pricing-card {
-      flex: 0 0 61vw;              /* fixed width: don't grow or shrink */
-      width: 61vw;
+      flex: 0 0 80vw;              /* fixed width: don't grow or shrink */
+      width: 80vw;
+      max-height: 75vh;            /* 0.75× natural card height on typical phones */
+      overflow: hidden;
       scroll-snap-align: center;
       margin: 0;                   /* spacing now comes from the flex `gap` */
 
@@ -1776,6 +1777,17 @@
        .in-focus rule is more specific, so the centred card stays at scale(1). */
     #pricing .pricing-card:hover { transform: scale(0.9); }
     #pricing .pricing-card.in-focus:hover { transform: scale(1); }
+
+    /* Re-flow the "Most Popular" badge so it sits inside the card rather than
+       at top:-12px, which would be clipped by overflow:hidden on the card. */
+    #pricing .pricing-popular-badge {
+      position: relative;
+      top: auto; left: auto;
+      transform: none;
+      display: block;
+      width: fit-content;
+      margin: 0 auto 0.75rem;
+    }
   }
 </style>
 </head>
