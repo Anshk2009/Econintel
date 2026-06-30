@@ -316,6 +316,125 @@ export function resolveSupabaseKey(env) {
 }
 
 // ============================================================================
+// SUPABASE + KV CLIENT — one factory, shared by every edge function
+// ============================================================================
+/**
+ * Build the per-request Supabase helpers from the env bindings.
+ *
+ * auth.js, chat.js and chat-history.js all need the SAME three things: a thin
+ * REST wrapper (supabaseRest), a KV store backed by the kv_store table (TOKENS),
+ * and the token_version DB check that verifyJWT uses to reject revoked sessions
+ * (dbCheck). They were copy-pasted into all three files; this is the single copy.
+ *
+ * Returns supabaseUrl/supabaseKey too, for the few places (chat.js retrieval)
+ * that hit a REST endpoint directly.
+ * @param {object} env - EdgeOne environment bindings
+ */
+export function makeSupabase(env) {
+  const supabaseUrl = env.SUPABASE_URL;
+  // Service-role key (base64-wrapped) if configured, else anon key — see
+  // resolveSupabaseKey(). This is the only guard on the DB until RLS is on.
+  const supabaseKey = resolveSupabaseKey(env);
+
+  async function supabaseRest(table, method = 'GET', filters = '', body = null) {
+    let url = `${supabaseUrl}/rest/v1/${table}`;
+    if (filters) url += `?${filters}`;
+
+    const options = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseKey}`,
+        'apikey': supabaseKey,
+      },
+    };
+    if (body) options.body = JSON.stringify(body);
+
+    try {
+      const res = await fetch(url, options);
+      // 409 (duplicate) is not treated as an error — signup relies on that.
+      if (!res.ok && res.status !== 409) {
+        console.warn(`[supabase] ${method} ${table} failed:`, res.status);
+        return { data: null, error: `HTTP ${res.status}` };
+      }
+      const _t = await res.text(); const data = _t ? JSON.parse(_t) : null;
+      return { data, error: null };
+    } catch (err) {
+      console.warn(`[supabase] ${method} ${table} error:`, err);
+      return { data: null, error: err.message };
+    }
+  }
+
+  // KV store backed by the kv_store table (refresh tokens, CSRF, rate limits…).
+  const TOKENS = {
+    async get(key) {
+      const { data } = await supabaseRest('kv_store', 'GET', `key=eq.${encodeURIComponent(key)}&expires_at=gt.${new Date().toISOString()}`);
+      return data?.[0]?.value || null;
+    },
+    async put(key, value, opts) {
+      const ttl = opts?.expirationTtl || 3600;
+      const expiresAt = new Date(Date.now() + ttl * 1000).toISOString();
+      // Upsert: kv_store.key is PRIMARY KEY, so Prefer: resolution=merge-duplicates
+      // tells PostgREST to UPDATE on conflict instead of returning 409. Plain POST
+      // would fail silently on duplicate keys, freezing counters at 1.
+      await fetch(`${supabaseUrl}/rest/v1/kv_store`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': supabaseKey,
+          'Prefer': 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({ key, value, expires_at: expiresAt }),
+      });
+    },
+    async delete(key) {
+      await supabaseRest('kv_store', 'DELETE', `key=eq.${encodeURIComponent(key)}`);
+    },
+  };
+
+  // token_version check for verifyJWT: if payload.tv no longer matches the DB row
+  // the session was revoked (logout-all / password reset) — reject immediately.
+  const dbCheck = async (uid, tv) => {
+    const { data } = await supabaseRest('users', 'GET', `id=eq.${encodeURIComponent(uid)}&select=token_version`);
+    return data?.[0]?.token_version === tv;
+  };
+
+  return { supabaseRest, TOKENS, dbCheck, supabaseUrl, supabaseKey };
+}
+
+// ============================================================================
+// REQUEST HELPERS — bearer/cookie/token extraction (shared by all functions)
+// ============================================================================
+
+/** Extract the Bearer token from the Authorization header, or null. */
+export function getBearerToken(request) {
+  const auth = request.headers.get('Authorization');
+  if (!auth || !auth.startsWith('Bearer ')) return null;
+  return auth.slice(7); // strip "Bearer "
+}
+
+/** Parse the Cookie header into a plain { name: value } object. */
+export function parseCookies(request) {
+  const cookies = {};
+  const cookieHeader = request.headers.get('Cookie');
+  if (!cookieHeader) return cookies;
+  cookieHeader.split(';').forEach(cookie => {
+    const [key, value] = cookie.trim().split('=');
+    if (key && value) cookies[key] = decodeURIComponent(value);
+  });
+  return cookies;
+}
+
+/**
+ * The access token, from the Authorization header or — since the real client
+ * can't read the HttpOnly access_token cookie to set that header — the cookie.
+ */
+export function getToken(request) {
+  return getBearerToken(request) || parseCookies(request).access_token || null;
+}
+
+// ============================================================================
 // UTILITY: JSON response helper
 // ============================================================================
 

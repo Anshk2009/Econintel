@@ -17,7 +17,9 @@ import {
   hashIP,
   jsonResponse,
   corsPreflightResponse,
-  resolveSupabaseKey,
+  makeSupabase,
+  getToken,
+  parseCookies,
 } from './middleware.js';
 
 // Rate limiting thresholds
@@ -59,7 +61,7 @@ async function incrementRateLimit(kv, key, windowSeconds) {
 // Hoisted to module scope so the top-level handler functions (handleSignup,
 // handleLogin, …) can use them. They are (re)assigned at the top of onRequest,
 // closing over env-derived Supabase config which is constant per deployment.
-let supabaseRest, TOKENS;
+let supabaseRest, TOKENS, dbCheck;
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -73,73 +75,9 @@ export async function onRequest(context) {
   const JWT_SECRET = env.JWT_SECRET;
   const ALLOWED_ORIGIN = env.ALLOWED_ORIGIN;
 
-  // Supabase REST API helper (no npm packages needed)
-  const supabaseUrl = env.SUPABASE_URL;
-  // Use the service-role key (base64-wrapped in SUPABASE_SERVICE_KEY_B64) if it's
-  // configured, else fall back to the anon key. See resolveSupabaseKey() in
-  // middleware.js. This is the key that lets us enable RLS later without breaking
-  // the backend; until the env var is set it behaves exactly as before (anon key).
-  const supabaseKey = resolveSupabaseKey(env);
-
-  // REST API helper function (assigned to the module-scoped binding above)
-  supabaseRest = async function supabaseRest(table, method = 'GET', filters = '', body = null) {
-    let url = `${supabaseUrl}/rest/v1/${table}`;
-    if (filters) url += `?${filters}`;
-
-    const options = {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabaseKey}`,
-        'apikey': supabaseKey,
-      },
-    };
-
-    if (body) options.body = JSON.stringify(body);
-
-    try {
-      const res = await fetch(url, options);
-      if (!res.ok && res.status !== 409) {
-        console.warn(`[supabase] ${method} ${table} failed:`, res.status, await res.text());
-        return { data: null, error: `HTTP ${res.status}` };
-      }
-      const _t = await res.text(); const data = _t ? JSON.parse(_t) : null;
-      return { data, error: null };
-    } catch (err) {
-      console.warn(`[supabase] ${method} ${table} error:`, err);
-      return { data: null, error: err.message };
-    }
-  };
-
-  // KV store helper using REST API
-  TOKENS = {
-    async get(key) {
-      const { data } = await supabaseRest('kv_store', 'GET', `key=eq.${encodeURIComponent(key)}&expires_at=gt.${new Date().toISOString()}`);
-      return data?.[0]?.value || null;
-    },
-
-    async put(key, value, opts) {
-      const ttl = opts?.expirationTtl || 3600;
-      const expiresAt = new Date(Date.now() + ttl * 1000).toISOString();
-      // Upsert: kv_store.key is PRIMARY KEY, so Prefer: resolution=merge-duplicates
-      // tells PostgREST to UPDATE on conflict instead of returning 409.
-      // Plain POST (INSERT) would fail silently on duplicate keys, freezing counters at 1.
-      await fetch(`${supabaseUrl}/rest/v1/kv_store`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseKey}`,
-          'apikey': supabaseKey,
-          'Prefer': 'resolution=merge-duplicates',
-        },
-        body: JSON.stringify({ key, value, expires_at: expiresAt }),
-      });
-    },
-
-    async delete(key) {
-      await supabaseRest('kv_store', 'DELETE', `key=eq.${encodeURIComponent(key)}`);
-    },
-  };
+  // Supabase REST + KV helpers (shared factory in middleware.js). Assigned to the
+  // module-scoped bindings so the top-level handlers below can use them.
+  ({ supabaseRest, TOKENS, dbCheck } = makeSupabase(env));
 
   // CORS preflight
   if (request.method === 'OPTIONS') {
@@ -536,8 +474,7 @@ async function handleLogout(request, env, jwtSecret, allowedOrigin) {
   // on every genuine logout and never reached the blacklist step below. With the
   // cookie fallback we can actually blacklist the access token so it dies before
   // its 15-minute expiry.
-  let token = getBearerToken(request);
-  if (!token) token = parseCookies(request).access_token;
+  let token = getToken(request);
 
   if (!token) {
     // Nothing to blacklist — but logout is idempotent. Clear cookies and succeed.
@@ -545,13 +482,7 @@ async function handleLogout(request, env, jwtSecret, allowedOrigin) {
   }
 
   // Verify token — includes token_version DB check to catch revoked sessions immediately
-  const payload = await verifyJWT(token, jwtSecret, {
-    TOKENS,
-    dbCheck: async (uid, tv) => {
-      const { data } = await supabaseRest('users', 'GET', `id=eq.${encodeURIComponent(uid)}&select=token_version`);
-      return data?.[0]?.token_version === tv;
-    },
-  });
+  const payload = await verifyJWT(token, jwtSecret, { TOKENS, dbCheck });
   if (!payload) {
     return jsonResponse({ error: 'Invalid or expired token' }, 401, allowedOrigin);
   }
@@ -596,8 +527,7 @@ async function handleLogout(request, env, jwtSecret, allowedOrigin) {
 async function handleLogoutAll(request, env, jwtSecret, allowedOrigin) {
   // SECURITY (M5): read the access token from the cookie (JS can't read the
   // HttpOnly cookie to send a Bearer header).
-  let token = getBearerToken(request);
-  if (!token) token = parseCookies(request).access_token;
+  let token = getToken(request);
 
   if (!token) {
     return jsonResponse({ error: 'Missing token' }, 401, allowedOrigin);
@@ -606,13 +536,7 @@ async function handleLogoutAll(request, env, jwtSecret, allowedOrigin) {
   // Verify the token FIRST so we know who is calling — needed to bind the CSRF
   // check to this user (M3). Includes the token_version DB check to catch already
   // revoked sessions immediately.
-  const payload = await verifyJWT(token, jwtSecret, {
-    TOKENS,
-    dbCheck: async (uid, tv) => {
-      const { data } = await supabaseRest('users', 'GET', `id=eq.${encodeURIComponent(uid)}&select=token_version`);
-      return data?.[0]?.token_version === tv;
-    },
-  });
+  const payload = await verifyJWT(token, jwtSecret, { TOKENS, dbCheck });
   if (!payload) {
     return jsonResponse({ error: 'Invalid or expired token' }, 401, allowedOrigin);
   }
@@ -1415,37 +1339,7 @@ async function checkHaveIBeenPwned(password) {
   }
 }
 
-// ============================================================================
-// UTILITY: Extract Bearer token from Authorization header
-// ============================================================================
-
-function getBearerToken(request) {
-  const auth = request.headers.get('Authorization');
-  if (!auth || !auth.startsWith('Bearer ')) {
-    return null;
-  }
-  return auth.slice(7); // Remove "Bearer " prefix
-}
-
-/**
- * Parse cookies from request header.
- * @param {Request} request - HTTP request
- * @returns {object} Key-value pairs of cookies
- */
-function parseCookies(request) {
-  const cookies = {};
-  const cookieHeader = request.headers.get('Cookie');
-  if (!cookieHeader) return cookies;
-
-  cookieHeader.split(';').forEach(cookie => {
-    const [key, value] = cookie.trim().split('=');
-    if (key && value) {
-      cookies[key] = decodeURIComponent(value);
-    }
-  });
-
-  return cookies;
-}
+// getBearerToken / getToken / parseCookies are imported from middleware.js.
 
 /**
  * Phase 6: Validate CSRF token from header against cookie.

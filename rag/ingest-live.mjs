@@ -12,26 +12,12 @@
 // so the library always reflects what's happening in the world.
 
 import { readFile } from 'node:fs/promises';
+// embed() + fetchWithTimeout() are shared with the data-source ingesters.
+import { embed, fetchWithTimeout } from './sources/_lib.mjs';
 
 // --- Config: set these as environment variables before running ---
-const OPENROUTER_EMBED_KEY = process.env.OPENROUTER_EMBED_KEY; // OpenRouter key for embeddings
 const SUPABASE_URL   = process.env.SUPABASE_URL;          // https://xxxx.supabase.co
 const SUPABASE_KEY   = process.env.SUPABASE_ANON_KEY;
-
-// Hard per-request timeout. Node's built-in fetch() waits FOREVER by default, so
-// a single slow RSS feed or a hung OpenRouter/Supabase call freezes the whole run
-// until GitHub kills the job hours later (the "stuck run" symptom). AbortController
-// guarantees every request gives up after TIMEOUT_MS so the loop keeps moving.
-const TIMEOUT_MS = 15000;
-async function fetchWithTimeout(url, options = {}, ms = TIMEOUT_MS) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), ms);
-  try {
-    return await fetch(url, { ...options, signal: ctrl.signal });
-  } finally {
-    clearTimeout(timer); // always clear so the timer can't keep the process alive
-  }
-}
 
 // Read one RSS/XML feed and pull out its items as {title, url, description, date}.
 // This is a lightweight regex parser — good enough for standard RSS, no library.
@@ -68,20 +54,6 @@ function pickLink(block) {
 // Remove any leftover HTML tags from a description.
 function stripTags(s) {
   return s.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
-}
-
-// Turn text into a 2048-number embedding via OpenRouter (NVIDIA model, free).
-async function embed(text) {
-  const res = await fetchWithTimeout('https://openrouter.ai/api/v1/embeddings', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${OPENROUTER_EMBED_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ model: 'nvidia/llama-nemotron-embed-vl-1b-v2:free', input: text }),
-  });
-  if (!res.ok) throw new Error(`Embedding failed: ${res.status} ${await res.text()}`);
-  return (await res.json()).data[0].embedding;
 }
 
 // Has this article URL already been stored? (dedupe — don't embed the same news twice)
@@ -129,7 +101,7 @@ async function main() {
   // "Bearer undefined" to OpenRouter/Supabase, every request 401s, and the run
   // still finishes "successfully" having added nothing — a silent green failure.
   const missing = [];
-  if (!OPENROUTER_EMBED_KEY) missing.push('OPENROUTER_EMBED_KEY');
+  if (!process.env.OPENROUTER_EMBED_KEY) missing.push('OPENROUTER_EMBED_KEY');
   if (!SUPABASE_URL)         missing.push('SUPABASE_URL');
   if (!SUPABASE_KEY)         missing.push('SUPABASE_ANON_KEY');
   if (missing.length) {

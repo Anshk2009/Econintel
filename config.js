@@ -32,22 +32,7 @@ const CONFIG = {
     conversations: `${BASE}/chat-history?action=conversations`, // grouped thread list for the sidebar
     delete: `${BASE}/chat-history?action=delete`,
   },
-
-  // Debug mode
-  debug: isDev,
-
-  // Log environment
-  log: () => {
-    console.log(`%cEconIntel Configuration`, 'color: #0ea5e9; font-weight: bold');
-    console.log(`Environment: ${isDev ? 'Development (Local)' : 'Production (EdgeOne)'}`);
-    console.log(`API Base: ${CONFIG.apiBase}`);
-  }
 };
 
 // Expose globally so non-module scripts can access it
 window.CONFIG = CONFIG;
-
-// Log on load
-if (CONFIG.debug) {
-  CONFIG.log();
-}

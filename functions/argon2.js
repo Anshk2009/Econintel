@@ -14,5 +14,5 @@
 //     import { argon2id, argon2Verify } from './argon2.js';
 // The WebAssembly is embedded in the bundle (base64) — no network fetch — and is
 // compiled lazily on the first hash call, so importing this file is cheap.
-const { argon2id, argon2i, argon2d, argon2Verify } = globalThis.hashwasm;
-export { argon2id, argon2i, argon2d, argon2Verify };
+const { argon2id, argon2Verify } = globalThis.hashwasm;
+export { argon2id, argon2Verify };

@@ -17,11 +17,11 @@
 
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+// upsertDoc embeds + upserts on source_url (with the publishable-column retry) —
+// the same helper the open-data ingesters use.
+import { upsertDoc } from './sources/_lib.mjs';
 
 // --- Config: set these as environment variables before running ---
-const OPENROUTER_EMBED_KEY = process.env.OPENROUTER_EMBED_KEY; // embeddings key
-const SUPABASE_URL = process.env.SUPABASE_URL;                 // https://xxxx.supabase.co
-const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY;
 const DOCS_DIR = './documents';
 
 // Chunk size in characters (~2000 ≈ 500 tokens). Overlap repeats 200 chars so a
@@ -52,53 +52,6 @@ function chunkText(text) {
   return chunks;
 }
 
-// Embed text via OpenRouter (NVIDIA model, 2048-dim) — same as the live ingester.
-async function embed(text) {
-  const res = await fetch('https://openrouter.ai/api/v1/embeddings', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${OPENROUTER_EMBED_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ model: 'nvidia/llama-nemotron-embed-vl-1b-v2:free', input: text }),
-  });
-  if (!res.ok) throw new Error(`Embedding failed: ${res.status} ${await res.text()}`);
-  return (await res.json()).data[0].embedding;
-}
-
-// Upsert one chunk row. on_conflict=source_url + merge-duplicates makes Postgres
-// UPDATE the existing row (matched on the unique source_url) instead of 409-ing.
-// Without on_conflict, PostgREST targets the primary key, so re-seeding any doc
-// whose URL is already stored throws a duplicate-key 409.
-async function upsertChunk(row) {
-  const post = (body) => fetch(`${SUPABASE_URL}/rest/v1/documents?on_conflict=source_url`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
-      'apikey': SUPABASE_KEY,
-      'Prefer': 'resolution=merge-duplicates',
-    },
-    body: JSON.stringify(body),
-  });
-
-  let res = await post(row);
-  if (!res.ok) {
-    const errText = await res.text();
-    // The `publishable` column only exists after migration-add-publishable.sql is
-    // run. If it isn't there yet, Supabase 400s mentioning the column — retry once
-    // WITHOUT the flag so seeding still works; the migration's backfill sets the
-    // right value (case-study/reference/report -> true) afterwards.
-    if (row.publishable !== undefined && /publishable|does not exist|PGRST204/i.test(errText)) {
-      const { publishable, ...rest } = row;
-      const res2 = await post(rest);
-      if (res2.ok) return;
-      throw new Error(`Insert failed (retry without publishable): ${res2.status} ${await res2.text()}`);
-    }
-    throw new Error(`Insert failed: ${res.status} ${errText}`);
-  }
-}
-
 async function main() {
   // Read .md/.txt docs, skipping the template (_TEMPLATE.md) and the seed list.
   const files = (await readdir(DOCS_DIR)).filter(f =>
@@ -119,8 +72,7 @@ async function main() {
       console.log(`${file}: ${chunks.length} chunks`);
 
       for (let i = 0; i < chunks.length; i++) {
-        const embedding = await embed(chunks[i]);
-        await upsertChunk({
+        await upsertDoc({
           content:      chunks[i],
           source_name:  meta.source_name || file.replace(/\.(md|txt)$/, ''),
           // Make the URL unique per chunk so the source_url unique index doesn't
@@ -132,7 +84,6 @@ async function main() {
           // wrote/verified) → safe to republish. Front-matter can override with
           // `publishable: false` for anything you only want used for retrieval.
           publishable:  meta.publishable ? meta.publishable !== 'false' : true,
-          embedding,
         });
         total++;
       }
