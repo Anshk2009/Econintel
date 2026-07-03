@@ -16,11 +16,21 @@ import { verifyJWT, jsonResponse, corsPreflightResponse, hashIP, makeSupabase, g
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-// Chat model, pinned server-side so users can't request a pricier one.
-// gpt-oss-120b is free on OpenRouter and uses your EXISTING OPENROUTER_API_KEY
-// (no new key needed). To upgrade later, drop ":free" for the paid endpoint,
-// which has higher rate limits.
-const MODEL = 'openai/gpt-oss-120b:free';
+// Chat models, chosen server-side by plan (users can't request a pricier one).
+// Free tier + guests get Gemma; paid tiers (pro/enterprise) get gpt-oss-120b.
+// Both are OpenRouter ":free" endpoints today (no extra key/cost) — to move a
+// paid tier onto a truly paid endpoint later, drop its ":free" suffix.
+const FREE_MODEL = 'google/gemma-4-31b-it:free';   // free plan + guests
+const PAID_MODEL = 'openai/gpt-oss-120b:free';     // pro + enterprise
+
+// Per-IP quota for the FREE model: it draws on OpenRouter's SHARED free-model
+// allowance for our single key, so we cap how much any one network can pull —
+// 30 messages per 36 hours per IP. Separate from the per-account daily cap and
+// per-minute throttle below. ponytail: per-IP is coarse (IPv6 rotation can dodge
+// it), but shared-quota protection is the point; OpenRouter's free-tier limit and
+// the $1/day spend cap are the hard backstops.
+const FREE_IP_LIMIT  = 30;
+const FREE_IP_WINDOW = 129600; // 36 hours, in seconds
 
 // Per-account message limits, enforced server-side (see the authenticated block
 // in onRequest). dailyPerIP = messages/day — now keyed by userId, not IP; the name
@@ -315,6 +325,30 @@ export async function onRequest(context) {
     await TOKENS.put(dailyKey, String(usedToday + 1), { expirationTtl: 86400 });
   }
 
+  // Pick the model by plan: paid tiers (pro/enterprise) get gpt-oss-120b; everyone
+  // else (free plan + guests) gets the free Gemma model.
+  const model = (userPlan === 'pro' || userPlan === 'enterprise') ? PAID_MODEL : FREE_MODEL;
+
+  // Per-IP quota for the free model (30 per 36h) — protects OpenRouter's shared
+  // free-model allowance from being drained by one network. Fixed 36h window (the
+  // bucket number is baked into the key) so it resets deterministically, not on a
+  // sliding TTL. Checked HERE, before the body/embedding/completion work below, so
+  // an over-limit caller bails cheap. Paid users skip it (paid model + their own caps).
+  if (model === FREE_MODEL) {
+    const freeIP = request.headers.get('EO-Connecting-IP') || 'unknown';
+    const freeIPHash = await hashIP(freeIP);
+    const freeBucket = Math.floor(Date.now() / (FREE_IP_WINDOW * 1000));
+    const freeKey = `free:ip:${freeIPHash}:${freeBucket}`;
+    const usedFree = parseInt(await TOKENS.get(freeKey) || '0', 10);
+    if (usedFree >= FREE_IP_LIMIT) {
+      return jsonResponse(
+        { error: `Free-tier limit reached (${FREE_IP_LIMIT} messages per 36h for this network). Try again later, or sign in to a paid plan.`, code: 'FREE_IP_LIMIT_EXCEEDED' },
+        429, ALLOWED_ORIGIN, { 'Retry-After': String(FREE_IP_WINDOW) }
+      );
+    }
+    await TOKENS.put(freeKey, String(usedFree + 1), { expirationTtl: FREE_IP_WINDOW });
+  }
+
   // Step 2: Parse request body with size limit
   const rateLimit = RATE_LIMITS[userPlan] || RATE_LIMITS.free;
 
@@ -353,9 +387,8 @@ export async function onRequest(context) {
     );
   }
 
-  // Model is pinned server-side (see MODEL near the top of this file), so the
-  // user can no longer choose it — the old per-plan allowlist check that read
-  // body.model is therefore unnecessary and has been removed.
+  // Model is chosen server-side by plan (see FREE_MODEL / PAID_MODEL near the top),
+  // so the user can't choose it — any client-supplied body.model is ignored.
 
   // Phase 7: Cap message count (prevent token inflation)
   if (body.messages.length > 30) {
@@ -432,7 +465,7 @@ export async function onRequest(context) {
           'X-Title': 'EconIntel',
         },
         body: JSON.stringify({
-          model: MODEL,
+          model,
           messages: messagesWithSystem,
           max_tokens: 550,
           temperature: 0.5,
@@ -530,7 +563,7 @@ export async function onRequest(context) {
           rows.push({
             id: generateId(), user_id: userId, role: 'user',
             content: userMessage.content,
-            model: MODEL,
+            model,
             conversation_id: cid,
             tokens_used: 0, created_at: new Date(base).toISOString(),
           });
@@ -539,7 +572,7 @@ export async function onRequest(context) {
           rows.push({
             id: generateId(), user_id: userId, role: 'assistant',
             content: fullContent,
-            model: MODEL,
+            model,
             conversation_id: cid,
             // +1ms so the reply always sorts AFTER its question when a thread is
             // reopened (otherwise both share an identical timestamp and the order

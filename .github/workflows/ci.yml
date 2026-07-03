@@ -1,0 +1,141 @@
+name: Post-push debug
+
+# Runs on every push and every pull request against main.
+# Catches syntax errors, leaked secrets, and missing env vars BEFORE
+# a broken function reaches production.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  debug:
+    name: Lint · Secret-scan · Config check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      # ── 1. Syntax check: every .js/.mjs file must parse without errors ──────
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Syntax-check edge functions
+        run: |
+          echo "=== Syntax check: functions/ ==="
+          for f in functions/*.js; do
+            node --check "$f" && echo "  ✅ $f" || (echo "  ❌ $f — syntax error" && exit 1)
+          done
+
+      - name: Syntax-check RAG scripts
+        run: |
+          echo "=== Syntax check: rag/ ==="
+          for f in rag/*.mjs rag/sources/*.mjs; do
+            [ -f "$f" ] || continue
+            node --check "$f" && echo "  ✅ $f" || (echo "  ❌ $f — syntax error" && exit 1)
+          done
+
+      # ── 2. Dependency audit (package.json present) ──────────────────────────
+      - name: Install deps (audit-only)
+        run: npm install --ignore-scripts
+        if: hashFiles('package.json') != ''
+
+      - name: npm audit (high + critical only)
+        run: npm audit --audit-level=high
+        if: hashFiles('package.json') != ''
+        continue-on-error: true   # warn but don't block; pin deps to fix
+
+      # ── 3. Hardcoded secret / credential scan ───────────────────────────────
+      #    Looks for patterns that should NEVER appear in source code.
+      #    Does NOT scan .env.example (that file uses placeholder strings).
+      - name: Check for hardcoded secrets
+        run: |
+          echo "=== Secret scan ==="
+          FAIL=0
+
+          # Real OpenRouter key starts with "sk-or-v1-" followed by hex
+          if grep -rn --include="*.js" --include="*.mjs" --include="*.html" \
+               "sk-or-v1-[0-9a-f]\{32\}" . 2>/dev/null | grep -v ".env"; then
+            echo "❌ Possible hardcoded OpenRouter API key found"
+            FAIL=1
+          fi
+
+          # Supabase service role JWTs are long ey... JWTs
+          if grep -rn --include="*.js" --include="*.mjs" \
+               'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.' . 2>/dev/null; then
+            echo "❌ Possible hardcoded Supabase JWT found (use env vars)"
+            FAIL=1
+          fi
+
+          # JWT_SECRET set inline (not via env)
+          if grep -rn --include="*.js" --include="*.mjs" \
+               'JWT_SECRET\s*=\s*["'"'"'][^$]' . 2>/dev/null; then
+            echo "❌ Possible hardcoded JWT_SECRET found"
+            FAIL=1
+          fi
+
+          if [ $FAIL -eq 0 ]; then
+            echo "  ✅ No hardcoded secrets detected"
+          else
+            exit 1
+          fi
+
+      # ── 4. Env-var coverage check ────────────────────────────────────────────
+      #    Every env var used in code should be listed in .env.example.
+      - name: Env-var coverage
+        run: |
+          echo "=== Env-var coverage ==="
+          MISSING=()
+          for VAR in JWT_SECRET ALLOWED_ORIGIN SUPABASE_URL SUPABASE_ANON_KEY \
+                     OPENROUTER_API_KEY OPENROUTER_EMBED_KEY \
+                     SUPABASE_SERVICE_KEY_B64 \
+                     DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET \
+                     GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET \
+                     RESEND_API_KEY FRED_API_KEY DATA_GOV_IN_KEY INGEST_CONTACT; do
+            if ! grep -q "$VAR" .env.example 2>/dev/null; then
+              MISSING+=("$VAR")
+            fi
+          done
+
+          if [ ${#MISSING[@]} -gt 0 ]; then
+            echo "⚠️  These env vars are used in code but missing from .env.example:"
+            for v in "${MISSING[@]}"; do echo "   $v"; done
+            # Warn only — .env.example is documentation, not enforcement
+          else
+            echo "  ✅ All expected env vars documented in .env.example"
+          fi
+
+      # ── 5. Workflow file validation (yamllint) ───────────────────────────────
+      - name: Validate GitHub Actions YAML
+        run: |
+          pip install yamllint --quiet
+          yamllint -d relaxed .github/workflows/ && echo "  ✅ Workflow YAML valid"
+
+      # ── 6. RLS reminder ──────────────────────────────────────────────────────
+      #    Flags if the rollback migration (disable RLS) is the most recent one.
+      #    Means RLS may be OFF in production — a known critical finding.
+      - name: RLS posture check
+        run: |
+          echo "=== RLS posture ==="
+          LAST=$(ls migrations/*.sql 2>/dev/null | sort | tail -1)
+          if echo "$LAST" | grep -q "rollback_disable_rls\|disable_rls"; then
+            echo "⚠️  WARNING: latest migration appears to DISABLE RLS ($LAST)."
+            echo "   Run migrations/0003_enable_rls.sql after setting SUPABASE_SERVICE_KEY_B64."
+          else
+            echo "  ℹ️  Latest migration: $LAST"
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo ""
+          echo "=============================="
+          echo "  EconIntel post-push debug done"
+          echo "=============================="

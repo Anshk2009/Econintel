@@ -2023,13 +2023,18 @@ async function sendMessage() {
       return;
     }
 
-    // Handle rate limiting (quota exceeded)
+    // Handle 429s. OUR rate limits set a `code` (DAILY_LIMIT_EXCEEDED,
+    // RATE_LIMIT_PER_MINUTE, FREE_IP_LIMIT_EXCEEDED) and a specific message — show
+    // that. A 429 WITHOUT a code came from the AI provider (its shared free-model
+    // limit), which is NOT the user's fault — show a neutral "busy" message instead
+    // of wrongly blaming the user's "monthly limit".
     if (res.status === 429) {
       thinkingEl.remove();
-      const data = await res.json();
-      addMessage('assistant',
-        `You've exceeded your monthly query limit. ${data.error || 'Please try again next month or upgrade your plan.'}`,
-        { error: true });
+      const data = await res.json().catch(() => ({}));
+      const busy = 'The AI provider is busy right now. Please try again in a moment.';
+      // Show our own coded quota message; anything else (provider 429, or a coded
+      // response that somehow lacks a message) falls back to the neutral "busy" text.
+      addMessage('assistant', (data.code && data.error) ? data.error : busy, { error: true });
       return;
     }
 
