@@ -67,7 +67,9 @@ export async function onRequest(context) {
   const { request, env } = context;
 
   // Fail loud if config missing
-  if (!env.JWT_SECRET) throw new Error('JWT_SECRET not configured');
+  // SECURITY (L2): a short/guessable HS256 secret lets an attacker brute-force it
+  // offline and forge valid JWTs (full account takeover). Require >= 32 chars.
+  if (!env.JWT_SECRET || env.JWT_SECRET.length < 32) throw new Error('JWT_SECRET missing or too short (need >= 32 chars)');
   if (!env.ALLOWED_ORIGIN) throw new Error('ALLOWED_ORIGIN not configured');
   if (!env.SUPABASE_URL) throw new Error('SUPABASE_URL not configured');
   if (!env.SUPABASE_ANON_KEY) throw new Error('SUPABASE_ANON_KEY not configured');
@@ -188,34 +190,48 @@ async function handleSignup(request, env, jwtSecret, allowedOrigin) {
   const userId = generateId();
 
   try {
-    // Check if email or username already exists (REST API)
-    const existingEmailRes = await supabaseRest('users', 'GET', `email=eq.${encodeURIComponent(normalizedEmail)}&select=id`);
-    const existingUsernameRes = await supabaseRest('users', 'GET', `username=ilike.${encodeURIComponent(username)}&select=id`);
-
-    const existingEmail = existingEmailRes.data?.[0];
-    const existingUsername = existingUsernameRes.data?.[0];
-
-    // Increment signup counter regardless of outcome so the rate limit counts all attempts
+    // Count this attempt against the signup rate limit UP FRONT, before the
+    // expensive HIBP + Argon2 work below. The enforcing check ran at the top of
+    // handleSignup; incrementing here (rather than after the hash) keeps the gap
+    // between that check and this increment small, so a concurrent burst can't slip
+    // many extra hashes through before the counter catches up.
+    // ponytail: KV read-then-write still isn't atomic, so a few can race in under
+    // true simultaneity — bounded and fine at 3/hr/IP.
     await incrementRateLimit(TOKENS, ipKey, RATE_LIMITS.signupAttempts.window);
 
-    // Generic response (no user enumeration)
-    if (existingEmail || existingUsername) {
-      return jsonResponse({ message: 'If account can be created, confirmation email will be sent.' }, 200, allowedOrigin);
-    }
+    // SECURITY (M1 — no timing enumeration): run the expensive work (HIBP lookup +
+    // Argon2 hash) BEFORE the "does this account already exist?" check, so signing
+    // up with an ALREADY-REGISTERED email takes the same time as a brand-new one.
+    // The old order returned immediately for an existing account (skipping the
+    // ~100ms hash), leaking registered-vs-unregistered by response time. Now both
+    // paths do the same dominant work; only a NEW account does the final INSERT — a
+    // much smaller residual delta than the hash, not worth masking with a dummy write.
 
-    // Phase 9: Check password against HaveIBeenPwned API
+    // Reject passwords found in known breaches (HaveIBeenPwned, k-anonymity).
     try {
       const isPwned = await checkHaveIBeenPwned(password);
       if (isPwned) {
         return jsonResponse({ error: 'Password has been compromised in known breaches. Please choose a different password.' }, 400, allowedOrigin);
       }
     } catch (err) {
-      // Log but don't fail if HIBP is unreachable (graceful degradation)
+      // Non-fatal — HIBP being unreachable must not block signup.
       console.warn('[auth] HaveIBeenPwned check failed:', err);
     }
 
-    // Hash password with PBKDF2
+    // Hash the password (Argon2id). Computed up front: it's needed for the insert
+    // below AND it equalises response timing against the existing-account path.
     const passwordHash = await hashPassword(password);
+
+    // Now check whether the email or username is already taken.
+    const existingEmailRes = await supabaseRest('users', 'GET', `email=eq.${encodeURIComponent(normalizedEmail)}&select=id`);
+    const existingUsernameRes = await supabaseRest('users', 'GET', `username=ilike.${encodeURIComponent(username)}&select=id`);
+    const existingEmail = existingEmailRes.data?.[0];
+    const existingUsername = existingUsernameRes.data?.[0];
+
+    // Generic response — never reveal whether the account already existed.
+    if (existingEmail || existingUsername) {
+      return jsonResponse({ message: 'If account can be created, confirmation email will be sent.' }, 200, allowedOrigin);
+    }
 
     // Create user (REST API)
     const { data: insertData, error: insertError } = await supabaseRest('users', 'POST', '', {
@@ -675,8 +691,10 @@ async function handleResetPasswordRequest(request, env, allowedOrigin) {
         console.warn('[auth] Reset email failed:', emailErr);
       }
     } else {
-      // No API key configured — log the link for local dev/testing
-      console.log('[auth] RESEND_API_KEY not set. Reset link:', resetLink);
+      // SECURITY (L1): do NOT log the reset link — it contains a valid, usable
+      // reset token that would then sit in EdgeOne's server logs. Just record that
+      // the email wasn't sent; the token is in KV if you need it for local testing.
+      console.log('[auth] RESEND_API_KEY not set — reset email NOT sent (token stored in KV).');
     }
 
     return jsonResponse(
@@ -1041,7 +1059,8 @@ async function handleOAuthDiscord(request, env, jwtSecret, allowedOrigin) {
     });
     const tokenData = await tokenRes.json();
     if (!tokenData.access_token) {
-      console.error('[auth] Discord token exchange failed:', JSON.stringify(tokenData));
+      // SECURITY (L1): log only the error string, never the full token payload.
+      console.error('[auth] Discord token exchange failed:', tokenData?.error || 'unknown error');
       return redirect(`${base}/index.html?oauth_error=exchange_failed`);
     }
 
@@ -1204,7 +1223,8 @@ async function handleOAuthGoogle(request, env, jwtSecret, allowedOrigin) {
     });
     const tokenData = await tokenRes.json();
     if (!tokenData.access_token) {
-      console.error('[auth] Google token exchange failed:', JSON.stringify(tokenData));
+      // SECURITY (L1): log only the error string, never the full token payload.
+      console.error('[auth] Google token exchange failed:', tokenData?.error || 'unknown error');
       return redirect(`${base}/index.html?oauth_error=exchange_failed`);
     }
 

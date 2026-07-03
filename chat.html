@@ -3,6 +3,11 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<!-- SECURITY (M5): baseline CSP (defence-in-depth): object-src 'none', base-uri
+     'self', form-action 'self'. MUST-FIX before launch (EdgeOne response headers — a
+     <meta> can't do these): X-Frame-Options: DENY / frame-ancestors 'none' + HSTS on
+     this page. chat.html holds an authenticated session, so it must not be framable. -->
+<meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'; form-action 'self'" />
 <title>EconIntel — Chat</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
