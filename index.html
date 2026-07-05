@@ -1760,18 +1760,18 @@
     #pricing .pricing-card {
       flex: 0 0 80vw;              /* fixed width: don't grow or shrink */
       width: 80vw;
-      max-height: 75vh;            /* 0.75× natural card height on typical phones */
+      max-height: 56.25vh;         /* 0.75× 75vh = 56.25vh for more compact mobile cards */
       overflow: hidden;
       scroll-snap-align: center;
       margin: 0;                   /* spacing now comes from the flex `gap` */
 
-      /* Default state = a SIDE card: strongly blurred, dimmed, slightly shrunk. The JS
-         removes this from whichever card is centred. The transition makes the
-         focus glide smoothly from card to card as you swipe. Blur increased to make
-         sneak peeks obvious — users see there's content beyond but can't read it. */
-      filter: blur(8px);
-      opacity: 0.65;
-      transform: scale(0.92);
+      /* Default state = a SIDE card: moderately blurred, more opaque to show peek.
+         Blur reduced from 8px to 5px so peek cards remain visible despite mask fade.
+         Opacity boosted to 0.8 to compensate for edge mask. JS toggles .in-focus to
+         remove blur from center card. */
+      filter: blur(5px);
+      opacity: 0.8;
+      transform: scale(0.94);
       transition: filter 0.45s ease, opacity 0.45s ease, transform 0.45s ease;
     }
 
