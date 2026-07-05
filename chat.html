@@ -621,9 +621,42 @@
 
   /* ── RESPONSIVE ── */
   @media (max-width: 640px) {
+    /* Sidebar + header cleanup */
     .sidebar { display: none; }
     .upgrade-btn span { display: none; }
     .header-nav-btn span { display: none; }
+
+    /* Reduce header padding on mobile */
+    .chat-header { padding: 0.5rem 0.75rem; }
+
+    /* Tighter content padding on mobile — from 2rem 1.5rem to 1rem 0.75rem */
+    .chat-content { padding: 1rem 0.75rem 5rem; }
+
+    /* Reduce greeting size on mobile: clamp to smaller max */
+    .chat-greeting { font-size: clamp(1.8rem, 4.5vw, 2.8rem); margin-bottom: 1.5rem; }
+
+    /* Shrink subtitle */
+    .chat-greeting-sub { font-size: 0.85rem; margin-top: -0.8rem; margin-bottom: 1.5rem; }
+
+    /* Reduce message bubble padding */
+    .msg { padding: 0.75rem 0.9rem; font-size: 0.9rem; }
+
+    /* Reduce prompt input font to 16px (iOS won't zoom on focus) */
+    .prompt-input { font-size: 16px; }
+
+    /* Tighter prompt wrap padding */
+    .chat-content.has-messages .prompt-wrap { padding: 0.35rem 0 0.75rem; }
+
+    /* Shift theme toggle up to avoid covering prompt on small screens */
+    .theme-toggle { bottom: 6.5rem; right: 0.75rem; width: 38px; height: 38px; }
+    .theme-toggle svg { width: 15px; height: 15px; }
+
+    /* Account menu breaks off-screen on mobile: reposition to left-align */
+    .account-menu {
+      transform-origin: top right;
+      right: -120px;
+    }
+    .account-menu.open { right: -120px; }
   }
 
   /* ── LIGHT MODE (warm peach-cream palette) ── */

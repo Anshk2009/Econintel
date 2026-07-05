@@ -1765,12 +1765,13 @@
       scroll-snap-align: center;
       margin: 0;                   /* spacing now comes from the flex `gap` */
 
-      /* Default state = a SIDE card: blurred, dimmed, slightly shrunk. The JS
+      /* Default state = a SIDE card: strongly blurred, dimmed, slightly shrunk. The JS
          removes this from whichever card is centred. The transition makes the
-         focus glide smoothly from card to card as you swipe. */
-      filter: blur(3px);
-      opacity: 0.5;
-      transform: scale(0.9);
+         focus glide smoothly from card to card as you swipe. Blur increased to make
+         sneak peeks obvious — users see there's content beyond but can't read it. */
+      filter: blur(8px);
+      opacity: 0.65;
+      transform: scale(0.92);
       transition: filter 0.45s ease, opacity 0.45s ease, transform 0.45s ease;
     }
 
