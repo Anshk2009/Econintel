@@ -1764,6 +1764,7 @@
       overflow: hidden;
       scroll-snap-align: center;
       margin: 0;                   /* spacing now comes from the flex `gap` */
+      padding: 1.5rem;             /* reduced from 2rem to fit compact height */
 
       /* Default state = a SIDE card: moderately blurred, more opaque to show peek.
          Blur reduced from 8px to 5px so peek cards remain visible despite mask fade.
@@ -1774,6 +1775,19 @@
       transform: scale(0.94);
       transition: filter 0.45s ease, opacity 0.45s ease, transform 0.45s ease;
     }
+
+    /* Scale interior text + spacing to fit compact card height */
+    #pricing .pricing-tier { font-size: 0.65rem; margin-bottom: 0.35rem; }
+    #pricing .pricing-desc { font-size: 0.72rem; margin-bottom: 1.2rem; }
+    #pricing .pricing-amount { font-size: 2.4rem; }
+    #pricing .pricing-currency { font-size: 1rem; }
+    #pricing .pricing-period { font-size: 0.7rem; }
+    #pricing .pricing-divider { margin: 1rem 0; }
+    #pricing .pricing-features { gap: 0.5rem; }
+    #pricing .pricing-feature { font-size: 0.75rem; gap: 0.5rem; }
+    #pricing .pricing-feature .check { width: 14px; height: 14px; font-size: 0.55rem; }
+    #pricing .pricing-btn { margin-top: 1.2rem; padding: 0.65rem; font-size: 0.8rem; }
+    #pricing .pricing-popular-badge { font-size: 0.6rem; padding: 0.25rem 0.75rem; }
 
     /* The centred card — sharp, full opacity, full size. */
     #pricing .pricing-card.in-focus {
