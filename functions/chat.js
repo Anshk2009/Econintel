@@ -171,9 +171,10 @@ export async function onRequest(context) {
       queryEmbedding = (await r.json()).data[0].embedding;
     } catch { return EMPTY; }
 
-    // 2. Ask Supabase (match_documents) for the closest chunks. Pull a few extra
-    //    (5) so a citeable source has a chance to surface alongside the news that
-    //    dominates the library. match_documents now also returns `publishable`.
+    // 2. Ask Supabase (match_documents) for the closest chunks — hybrid search
+    //    (vector + keyword, fused with RRF) since migration-hybrid-retrieval.sql.
+    //    Pull 10 so a citeable source has a chance to surface alongside the news
+    //    that dominates the library. match_documents also returns `publishable`.
     let chunks;
     try {
       // SECURITY (L3): same 8s timeout guard for the vector search (fails open).
@@ -188,7 +189,12 @@ export async function onRequest(context) {
             'Authorization': `Bearer ${supabaseKey}`,
             'apikey': supabaseKey,
           },
-          body: JSON.stringify({ query_embedding: queryEmbedding, match_count: 5 }),
+          // HYBRID RETRIEVAL: query_text turns on the keyword (full-text) leg in
+          // match_documents (rag/migration-hybrid-retrieval.sql) — exact entities
+          // like "Volcker" / "1997" / "peg" that embeddings blur. match_count 10
+          // (was 5) gives the citeable/background split more to work with.
+          // Truncate the text; the fts leg doesn't need a full essay.
+          body: JSON.stringify({ query_embedding: queryEmbedding, match_count: 10, query_text: String(query).slice(0, 500) }),
           signal: matchCtl.signal,
         });
       } finally {

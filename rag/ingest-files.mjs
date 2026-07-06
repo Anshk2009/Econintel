@@ -25,7 +25,8 @@ import { upsertDoc } from './sources/_lib.mjs';
 const DOCS_DIR = './documents';
 
 // Chunk size in characters (~2000 ≈ 500 tokens). Overlap repeats 200 chars so a
-// sentence straddling a boundary isn't cut in half and lost.
+// sentence straddling a boundary isn't cut in half and lost. These now only
+// apply as the FALLBACK inside chunkText() — heading-based splitting comes first.
 const CHUNK_SIZE = 2000;
 const CHUNK_OVERLAP = 200;
 
@@ -41,8 +42,41 @@ function parseDoc(raw) {
   return { meta, body: m[2].trim() };
 }
 
-// Split text into overlapping chunks.
+// Split text into chunks, preferring MARKDOWN HEADING boundaries.
+// A chunking analysis of our case-study corpus showed heading-based splits give
+// 100% clean sentence breaks (a heading always starts a new thought), while
+// fixed 2000-char slicing cuts sentences mid-word. Strategy:
+//   1. Split the body at every "## Heading" line (each section keeps its heading,
+//      so the chunk carries its own topic label into the embedding).
+//   2. Merge small neighbouring sections until adding the next would pass
+//      CHUNK_SIZE — tiny sections shouldn't become one-line chunks.
+//   3. Any single section still longer than CHUNK_SIZE falls back to the old
+//      fixed-size overlapping split.
 function chunkText(text) {
+  // 1. Section per heading. The regex keeps the "## " with the section that
+  //    follows it (lookahead split, so nothing is thrown away).
+  const sections = text.split(/(?=^#{1,3} )/m).map(s => s.trim()).filter(Boolean);
+  if (sections.length <= 1) return fixedChunks(text);   // no headings — old behaviour
+
+  // 2. Greedily merge sections into ~CHUNK_SIZE chunks.
+  const chunks = [];
+  let current = '';
+  for (const sec of sections) {
+    if (current && (current.length + sec.length + 2) > CHUNK_SIZE) {
+      chunks.push(current);
+      current = sec;
+    } else {
+      current = current ? `${current}\n\n${sec}` : sec;
+    }
+  }
+  if (current) chunks.push(current);
+
+  // 3. Oversized single sections still get the fixed split.
+  return chunks.flatMap(c => (c.length > CHUNK_SIZE ? fixedChunks(c) : [c]));
+}
+
+// The old fixed-size overlapping split — now the fallback.
+function fixedChunks(text) {
   const chunks = [];
   let start = 0;
   while (start < text.length) {

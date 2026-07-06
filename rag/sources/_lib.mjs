@@ -28,13 +28,23 @@ export async function fetchWithTimeout(url, options = {}, ms = TIMEOUT_MS) {
 // Turn text into a 2048-dim embedding — SAME model as every other ingester and
 // the chat, so the vectors live in the same space.
 export async function embed(text) {
+  return (await embedBatch([text]))[0];
+}
+
+// Embed MANY texts in one API call (the embeddings endpoint accepts an array).
+// One request for 10 items instead of 10 requests — faster ingestion and far
+// fewer chances to trip OpenRouter's free-tier rate limit. Returns embeddings
+// in the same order as `texts` (sorted by the response's index field, since
+// the API doesn't guarantee response order).
+export async function embedBatch(texts) {
   const r = await fetchWithTimeout('https://openrouter.ai/api/v1/embeddings', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${OPENROUTER_EMBED_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'nvidia/llama-nemotron-embed-vl-1b-v2:free', input: text }),
+    body: JSON.stringify({ model: 'nvidia/llama-nemotron-embed-vl-1b-v2:free', input: texts }),
   });
   if (!r.ok) throw new Error(`Embedding failed: ${r.status} ${await r.text()}`);
-  return (await r.json()).data[0].embedding;
+  const data = (await r.json()).data;
+  return data.sort((a, b) => a.index - b.index).map(d => d.embedding);
 }
 
 // Embed + upsert one citeable document. Dedupes/updates on source_url (the unique

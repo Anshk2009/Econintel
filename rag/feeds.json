@@ -20,6 +20,10 @@
     { "name": "Moneycontrol Economy", "url": "https://www.moneycontrol.com/rss/economy.xml",                  "category": "india" },
     { "name": "Moneycontrol Business","url": "https://www.moneycontrol.com/rss/business.xml",                 "category": "india" },
     { "name": "Financial Express",    "url": "https://www.financialexpress.com/economy/feed/",                "category": "india" },
-    { "name": "The Hindu Economy",    "url": "https://www.thehindu.com/business/Economy/feeder/default.rss",  "category": "india" }
+    { "name": "The Hindu Economy",    "url": "https://www.thehindu.com/business/Economy/feeder/default.rss",  "category": "india" },
+    { "name": "ECB Press",            "url": "https://www.ecb.europa.eu/rss/press.xml",                        "category": "institution", "citeable": true },
+    { "name": "RBI Press Releases",   "url": "https://www.rbi.org.in/pressreleases_rss.xml",                   "category": "institution", "citeable": true },
+    { "name": "PIB India",            "url": "https://pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=3",          "category": "institution", "citeable": true },
+    { "name": "VoxEU / CEPR",         "url": "https://cepr.org/rss/vox-content",                               "category": "analysis" }
   ]
 }
