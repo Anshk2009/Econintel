@@ -1760,11 +1760,15 @@
     #pricing .pricing-card {
       flex: 0 0 80vw;              /* fixed width: don't grow or shrink */
       width: 80vw;
-      max-height: 56.25vh;         /* 0.75× 75vh = 56.25vh for more compact mobile cards */
-      overflow: hidden;
+      /* NO max-height / overflow:hidden here. The Pro card is the tallest (6
+         features + badge + 2-line desc + button); a fixed 56.25vh cap + clip cut
+         its bottom off ("crammed"). Cards now size to content and flex-stretch to
+         match the tallest, so nothing is truncated. The compact look the smaller
+         height was meant to give comes from the reduced fonts/padding below +
+         the scale() transform, not from clipping. */
       scroll-snap-align: center;
       margin: 0;                   /* spacing now comes from the flex `gap` */
-      padding: 1.5rem;             /* reduced from 2rem to fit compact height */
+      padding: 1.5rem;             /* compact padding (down from desktop 2rem) */
 
       /* Default state = a SIDE card: moderately blurred, more opaque to show peek.
          Blur reduced from 8px to 5px so peek cards remain visible despite mask fade.

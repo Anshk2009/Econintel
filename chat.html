@@ -1998,6 +1998,19 @@ async function sendMessage() {
 
   const thinkingEl = addMessage('assistant', 'Thinking…', { thinking: true });
 
+  // WATCHDOG — makes a hung request impossible to get "stuck" on. The server can
+  // stall in two places with no timeout of its own on the CLIENT side:
+  //   1. before any response headers arrive (slow RAG lookup / hung upstream), or
+  //   2. mid-stream, after headers, if the token stream stalls (reader.read()
+  //      would otherwise block forever and the reply bubble spins indefinitely).
+  // One AbortController covers both: 35s to get the first headers (RAG retrieval
+  // can add a few seconds), then re-armed to a 20s inactivity gap that resets on
+  // every token. If it fires, the fetch/stream aborts → caught below → a clear
+  // "timed out" message shows and the send button re-enables (finally).
+  const streamCtl = new AbortController();
+  let watchdog = setTimeout(() => streamCtl.abort(), 35000);
+  const armWatchdog = (ms) => { clearTimeout(watchdog); watchdog = setTimeout(() => streamCtl.abort(), ms); };
+
   try {
     // Small helper so we can fire the same request twice (see retry below).
     // Reads the CSRF token fresh each time — silentRefresh may have replaced it.
@@ -2008,6 +2021,7 @@ async function sendMessage() {
         'X-CSRF-Token': localStorage.getItem('econintel:csrf') || ''
       },
       credentials: 'include', // cookies (access_token) sent automatically
+      signal: streamCtl.signal, // watchdog can abort a hung request/stream
       body: JSON.stringify({ model: MODEL, messages: history, conversation_id: currentConversationId })
     });
 
@@ -2105,10 +2119,12 @@ async function sendMessage() {
     const dec = new TextDecoder();
     // partial holds an incomplete SSE line that was split across two chunks
     let partial = '';
+    armWatchdog(20000); // headers arrived — switch to the 20s inter-token inactivity guard
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+        armWatchdog(20000); // got a chunk — reset the inactivity timer
         // Prepend any leftover incomplete line, then split on newlines
         partial += dec.decode(value, { stream: true });
         const lines = partial.split('\n');
@@ -2129,9 +2145,13 @@ async function sendMessage() {
         }
       }
     } catch (err) {
-      // Network dropped mid-stream — keep whatever arrived
+      // Network dropped OR watchdog aborted a stalled stream — keep whatever arrived
       if (!started) beginReply();
-      if (!fullReply) msgEl.textContent = 'Stream interrupted. Try again.';
+      if (!fullReply) {
+        msgEl.textContent = err.name === 'AbortError'
+          ? 'The response timed out. Please try again.'
+          : 'Stream interrupted. Try again.';
+      }
     }
     // Stream produced nothing — make sure the dots don't spin forever.
     if (!started) { beginReply(); if (!fullReply) msgEl.textContent = 'No response.'; }
@@ -2148,11 +2168,15 @@ async function sendMessage() {
     if (history.length === 3 && getUser()) loadRecentChats();
   } catch (err) {
     thinkingEl.remove();
-    addMessage('assistant',
-      `Network error: ${err.message}. Make sure /functions/chat is reachable.`,
-      { error: true });
+    // AbortError here = the watchdog fired BEFORE any response headers arrived
+    // (hung request / slow RAG lookup), not a mid-stream stall (that's caught above).
+    const msg = err.name === 'AbortError'
+      ? 'The request timed out. Please try again.'
+      : `Network error: ${err.message}. Make sure /functions/chat is reachable.`;
+    addMessage('assistant', msg, { error: true });
   } finally {
-    setSending(false); // re-enable the send button on every exit path (success, error, early return)
+    clearTimeout(watchdog); // stop the watchdog on every exit path (success, error, early return)
+    setSending(false); // re-enable the send button on every exit path
   }
 }
 
