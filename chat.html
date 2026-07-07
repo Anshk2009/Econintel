@@ -679,8 +679,16 @@
     box-shadow: 0 4px 18px -8px rgba(200,100,50,0.12);
   }
   body.light .msg.assistant a { color: #c05a20; }
-  body.light .msg.assistant code { background: rgba(0,0,0,0.07); }
-  body.light .msg.assistant pre { background: rgba(0,0,0,0.05); }
+  /* The dark-mode heading/bold/code colours are near-white — override them back to
+     dark tones so they stay readable on the light cream bubble. */
+  body.light .msg.assistant strong { color: #1a0f08; }
+  body.light .msg.assistant h2 { color: #241009; }
+  body.light .msg.assistant h3 { color: #3a1c10; }
+  body.light .msg.assistant li::marker { color: #f08a5d; }
+  body.light .msg.assistant { border-color: rgba(120,60,30,0.12); }
+  body.light .msg.assistant code { background: rgba(0,0,0,0.07); color: #7a3410; }
+  body.light .msg.assistant pre { background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.08); }
+  body.light .msg.assistant pre code { color: #2a1810; }
   body.light .chat-greeting { color: #2a1810; }
   body.light .chat-greeting em {
     color: var(--text);
@@ -843,33 +851,39 @@
   .msg {
     padding: 0.85rem 1.1rem;
     border-radius: 14px;
-    font-size: 0.95rem; line-height: 1.6;
+    /* Reading comfort: slightly larger body + more open leading so long
+       reasoning answers don't feel dense. */
+    font-size: 1rem; line-height: 1.72;
     word-wrap: break-word;
   }
   /* User messages are plain text — keep literal whitespace */
   .msg.user { white-space: pre-wrap; }
   /* Markdown element styles inside assistant bubbles */
-  .msg.assistant p { margin: 0 0 0.5rem; }
+  .msg.assistant p { margin: 0 0 0.8rem; }
   .msg.assistant p:last-child { margin-bottom: 0; }
-  .msg.assistant ul, .msg.assistant ol { padding-left: 1.25rem; margin: 0.3rem 0 0.5rem; }
-  .msg.assistant li { margin-bottom: 0.25rem; }
-  .msg.assistant strong { font-weight: 700; }
+  .msg.assistant ul, .msg.assistant ol { padding-left: 1.4rem; margin: 0.5rem 0 0.85rem; }
+  .msg.assistant li { margin-bottom: 0.45rem; }
+  .msg.assistant li::marker { color: #6f9bff; }        /* branded bullet/number */
+  .msg.assistant strong { font-weight: 700; color: #f4f7fc; }  /* key terms pop a touch brighter */
   .msg.assistant em { font-style: italic; }
   .msg.assistant code {
-    font-family: 'Fira Code', 'Courier New', monospace; font-size: 0.85em;
-    background: rgba(255,255,255,0.1); padding: 0.15em 0.35em;
-    border-radius: 4px;
+    font-family: 'Fira Code', 'Courier New', monospace; font-size: 0.86em;
+    background: rgba(122,167,255,0.14); color: #cdddff;
+    padding: 0.12em 0.4em; border-radius: 5px;
   }
   .msg.assistant pre {
-    background: rgba(0,0,0,0.35); border-radius: 8px;
-    padding: 0.8rem 1rem; margin: 0.5rem 0;
+    background: rgba(0,0,0,0.32); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px; padding: 0.85rem 1rem; margin: 0.7rem 0;
     overflow-x: auto;
   }
-  .msg.assistant pre code { background: none; padding: 0; font-size: 0.85rem; }
-  .msg.assistant a { color: #7aa7ff; text-decoration: underline; }
-  .msg.assistant h2 { font-size: 1rem; font-weight: 700; margin: 0.6rem 0 0.2rem; }
-  .msg.assistant h3 { font-size: 0.95rem; font-weight: 600; margin: 0.5rem 0 0.2rem; }
-  .msg.assistant hr { border: none; border-top: 1px solid rgba(255,255,255,0.12); margin: 0.6rem 0; }
+  .msg.assistant pre code { background: none; padding: 0; color: #dfe7f5; font-size: 0.85rem; }
+  .msg.assistant a { color: #86b0ff; text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+  .msg.assistant a:hover { color: #a8c6ff; }
+  /* Clear heading hierarchy so scannable structure emerges from a wall of text. */
+  .msg.assistant h2 { font-size: 1.16rem; font-weight: 700; color: #f2f6fd; margin: 1rem 0 0.35rem; letter-spacing: -0.01em; }
+  .msg.assistant h3 { font-size: 1.02rem; font-weight: 600; color: #eaf0fa; margin: 0.85rem 0 0.3rem; }
+  .msg.assistant h2:first-child, .msg.assistant h3:first-child { margin-top: 0; }
+  .msg.assistant hr { border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 0.9rem 0; }
   .msg.user {
     align-self: flex-end;
     background: var(--bg-input);
@@ -878,15 +892,21 @@
   }
   .msg.assistant {
     align-self: flex-start;
-    background: linear-gradient(135deg, rgba(13,22,52,0.94), rgba(22,34,72,0.94));
-    border-left: 2px solid #3b6ed8;
-    color: #e8ecf6;
+    /* SOLID (fully opaque) deep-navy reading surface. The old bubble was 0.94
+       alpha, so the ANIMATED page gradient bled through and subtly shifted the
+       contrast under the text as it moved — the main eye-strain cause. An opaque
+       surface keeps the reading contrast dead-steady. */
+    background: linear-gradient(180deg, #141f39 0%, #111a30 100%);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-left: 3px solid #4d82e6;      /* refined brand accent rail */
+    color: #dfe6f2;                       /* soft off-white — high contrast without pure-white glare */
     max-width: 100%;
-    border-radius: 14px;
-    padding-left: 1rem;
-    box-shadow: 0 8px 26px -14px rgba(20,45,110,0.65);
+    border-radius: 16px;
+    padding: 1rem 1.3rem;
+    letter-spacing: 0.002em;
+    box-shadow: 0 12px 34px -20px rgba(0,0,0,0.75);
   }
-  .msg.assistant a { color: #7aa7ff; }
+  .msg.assistant a { color: #86b0ff; }
   .msg.assistant.thinking {
     display: inline-flex; align-items: center;
     padding: 0.95rem 1.2rem;
