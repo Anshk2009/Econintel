@@ -588,11 +588,8 @@
     font-size: 0.8rem; color: var(--text2);
   }
 
-  /* ── ENTER TERMINAL CTA (bridge between hero and case studies) ── */
-  .terminal-cta-wrap {
-    display: flex; justify-content: center;
-    padding: 2.5rem 1.5rem 0;
-  }
+  /* ── ENTER TERMINAL CTA (hero primary call-to-action) ── */
+  .hero-cta { margin-top: 2.2rem; }
   .terminal-cta {
     display: inline-flex; align-items: center; gap: 0.6rem;
     background: var(--accent); color: #04131f;
@@ -613,7 +610,7 @@
   /* Responsive */
   @media (max-width: 640px) {
     #hero { padding: 100px 1.5rem 1rem; min-height: auto; }
-    .terminal-cta-wrap { padding: 1.5rem 1.5rem 0; }
+    .hero-cta { margin-top: 1.6rem; }
     .hero-left { padding-top: 0; transform: none; }
     .hero-heading { font-size: clamp(2.2rem, 4.5vw, 3.2rem); margin-bottom: 1rem; }
     .hero-sub { max-width: 100%; font-size: 0.95rem; margin-bottom: 1.5rem; }
@@ -1895,6 +1892,15 @@
       <p class="hero-sub">
         Economic analysis powered by AI. Get structured insights on crisis mechanisms, policy effects, and second-order impacts.
       </p>
+      <!-- Primary CTA — anchored to the hero text (left-aligned) instead of floating
+           centered below the whole grid. This is the hero's main call-to-action. -->
+      <a href="chat.html" class="terminal-cta hero-cta">
+        <!-- Terminal prompt icon: > _ -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+        </svg>
+        Enter Terminal
+      </a>
     </div>
 
     <!-- Right: Spline 3D Robot -->
@@ -1971,17 +1977,6 @@
   </div>
 </section>
 
-<!-- ENTER TERMINAL CTA — sits between the hero and the proof sections -->
-<div class="terminal-cta-wrap reveal">
-  <a href="chat.html" class="terminal-cta">
-    <!-- Terminal prompt icon: > _ -->
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-      <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
-    </svg>
-    Enter Terminal
-  </a>
-</div>
-
 <!-- SECTION 2: CRISIS ANALOGUES -->
 <!-- CASE STUDIES -->
 <section id="case-studies">
@@ -1994,29 +1989,6 @@
     <a class="case-card reveal" href="https://www.britannica.com/money/financial-crisis-of-2007-2008" target="_blank" rel="noopener"><div class="case-year">2008 — Global</div><div class="case-name">Global Financial Crisis</div><div class="case-desc">Credit instrument mispricing, leverage unwind, and global transmission through interbank markets.</div><div class="case-tags"><span class="case-tag">Credit</span><span class="case-tag">Systemic</span><span class="case-tag">QE</span></div><div class="case-link-label">Read article</div></a>
     <a class="case-card reveal" href="https://www.bbc.com/news/business-13798000" target="_blank" rel="noopener"><div class="case-year">2011 — Europe</div><div class="case-name">Eurozone Debt Crisis</div><div class="case-desc">Sovereign spread blowout in periphery nations. Draghi "whatever it takes" as the policy turning point.</div><div class="case-tags"><span class="case-tag">Sovereign Debt</span><span class="case-tag">ECB</span></div><div class="case-link-label">Read BBC report</div></a>
     <a class="case-card reveal" href="https://www.imf.org/en/Publications/WEO/Issues/2020/09/30/world-economic-outlook-october-2020" target="_blank" rel="noopener"><div class="case-year">2020 — Global</div><div class="case-name">COVID Economic Shock</div><div class="case-desc">Simultaneous demand and supply collapse with unprecedented fiscal and monetary response.</div><div class="case-tags"><span class="case-tag">Supply Shock</span><span class="case-tag">Fiscal</span></div><div class="case-link-label">Read IMF outlook</div></a>
-  </div>
-</section>
-
-<!-- SOURCES -->
-<section id="sources">
-  <div class="eyebrow reveal">Intelligence Sources</div>
-  <div class="sec-title reveal">Multi-Source Synthesis</div>
-  <div class="sources-grid">
-    <div class="reveal">
-      <a class="source-row" href="https://www.bbc.com/news/business" target="_blank" rel="noopener"><div class="source-bullet"></div><div class="source-name">BBC World Service</div><div class="source-type">Western Media</div><div class="source-arrow">↗</div></a>
-      <a class="source-row" href="https://www.thehindu.com/business/" target="_blank" rel="noopener"><div class="source-bullet"></div><div class="source-name">The Hindu</div><div class="source-type">South Asian</div><div class="source-arrow">↗</div></a>
-      <a class="source-row" href="https://www.aljazeera.com/economy/" target="_blank" rel="noopener"><div class="source-bullet"></div><div class="source-name">Al Jazeera</div><div class="source-type">Non-Western Global</div><div class="source-arrow">↗</div></a>
-      <a class="source-row" href="https://www.imf.org/en/Publications" target="_blank" rel="noopener"><div class="source-bullet"></div><div class="source-name">IMF · World Bank · OECD</div><div class="source-type">Institutional Primary</div><div class="source-arrow">↗</div></a>
-      <a class="source-row" href="https://www.federalreserve.gov/newsevents/pressreleases.htm" target="_blank" rel="noopener"><div class="source-bullet"></div><div class="source-name">Central Bank Statements</div><div class="source-type">Policy Primary</div><div class="source-arrow">↗</div></a>
-      <a class="source-row" href="https://finance.yahoo.com/topic/earnings/" target="_blank" rel="noopener"><div class="source-bullet"></div><div class="source-name">CEO / CFO Conference Calls</div><div class="source-type">Executive Sentiment</div><div class="source-arrow">↗</div></a>
-    </div>
-    <div class="bias-card reveal">
-      <div class="bias-title">Bias Filtration Protocol</div>
-      <div class="bias-row"><span class="bias-label">Western narrative isolation</span><div class="bias-meter"><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot"></div></div></div>
-      <div class="bias-row"><span class="bias-label">Non-Western perspective</span><div class="bias-meter"><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div></div></div>
-      <div class="bias-row"><span class="bias-label">Primary source preference</span><div class="bias-meter"><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div></div></div>
-      <div class="bias-row"><span class="bias-label">Editorial framing separation</span><div class="bias-meter"><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot"></div></div></div>
-    </div>
   </div>
 </section>
 
@@ -2098,6 +2070,29 @@
         <li class="pricing-feature has"><span class="check">✓</span>Fortnightly economic magazine</li>
       </ul>
       <a href="#contact" class="pricing-btn pricing-btn-outline">Contact Sales</a>
+    </div>
+  </div>
+</section>
+
+<!-- SOURCES -->
+<section id="sources">
+  <div class="eyebrow reveal">Intelligence Sources</div>
+  <div class="sec-title reveal">Multi-Source Synthesis</div>
+  <div class="sources-grid">
+    <div class="reveal">
+      <a class="source-row" href="https://www.bbc.com/news/business" target="_blank" rel="noopener"><div class="source-bullet"></div><div class="source-name">BBC World Service</div><div class="source-type">Western Media</div><div class="source-arrow">↗</div></a>
+      <a class="source-row" href="https://www.thehindu.com/business/" target="_blank" rel="noopener"><div class="source-bullet"></div><div class="source-name">The Hindu</div><div class="source-type">South Asian</div><div class="source-arrow">↗</div></a>
+      <a class="source-row" href="https://www.aljazeera.com/economy/" target="_blank" rel="noopener"><div class="source-bullet"></div><div class="source-name">Al Jazeera</div><div class="source-type">Non-Western Global</div><div class="source-arrow">↗</div></a>
+      <a class="source-row" href="https://www.imf.org/en/Publications" target="_blank" rel="noopener"><div class="source-bullet"></div><div class="source-name">IMF · World Bank · OECD</div><div class="source-type">Institutional Primary</div><div class="source-arrow">↗</div></a>
+      <a class="source-row" href="https://www.federalreserve.gov/newsevents/pressreleases.htm" target="_blank" rel="noopener"><div class="source-bullet"></div><div class="source-name">Central Bank Statements</div><div class="source-type">Policy Primary</div><div class="source-arrow">↗</div></a>
+      <a class="source-row" href="https://finance.yahoo.com/topic/earnings/" target="_blank" rel="noopener"><div class="source-bullet"></div><div class="source-name">CEO / CFO Conference Calls</div><div class="source-type">Executive Sentiment</div><div class="source-arrow">↗</div></a>
+    </div>
+    <div class="bias-card reveal">
+      <div class="bias-title">Bias Filtration Protocol</div>
+      <div class="bias-row"><span class="bias-label">Western narrative isolation</span><div class="bias-meter"><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot"></div></div></div>
+      <div class="bias-row"><span class="bias-label">Non-Western perspective</span><div class="bias-meter"><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div></div></div>
+      <div class="bias-row"><span class="bias-label">Primary source preference</span><div class="bias-meter"><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div></div></div>
+      <div class="bias-row"><span class="bias-label">Editorial framing separation</span><div class="bias-meter"><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot"></div></div></div>
     </div>
   </div>
 </section>
