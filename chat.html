@@ -1774,17 +1774,17 @@
 // ── MARKDOWN RENDERER ──
 // Converts AI response markdown to safe HTML. Applied after stream ends,
 // not during streaming (so partial tokens don't break mid-tag).
-function escHtml(s) {
-  // Escape HTML special chars to prevent XSS when inserting into innerHTML
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
+// renderMarkdown uses escapeHTML (defined below — function declarations are
+// hoisted, so the definition order doesn't matter) instead of a second
+// escaper: it was a near-duplicate that skipped quotes, which is harmless to
+// also escape in text content.
 function renderMarkdown(raw) {
   let t = raw;
   // Step 1: Extract fenced code blocks (```lang\ncode\n```) so inner content
   // isn't touched by bold/italic/link replacements
   const blocks = [];
   t = t.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
-    blocks.push(`<pre><code>${escHtml(code.trim())}</code></pre>`);
+    blocks.push(`<pre><code>${escapeHTML(code.trim())}</code></pre>`);
     return `\x00B${blocks.length - 1}\x00`; // placeholder
   });
   // Step 1b: SECURITY — escape ALL remaining text BEFORE any other transform.
@@ -1796,7 +1796,7 @@ function renderMarkdown(raw) {
   // markdown rules below only re-introduce the safe tags WE generate.
   // Fenced code blocks are already safe — escaped and swapped for \x00
   // placeholders in Step 1 — so this does not touch them.
-  t = escHtml(t);
+  t = escapeHTML(t);
   // Step 2: Inline code (content is already escaped by Step 1b — just wrap it,
   // do NOT escape again or it would double-encode into &amp;lt; etc.)
   t = t.replace(/`([^`\n]+)`/g, (_, c) => `<code>${c}</code>`);
@@ -1805,11 +1805,10 @@ function renderMarkdown(raw) {
   t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   t = t.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
   // Step 4: Links — only allow http/https to prevent javascript: injection.
-  // SECURITY (H2): escHtml() above escapes < > & but NOT the double-quote, so a
-  // URL containing a " could close the href="" attribute early and inject its own
-  // attributes / event handlers (e.g. [x](https://a" onmouseover=alert``)). We
-  // percent-encode any quote or angle-bracket left in the URL so it can only ever
-  // be a URL, never new markup. The link TEXT was already escaped in Step 1b.
+  // SECURITY (H2): escapeHTML() above already escapes the quote in the URL too,
+  // but percent-encoding it here is belt-and-suspenders — it guarantees the URL
+  // can only ever be a URL, never new markup, even if Step 1b's escaping rules
+  // change later. The link TEXT was already escaped in Step 1b.
   t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, (_, text, url) => {
     const safeUrl = url.replace(/"/g, '%22').replace(/'/g, '%27')
                        .replace(/</g, '%3C').replace(/>/g, '%3E');

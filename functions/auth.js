@@ -224,7 +224,11 @@ async function handleSignup(request, env, jwtSecret, allowedOrigin) {
 
     // Now check whether the email or username is already taken.
     const existingEmailRes = await supabaseRest('users', 'GET', `email=eq.${encodeURIComponent(normalizedEmail)}&select=id`);
-    const existingUsernameRes = await supabaseRest('users', 'GET', `username=ilike.${encodeURIComponent(username)}&select=id`);
+    // SECURITY: eq. (exact match), not ilike. — the username regex allows '_' and
+    // a raw ilike turns that into a PostgREST/SQL LIKE wildcard, letting an
+    // attacker grind position-by-position to confirm which usernames already
+    // exist (a boolean-oracle enumeration the eq. email check above doesn't have).
+    const existingUsernameRes = await supabaseRest('users', 'GET', `username=eq.${encodeURIComponent(username)}&select=id`);
     const existingEmail = existingEmailRes.data?.[0];
     const existingUsername = existingUsernameRes.data?.[0];
 
@@ -853,10 +857,6 @@ async function handleVerifyEmail(request, env, allowedOrigin) {
     return jsonResponse({ error: 'Failed to verify email' }, 500, allowedOrigin);
   }
 }
-
-// ============================================================================
-// UTILITY: Check password against HaveIBeenPwned API (Phase 9)
-// ============================================================================
 
 // ============================================================================
 // REFRESH TOKEN (Phase 6)
