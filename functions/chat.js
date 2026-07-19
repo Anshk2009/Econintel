@@ -17,11 +17,11 @@ import { verifyJWT, jsonResponse, corsPreflightResponse, hashIP, makeSupabase, g
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // Chat models, chosen server-side by plan (users can't request a pricier one).
-// Free tier + guests get Gemma; paid tiers (pro/enterprise) get gpt-oss-120b.
+// Free tier + guests get Gemma; paid tiers (pro/enterprise) get Nemotron Ultra.
 // Both are OpenRouter ":free" endpoints today (no extra key/cost) — to move a
 // paid tier onto a truly paid endpoint later, drop its ":free" suffix.
 const FREE_MODEL = 'google/gemma-4-31b-it:free';   // free plan + guests
-const PAID_MODEL = 'openai/gpt-oss-120b:free';     // pro + enterprise
+const PAID_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b:free'; // pro + enterprise
 
 // Per-IP quota for the FREE model: it draws on OpenRouter's SHARED free-model
 // allowance for our single key, so we cap how much any one network can pull —
@@ -48,7 +48,7 @@ const RATE_LIMITS = {
 // Voice/format reworked per founder's brief (sharper "trading desk" persona,
 // strict bullets). The SOURCES POLICY is deliberately the SAFE one — no
 // "always cite", no hardcoded domain allowlist — because telling the model to
-// always cite with no retrieved source makes gpt-oss-120b fabricate plausible
+// always cite with no retrieved source makes the paid model fabricate plausible
 // fake links/figures (the documented "empty library = confident fabrication"
 // bug). Sources are on-demand only and come ONLY from retrieval-injected SOURCES.
 const SYSTEM_PROMPT = `You are EconIntel — a Bloomberg-trained analyst with a Wharton degree and a dry sense of humour. You've seen every market cycle, read every central-bank statement, and have zero patience for vague answers or bad takes.
@@ -331,7 +331,7 @@ export async function onRequest(context) {
     await TOKENS.put(dailyKey, String(usedToday + 1), { expirationTtl: 86400 });
   }
 
-  // Pick the model by plan: paid tiers (pro/enterprise) get gpt-oss-120b; everyone
+  // Pick the model by plan: paid tiers (pro/enterprise) get PAID_MODEL; everyone
   // else (free plan + guests) gets the free Gemma model.
   const model = (userPlan === 'pro' || userPlan === 'enterprise') ? PAID_MODEL : FREE_MODEL;
 
