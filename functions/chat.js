@@ -130,7 +130,7 @@ export async function onRequest(context) {
   // Supabase down, empty library), it returns '' and the chat just answers
   // normally instead of breaking.
   //
-  // Embeddings use nvidia/llama-nemotron-embed-vl-1b-v2:free via OpenRouter
+  // Embeddings use nvidia/nemotron-3-embed-1b:free via OpenRouter
   // (2048 dims) — this MUST match the ingester (rag/ingest-live.mjs) and the
   // vector(2048) column (rag/schema.sql). Uses a SEPARATE OpenRouter key,
   // OPENROUTER_EMBED_KEY (set in EdgeOne env vars), so chat and embeddings have
@@ -161,7 +161,7 @@ export async function onRequest(context) {
             'Authorization': `Bearer ${env.OPENROUTER_EMBED_KEY}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ model: 'nvidia/llama-nemotron-embed-vl-1b-v2:free', input: query }),
+          body: JSON.stringify({ model: 'nvidia/nemotron-3-embed-1b:free', input: query }),
           signal: embedCtl.signal,
         });
       } finally {

@@ -40,7 +40,7 @@ export async function embedBatch(texts) {
   const r = await fetchWithTimeout('https://openrouter.ai/api/v1/embeddings', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${OPENROUTER_EMBED_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'nvidia/llama-nemotron-embed-vl-1b-v2:free', input: texts }),
+    body: JSON.stringify({ model: 'nvidia/nemotron-3-embed-1b:free', input: texts }),
   });
   if (!r.ok) throw new Error(`Embedding failed: ${r.status} ${await r.text()}`);
   const data = (await r.json()).data;
