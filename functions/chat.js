@@ -18,21 +18,32 @@ const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // NVIDIA's build.nvidia.com trial endpoint (OpenAI-compatible, same SSE stream
 // format as OpenRouter). BETA-TESTING ONLY: the free trial credits are licensed
-// for development/testing/evaluation — move paid tiers to a production endpoint
-// (paid OpenRouter) before real launch. Used ONLY when NVIDIA_API_KEY is set in
-// the EdgeOne env vars; otherwise paid tiers stay on OpenRouter unchanged.
+// for development/testing/evaluation — move tiers back to OpenRouter (or a paid
+// endpoint) before real launch.
 const NVIDIA_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
-const NVIDIA_PAID_MODEL = 'nvidia/nemotron-3-super-120b-a12b';
 
-// Chat models, chosen server-side by plan (users can't request a pricier one).
-// Free tier + guests get Gemma; paid tiers (pro/enterprise) get Nemotron Ultra.
-// Both are OpenRouter ":free" endpoints today (no extra key/cost) — to move a
-// paid tier onto a truly paid endpoint later, drop its ":free" suffix.
-const FREE_MODEL = 'google/gemma-4-31b-it:free';   // free plan + guests
-const PAID_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b:free'; // pro + enterprise
+// ── MODEL BUCKETS — one per plan tier (guests count as 'free') ──────────────
+// To re-route any tier later, edit ITS line only: provider is 'nvidia' or
+// 'openrouter', model is that provider's model id. Nothing else to touch.
+// BETA: all three tiers currently on NVIDIA — paid tiers get Super 120B
+// (strongest fast model), free/guests get Nano 30B (quick, cheap on the
+// shared 40 req/min trial limit).
+const MODEL_BUCKETS = {
+  free:       { provider: 'nvidia', model: 'nvidia/nemotron-3-nano-30b-a3b' },
+  pro:        { provider: 'nvidia', model: 'nvidia/nemotron-3-super-120b-a12b' },
+  enterprise: { provider: 'nvidia', model: 'nvidia/nemotron-3-super-120b-a12b' },
+};
+// Safety net: if a bucket says 'nvidia' but NVIDIA_API_KEY isn't set in the
+// EdgeOne env, that tier silently falls back to these OpenRouter models — a
+// missing key degrades to the old behaviour instead of breaking chat.
+const OPENROUTER_FALLBACK = {
+  free:       'google/gemma-4-31b-it:free',
+  pro:        'nvidia/nemotron-3-ultra-550b-a55b:free',
+  enterprise: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+};
 
-// Per-IP quota for the FREE model: it draws on OpenRouter's SHARED free-model
-// allowance for our single key, so we cap how much any one network can pull —
+// Per-IP quota for the FREE tier: free/guest traffic draws on the provider's
+// SHARED allowance for our single key, so we cap how much any one network can pull —
 // 30 messages per 36 hours per IP. Separate from the per-account daily cap and
 // per-minute throttle below. ponytail: per-IP is coarse (IPv6 rotation can dodge
 // it), but shared-quota protection is the point; OpenRouter's free-tier limit and
@@ -343,20 +354,25 @@ export async function onRequest(context) {
     await TOKENS.put(dailyKey, String(usedToday + 1), { expirationTtl: 86400 });
   }
 
-  // Pick the model by plan: paid tiers (pro/enterprise) get PAID_MODEL; everyone
-  // else (free plan + guests) gets the free Gemma model. If NVIDIA_API_KEY is
-  // set, paid tiers use NVIDIA's endpoint/model instead (beta-testing route —
-  // its own quota pool, separate from OpenRouter's shared free-model cap).
-  const isPaidPlan = (userPlan === 'pro' || userPlan === 'enterprise');
-  const viaNvidia = isPaidPlan && !!NVIDIA_API_KEY;
-  const model = isPaidPlan ? (viaNvidia ? NVIDIA_PAID_MODEL : PAID_MODEL) : FREE_MODEL;
+  // Pick this tier's bucket (see MODEL_BUCKETS at the top — guests count as
+  // 'free'). If the bucket wants NVIDIA but the key isn't configured, fall back
+  // to the tier's OpenRouter model so chat keeps working.
+  const tier = (userPlan === 'pro' || userPlan === 'enterprise') ? userPlan : 'free';
+  const isPaidPlan = tier !== 'free';
+  let bucket = MODEL_BUCKETS[tier];
+  if (bucket.provider === 'nvidia' && !NVIDIA_API_KEY) {
+    bucket = { provider: 'openrouter', model: OPENROUTER_FALLBACK[tier] };
+  }
+  const viaNvidia = bucket.provider === 'nvidia';
+  const model = bucket.model;
 
-  // Per-IP quota for the free model (30 per 36h) — protects OpenRouter's shared
-  // free-model allowance from being drained by one network. Fixed 36h window (the
-  // bucket number is baked into the key) so it resets deterministically, not on a
-  // sliding TTL. Checked HERE, before the body/embedding/completion work below, so
-  // an over-limit caller bails cheap. Paid users skip it (paid model + their own caps).
-  if (model === FREE_MODEL) {
+  // Per-IP quota for the free tier (30 per 36h) — protects the provider's shared
+  // allowance (OpenRouter free pool / NVIDIA trial credits) from being drained by
+  // one network. Fixed 36h window (the bucket number is baked into the key) so it
+  // resets deterministically, not on a sliding TTL. Checked HERE, before the
+  // body/embedding/completion work below, so an over-limit caller bails cheap.
+  // Paid users skip it (their own per-account caps below).
+  if (!isPaidPlan) {
     const freeIP = request.headers.get('EO-Connecting-IP') || 'unknown';
     const freeIPHash = await hashIP(freeIP);
     const freeBucket = Math.floor(Date.now() / (FREE_IP_WINDOW * 1000));
@@ -409,7 +425,7 @@ export async function onRequest(context) {
     );
   }
 
-  // Model is chosen server-side by plan (see FREE_MODEL / PAID_MODEL near the top),
+  // Model is chosen server-side by plan (see MODEL_BUCKETS near the top),
   // so the user can't choose it — any client-supplied body.model is ignored.
 
   // Phase 7: Cap message count (prevent token inflation)
