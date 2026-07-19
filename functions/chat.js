@@ -16,6 +16,14 @@ import { verifyJWT, jsonResponse, corsPreflightResponse, hashIP, makeSupabase, g
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
+// NVIDIA's build.nvidia.com trial endpoint (OpenAI-compatible, same SSE stream
+// format as OpenRouter). BETA-TESTING ONLY: the free trial credits are licensed
+// for development/testing/evaluation — move paid tiers to a production endpoint
+// (paid OpenRouter) before real launch. Used ONLY when NVIDIA_API_KEY is set in
+// the EdgeOne env vars; otherwise paid tiers stay on OpenRouter unchanged.
+const NVIDIA_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
+const NVIDIA_PAID_MODEL = 'nvidia/nemotron-3-super-120b-a12b';
+
 // Chat models, chosen server-side by plan (users can't request a pricier one).
 // Free tier + guests get Gemma; paid tiers (pro/enterprise) get Nemotron Ultra.
 // Both are OpenRouter ":free" endpoints today (no extra key/cost) — to move a
@@ -118,6 +126,10 @@ export async function onRequest(context) {
   const OPENROUTER_API_KEY = env.OPENROUTER_API_KEY;
   const JWT_SECRET = env.JWT_SECRET;
   const ALLOWED_ORIGIN = env.ALLOWED_ORIGIN;
+  // Optional: when set, paid tiers route to NVIDIA's trial endpoint instead of
+  // OpenRouter (separate quota pool — unblocks beta testing while the OpenRouter
+  // shared free-model cap is exhausted). No throw: absent = OpenRouter as before.
+  const NVIDIA_API_KEY = env.NVIDIA_API_KEY;
 
   // Supabase REST + KV helpers (shared factory in middleware.js). supabaseUrl /
   // supabaseKey are used directly by retrieveContext's match_documents RPC below.
@@ -332,8 +344,12 @@ export async function onRequest(context) {
   }
 
   // Pick the model by plan: paid tiers (pro/enterprise) get PAID_MODEL; everyone
-  // else (free plan + guests) gets the free Gemma model.
-  const model = (userPlan === 'pro' || userPlan === 'enterprise') ? PAID_MODEL : FREE_MODEL;
+  // else (free plan + guests) gets the free Gemma model. If NVIDIA_API_KEY is
+  // set, paid tiers use NVIDIA's endpoint/model instead (beta-testing route —
+  // its own quota pool, separate from OpenRouter's shared free-model cap).
+  const isPaidPlan = (userPlan === 'pro' || userPlan === 'enterprise');
+  const viaNvidia = isPaidPlan && !!NVIDIA_API_KEY;
+  const model = isPaidPlan ? (viaNvidia ? NVIDIA_PAID_MODEL : PAID_MODEL) : FREE_MODEL;
 
   // Per-IP quota for the free model (30 per 36h) — protects OpenRouter's shared
   // free-model allowance from being drained by one network. Fixed 36h window (the
@@ -462,11 +478,17 @@ export async function onRequest(context) {
     const aiCtl = new AbortController();
     const aiTimer = setTimeout(() => aiCtl.abort(), 30000);
     try {
-      upstream = await fetch(OPENROUTER_URL, {
+      // Same OpenAI-compatible request either way; only the URL + key differ.
+      // enable_thinking:false (NVIDIA only): Nemotron models emit reasoning
+      // tokens by default, which would burn most of the 550-token budget before
+      // the visible answer starts — and our SSE parser only reads delta.content,
+      // so those tokens would be paid for and thrown away. OpenRouter ignores
+      // unknown fields, but we only send it on the NVIDIA path to be safe.
+      upstream = await fetch(viaNvidia ? NVIDIA_URL : OPENROUTER_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+          'Authorization': `Bearer ${viaNvidia ? NVIDIA_API_KEY : OPENROUTER_API_KEY}`,
           'HTTP-Referer': ALLOWED_ORIGIN,
           'X-Title': 'EconIntel',
         },
@@ -477,6 +499,7 @@ export async function onRequest(context) {
           temperature: 0.5,
           top_p: 0.9,
           stream: true, // tokens arrive immediately instead of waiting for full response
+          ...(viaNvidia ? { chat_template_kwargs: { enable_thinking: false } } : {}),
         }),
         signal: aiCtl.signal,
       });
