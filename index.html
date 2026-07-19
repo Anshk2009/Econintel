@@ -1790,11 +1790,46 @@
     #pricing .pricing-btn { margin-top: 1.2rem; padding: 0.65rem; font-size: 0.8rem; }
     #pricing .pricing-popular-badge { font-size: 0.6rem; padding: 0.25rem 0.75rem; }
 
-    /* The centred card — sharp, full opacity, full size. */
+    /* ── GLOWY BACKDROP behind the slider ──
+       A soft radial glow centred behind the cards so the focused plan looks
+       lit from behind. It's painted on #pricing's own ::before (NOT on the
+       scrolling .pricing-grid) so it stays fixed while cards swipe past it.
+       pointer-events:none keeps it from stealing swipes; z-index sits it
+       behind the cards. Phones only — this whole block is ≤600px. */
+    #pricing { position: relative; }
+    #pricing::before {
+      content: '';
+      position: absolute;
+      left: 50%; transform: translateX(-50%);
+      /* Vertically centred over the slider area (below the toggle row) */
+      bottom: 0;
+      width: 120vw; height: 60vh;
+      pointer-events: none;
+      z-index: 0;
+      background:
+        radial-gradient(ellipse 60% 50% at 50% 55%, rgba(14,165,233,0.22), transparent 70%),
+        radial-gradient(ellipse 40% 35% at 50% 60%, rgba(99,102,241,0.18), transparent 70%);
+      filter: blur(12px);
+    }
+    /* Light mode swaps the cyan/indigo glow for the site's peach accent. */
+    body.light #pricing::before {
+      background:
+        radial-gradient(ellipse 60% 50% at 50% 55%, rgba(240,138,93,0.20), transparent 70%),
+        radial-gradient(ellipse 40% 35% at 50% 60%, rgba(255,176,136,0.16), transparent 70%);
+    }
+    /* Keep the slider and headings above the glow layer. */
+    #pricing > * { position: relative; z-index: 1; }
+
+    /* The centred card — sharp, full opacity, full size, with its own glow
+       ring so it reads as the lit card sitting on the backdrop. */
     #pricing .pricing-card.in-focus {
       filter: none;
       opacity: 1;
       transform: scale(1);
+      box-shadow: 0 0 34px rgba(14,165,233,0.28), 0 0 90px rgba(99,102,241,0.16);
+    }
+    body.light #pricing .pricing-card.in-focus {
+      box-shadow: 0 0 34px rgba(240,138,93,0.30), 0 0 90px rgba(240,138,93,0.14);
     }
 
     /* On touch screens :hover can "stick" after a tap; stop the desktop
