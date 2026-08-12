@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Only the two real, indexable pages are listed. blogs.html and
+     newsletter.html are deliberately absent while they are "coming soon"
+     placeholders — add them here once they carry actual content (and drop
+     their noindex tag + robots.txt Disallow at the same time). -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://econintel.edgeone.app/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://econintel.edgeone.app/chat.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+</urlset>

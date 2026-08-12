@@ -1,0 +1,13 @@
+# EconIntel — https://econintel.edgeone.app
+# Crawlers are welcome on the public pages. The pages excluded below are either
+# account utilities or thin "coming soon" placeholders that would only add empty
+# results to the index (they also carry a noindex meta tag, which is the part
+# that actually removes them — this file just saves the crawl).
+
+User-agent: *
+Allow: /
+Disallow: /reset-password.html
+Disallow: /blogs.html
+Disallow: /newsletter.html
+
+Sitemap: https://econintel.edgeone.app/sitemap.xml
