@@ -42,7 +42,21 @@
      inject code into the page. crossorigin=anonymous is required for SRI on a
      cross-origin script (unpkg sends CORS headers). Hash pinned to the @1.9.82 build;
      if you bump the version, recompute the hash or the viewer silently won't load. -->
-<script type="module" src="https://unpkg.com/@splinetool/viewer@1.9.82/build/spline-viewer.js" integrity="sha384-MncMO4oYWD5D17Cg+k0Ag2UcKtc6zPR7kUHgGev9M9n5I9N4ekk0XB29G0dDwgOo" crossorigin="anonymous"></script>
+<script>
+  // Load the viewer ONLY where the robot is actually visible. `.hero-robot-wrap`
+  // is display:none under 640px, so on a phone the old unconditional <script>
+  // downloaded the whole 3D viewer (plus the remote scene) to render nothing —
+  // the worst possible trade on the mobile connections most visitors are on.
+  // Same URL, same pinned SRI hash, same crossorigin as before.
+  if (window.matchMedia('(min-width: 641px)').matches) {
+    var splineEl = document.createElement('script');
+    splineEl.type = 'module';
+    splineEl.src = 'https://unpkg.com/@splinetool/viewer@1.9.82/build/spline-viewer.js';
+    splineEl.integrity = 'sha384-MncMO4oYWD5D17Cg+k0Ag2UcKtc6zPR7kUHgGev9M9n5I9N4ekk0XB29G0dDwgOo';
+    splineEl.crossOrigin = 'anonymous';
+    document.head.appendChild(splineEl);
+  }
+</script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -329,7 +343,8 @@
     height: calc(100vh - 130px);
     min-height: 640px;
     overflow: visible;
-    will-change: transform;
+    /* No will-change here: nothing ever transforms this element, so the hint only
+       pinned a tall texture in GPU memory for no benefit. */
   }
 
   .hero-robot-wrap spline-viewer {
@@ -758,6 +773,9 @@
     font-family: 'Syne', sans-serif;
     font-size: 1.05rem; font-weight: 700; color: var(--text); margin-bottom: 1.4rem;
   }
+  /* Prose replacement for the old dot-meter rows (see the markup comment). */
+  .bias-copy { font-size: 0.9rem; line-height: 1.7; color: var(--text2); }
+  body.light .bias-copy { color: rgba(0,0,0,0.6); }
   .bias-row {
     display: flex; align-items: center; justify-content: space-between;
     gap: 1rem; margin-bottom: 1.1rem;
@@ -1095,11 +1113,17 @@
   }
   .faq-item:first-child { border-top: 1px solid rgba(255,255,255,0.07); }
 
+  /* A real <button>: the FAQ rows used to be <div onclick>, which meant a
+     keyboard or screen-reader user could not open them at all. Using the native
+     element gives focus, Enter/Space and the right role for free — these resets
+     just strip the default button chrome so it looks identical to before. */
   .faq-q {
     display: flex; justify-content: space-between; align-items: center;
     padding: 1.25rem 0; cursor: pointer;
     font-size: 0.95rem; font-weight: 600; color: var(--text);
     gap: 1rem; user-select: none;
+    width: 100%; background: none; border: 0; text-align: left;
+    font-family: inherit;
   }
   .faq-q-icon {
     font-size: 1.2rem; color: var(--accent); flex-shrink: 0;
@@ -1705,6 +1729,13 @@
      around as sections render in while you scroll. */
   #pricing { contain-intrinsic-size: auto 1100px; }
   #contact { contain-intrinsic-size: auto 900px; }
+  /* Same treatment for the other three heavy below-the-fold sections — they were
+     being fully laid out and painted at load despite sitting 2–5 screens down.
+     For #globe-coverage this also stops the spinning globe repainting while it
+     is off-screen. Intrinsic sizes are required (see the note above). */
+  #case-studies   { content-visibility: auto; contain-intrinsic-size: auto 1000px; }
+  #sources        { content-visibility: auto; contain-intrinsic-size: auto 900px; }
+  #globe-coverage { content-visibility: auto; contain-intrinsic-size: auto 700px; }
 
   /* The sign-in modal could grow taller than small screens (especially in
      landscape or with the keyboard open) with no way to scroll it. */
@@ -1969,70 +2000,6 @@
       <div class="hero-robot-placeholder"></div>
       <spline-viewer url="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"></spline-viewer>
 
-      <!-- SVG kept as comment for reference -->
-      <svg viewBox="0 0 240 340" class="robot-svg" style="display:none;" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <filter id="glow">
-            <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-            <feMerge>
-              <feMergeNode in="coloredBlur"/>
-              <feMergeNode in="SourceGraphic"/>
-            </feMerge>
-          </filter>
-        </defs>
-
-        <!-- Head -->
-        <rect x="70" y="20" width="100" height="100" rx="12" fill="none" stroke="var(--accent)" stroke-width="3" filter="url(#glow)"/>
-
-        <!-- Eyes -->
-        <circle cx="95" cy="55" r="12" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
-        <circle cx="145" cy="55" r="12" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
-        <circle cx="95" cy="55" r="6" fill="var(--accent)" opacity="0.8"/>
-        <circle cx="145" cy="55" r="6" fill="var(--accent)" opacity="0.8"/>
-
-        <!-- Antenna -->
-        <line x1="120" y1="15" x2="120" y2="-5" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>
-        <circle cx="120" cy="-8" r="3" fill="var(--accent)"/>
-
-        <!-- Upper Body (Chest) -->
-        <rect x="55" y="130" width="130" height="90" rx="10" fill="none" stroke="var(--accent)" stroke-width="3"/>
-
-        <!-- Center Panel -->
-        <rect x="85" y="145" width="70" height="60" rx="6" fill="none" stroke="var(--accent)" stroke-width="2" opacity="0.6"/>
-
-        <!-- Status Lights -->
-        <circle cx="95" cy="160" r="4" fill="var(--accent)" opacity="0.7"/>
-        <circle cx="110" cy="160" r="4" fill="var(--accent)" opacity="0.5"/>
-        <circle cx="125" cy="160" r="4" fill="var(--accent)" opacity="0.8"/>
-        <circle cx="140" cy="160" r="4" fill="var(--accent)" opacity="0.6"/>
-
-        <!-- Left Arm -->
-        <g>
-          <rect x="20" y="145" width="35" height="25" rx="5" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
-          <rect x="10" y="155" width="15" height="15" rx="3" fill="none" stroke="var(--accent)" stroke-width="2"/>
-        </g>
-
-        <!-- Right Arm -->
-        <g>
-          <rect x="185" y="145" width="35" height="25" rx="5" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
-          <rect x="215" y="155" width="15" height="15" rx="3" fill="none" stroke="var(--accent)" stroke-width="2"/>
-        </g>
-
-        <!-- Lower Body -->
-        <rect x="70" y="230" width="100" height="80" rx="8" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
-
-        <!-- Left Leg -->
-        <g>
-          <line x1="95" y1="310" x2="95" y2="330" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>
-          <rect x="85" y="325" width="20" height="12" rx="2" fill="none" stroke="var(--accent)" stroke-width="2"/>
-        </g>
-
-        <!-- Right Leg -->
-        <g>
-          <line x1="145" y1="310" x2="145" y2="330" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>
-          <rect x="135" y="325" width="20" height="12" rx="2" fill="none" stroke="var(--accent)" stroke-width="2"/>
-        </g>
-      </svg>
     </div>
   </div>
 </section>
@@ -2103,8 +2070,12 @@
         <li class="pricing-feature has"><span class="check">✓</span>Full Crisis Analogues engine</li>
         <li class="pricing-feature has"><span class="check">✓</span>All sources + live ingestion</li>
         <li class="pricing-feature has"><span class="check">✓</span>Real-time economic signals</li>
-        <li class="pricing-feature has"><span class="check">✓</span>Daily blog posts</li>
-        <li class="pricing-feature has"><span class="check">✓</span>Weekly newsletter</li>
+        <!-- "Daily blog posts" and "Weekly newsletter" were listed here, but
+             blogs.html and newsletter.html are still Coming Soon pages — a paying
+             user clicking Blogs in the nav would hit a placeholder. Put them back
+             the day they actually ship, not before. -->
+        <li class="pricing-feature has"><span class="check">✓</span>Longer, deeper answers (larger model)</li>
+        <li class="pricing-feature has"><span class="check">✓</span>Saved chat history &amp; projects</li>
       </ul>
       <a href="#contact" class="pricing-btn pricing-btn-primary">Get Started</a>
     </div>
@@ -2112,7 +2083,10 @@
     <!-- Enterprise -->
     <div class="pricing-card">
       <div class="pricing-tier">Enterprise</div>
-      <div class="pricing-desc">For sovereign funds, central banks, and institutional teams.</div>
+      <!-- Was "For sovereign funds, central banks, and institutional teams." — a
+           central bank is not buying a ₹599/mo plan, and one implausible claim
+           makes a reader re-check the other two cards. -->
+      <div class="pricing-desc">For coaching institutes, college departments, and small research teams.</div>
       <div class="pricing-price">
         <span class="pricing-currency" id="ent-currency">$</span>
         <span class="pricing-amount" id="ent-amount"
@@ -2124,10 +2098,12 @@
       <ul class="pricing-features">
         <li class="pricing-feature has"><span class="check">✓</span>Unlimited queries + priority</li>
         <li class="pricing-feature has"><span class="check">✓</span>Custom source ingestion</li>
-        <li class="pricing-feature has"><span class="check">✓</span>SLA guarantee + uptime</li>
-        <li class="pricing-feature has"><span class="check">✓</span>White-glove onboarding</li>
-        <li class="pricing-feature has"><span class="check">✓</span>2× daily blogs + newsletters</li>
-        <li class="pricing-feature has"><span class="check">✓</span>Fortnightly economic magazine</li>
+        <!-- Removed: "SLA guarantee + uptime" (a contractual promise a solo-run
+             service can't honour) and the blogs/newsletter/magazine lines (those
+             products don't exist yet — see the note in the Pro card). -->
+        <li class="pricing-feature has"><span class="check">✓</span>Up to 10 seats on one plan</li>
+        <li class="pricing-feature has"><span class="check">✓</span>Direct onboarding help</li>
+        <li class="pricing-feature has"><span class="check">✓</span>Priority on new features</li>
       </ul>
       <a href="#contact" class="pricing-btn pricing-btn-outline">Contact Sales</a>
     </div>
@@ -2147,12 +2123,14 @@
       <a class="source-row" href="https://www.federalreserve.gov/newsevents/pressreleases.htm" target="_blank" rel="noopener"><div class="source-bullet"></div><div class="source-name">Central Bank Statements</div><div class="source-type">Policy Primary</div><div class="source-arrow">↗</div></a>
       <a class="source-row" href="https://finance.yahoo.com/topic/earnings/" target="_blank" rel="noopener"><div class="source-bullet"></div><div class="source-name">CEO / CFO Conference Calls</div><div class="source-type">Executive Sentiment</div><div class="source-arrow">↗</div></a>
     </div>
+    <!-- This used to be a "Bias Filtration Protocol" panel of 4/5 and 5/5 dot
+         meters. Nothing computed those scores — they were hard-coded, so they
+         read as measurements the product doesn't actually take. One invented
+         metric makes a sharp reader doubt the true claims next to it, so this is
+         now plain prose describing what the retrieval genuinely does. -->
     <div class="bias-card reveal">
-      <div class="bias-title">Bias Filtration Protocol</div>
-      <div class="bias-row"><span class="bias-label">Western narrative isolation</span><div class="bias-meter"><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot"></div></div></div>
-      <div class="bias-row"><span class="bias-label">Non-Western perspective</span><div class="bias-meter"><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div></div></div>
-      <div class="bias-row"><span class="bias-label">Primary source preference</span><div class="bias-meter"><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div></div></div>
-      <div class="bias-row"><span class="bias-label">Editorial framing separation</span><div class="bias-meter"><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot active"></div><div class="bias-dot"></div></div></div>
+      <div class="bias-title">How sources are balanced</div>
+      <p class="bias-copy">Institutional primary sources come first — IMF, World Bank, OECD, and central-bank statements. Reporting is read from three different vantage points (BBC, The Hindu, Al Jazeera) so a single editorial framing doesn't become the answer. Where sources disagree, you're told they disagree rather than handed the average.</p>
     </div>
   </div>
 </section>
@@ -2192,24 +2170,24 @@
     <div class="reveal reveal-delay-1">
       <div class="faq-list">
         <div class="faq-item">
-          <div class="faq-q" onclick="toggleFaq(this)">
+          <button class="faq-q" type="button" aria-expanded="false" onclick="toggleFaq(this)">
             What makes EconIntel different from Bloomberg or Reuters?
             <span class="faq-q-icon">+</span>
-          </div>
+          </button>
           <div class="faq-a">EconIntel provides structured causal reasoning — not raw news feeds. We map current conditions to historical analogues, surfacing the mechanisms behind economic events rather than just reporting them.</div>
         </div>
         <div class="faq-item">
-          <div class="faq-q" onclick="toggleFaq(this)">
+          <button class="faq-q" type="button" aria-expanded="false" onclick="toggleFaq(this)">
             Which sources does EconIntel ingest?
             <span class="faq-q-icon">+</span>
-          </div>
+          </button>
           <div class="faq-a">We ingest BBC World Service, The Hindu, Al Jazeera, IMF/World Bank/OECD datasets, central bank statements, and executive conference calls. Enterprise plans support custom source pipelines.</div>
         </div>
         <div class="faq-item">
-          <div class="faq-q" onclick="toggleFaq(this)">
+          <button class="faq-q" type="button" aria-expanded="false" onclick="toggleFaq(this)">
             Can I cancel my subscription at any time?
             <span class="faq-q-icon">+</span>
-          </div>
+          </button>
           <div class="faq-a">Yes. Monthly plans cancel with no penalty. Annual plans include a 14-day money-back guarantee from the renewal date.</div>
         </div>
       </div>
@@ -2349,15 +2327,15 @@
          the modal opens in sign-in mode; toggleSignupMode() shows it and makes
          it required when the user switches to signup. -->
     <div class="modal-field" style="display:none">
-      <label class="modal-label">Name</label>
+      <label class="modal-label" for="signin-name">Name</label>
       <input class="modal-input" id="signin-name" placeholder="Jane Analyst" autocomplete="name" maxlength="25" />
     </div>
     <div class="modal-field">
-      <label class="modal-label">Email</label>
+      <label class="modal-label" for="signin-email">Email</label>
       <input class="modal-input" id="signin-email" type="email" required placeholder="you@example.com" autocomplete="email" pattern="[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}" title="Enter a valid email address (e.g. you@example.com)" />
     </div>
     <div class="modal-field">
-      <label class="modal-label">Password</label>
+      <label class="modal-label" for="signin-password">Password</label>
       <input class="modal-input" id="signin-password" type="password" required placeholder="••••••••" autocomplete="current-password" />
     </div>
 
@@ -2382,15 +2360,15 @@
 
     <form onsubmit="saveProfile(event)" id="profile-form">
       <div class="modal-field">
-        <label class="modal-label">Name</label>
+        <label class="modal-label" for="profile-name">Name</label>
         <input class="modal-input" id="profile-name" required maxlength="25" autocomplete="name" />
       </div>
       <div class="modal-field">
-        <label class="modal-label">Username</label>
+        <label class="modal-label" for="profile-username">Username</label>
         <input class="modal-input" id="profile-username" required pattern="[a-zA-Z0-9_]{2,24}" title="2-24 characters: letters, numbers, underscores" />
       </div>
       <div class="modal-field">
-        <label class="modal-label">Email</label>
+        <label class="modal-label" for="profile-email">Email</label>
         <!-- Email is the account key (tied to login + OAuth) — not editable here -->
         <input class="modal-input" id="profile-email" disabled />
       </div>
@@ -2571,6 +2549,11 @@ function toggleFaq(el) {
   const isOpen = item.classList.contains('open');
   document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
   if (!isOpen) item.classList.add('open');
+  // Keep aria-expanded truthful on every row, so a screen reader announces the
+  // open/closed state instead of just "button". Only one row is open at a time.
+  document.querySelectorAll('.faq-q').forEach(q => {
+    q.setAttribute('aria-expanded', String(q.parentElement.classList.contains('open')));
+  });
 }
 
 // ── SCROLL REVEAL ──
