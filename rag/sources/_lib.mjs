@@ -13,6 +13,19 @@ export const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY;
 // Set INGEST_CONTACT (e.g. "EconIntel you@domain.com"); falls back to a generic.
 export const CONTACT = process.env.INGEST_CONTACT || 'EconIntel econintelai@gmail.com';
 
+// Headers for fetching public RSS/Atom feeds.
+// Node's fetch defaults to `User-Agent: node`, which many outlets' CDNs answer
+// with 403 or an HTML interstitial. A UA that DECLARES itself a bot is blocked
+// just as hard — pib.gov.in, moneycontrol.com and business-standard.com all
+// return 403 to "…EconIntelBot/1.0…" and 200 to this string (verified
+// 2026-07-19). So we send a normal browser UA, which is what ordinary RSS
+// readers effectively do. Keep it here so the ingester and the health check
+// can never drift apart and report different results.
+export const FEED_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'application/rss+xml, application/atom+xml, application/xml;q=0.9, */*;q=0.8',
+};
+
 // Hard per-request timeout so one slow/hung API can't freeze the whole run.
 const TIMEOUT_MS = 20000;
 export async function fetchWithTimeout(url, options = {}, ms = TIMEOUT_MS) {

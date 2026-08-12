@@ -1,0 +1,39 @@
+name: RAG feed health
+
+# Dead feeds fail SILENTLY in the ingester: collectFeed() swallows the error and
+# returns [], so "RAG live news ingest" stays green while the library stops
+# growing from that source. This job is the alarm — it fails loudly when a
+# citeable source dies, which is the case that actually degrades answer quality.
+#
+# Needs no secrets: it only makes public GET requests to the feed URLs.
+
+on:
+  schedule:
+    # Weekly, Monday 06:41 UTC. Off-the-hour on purpose — GitHub delays or drops
+    # runs queued at :00, its busiest slot.
+    - cron: "41 6 * * 1"
+  workflow_dispatch: {}
+  push:
+    # Also verify whenever the feed list itself changes, so a typo'd or dead URL
+    # is caught at commit time rather than a week later.
+    paths:
+      - "rag/feeds.json"
+      - "rag/check-feeds.mjs"
+      - ".github/workflows/check-feeds.yml"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"   # built-in fetch(), so no npm install
+
+      - name: Check every feed in feeds.json
+        working-directory: rag
+        run: node check-feeds.mjs

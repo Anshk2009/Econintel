@@ -14,7 +14,7 @@
 
 import { readFile } from 'node:fs/promises';
 // embedBatch() + fetchWithTimeout() are shared with the data-source ingesters.
-import { embedBatch, fetchWithTimeout } from './sources/_lib.mjs';
+import { embedBatch, fetchWithTimeout, FEED_HEADERS } from './sources/_lib.mjs';
 
 // --- Config: set these as environment variables before running ---
 const SUPABASE_URL   = process.env.SUPABASE_URL;          // https://xxxx.supabase.co
@@ -126,8 +126,16 @@ async function insertRows(rows) {
 async function collectFeed(feed) {
   let items;
   try {
-    const res = await fetchWithTimeout(feed.url);
+    // FEED_HEADERS sends a real browser User-Agent — Node's default (`node`) gets
+    // 403'd by many outlets' CDNs, so the feed looks dead while the URL is fine.
+    // See _lib.mjs for why the UA must not announce itself as a bot.
+    // redirect:'follow' is the default, stated so a moved feed keeps working.
+    const res = await fetchWithTimeout(feed.url, { redirect: 'follow', headers: FEED_HEADERS });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const xml = await res.text();
+    // A blocked/moved feed often answers 200 with an HTML page. Treat that as a
+    // failure so it shows up in the log instead of silently parsing to 0 items.
+    if (!/<(\?xml|rss|feed)\b/i.test(xml.slice(0, 500))) throw new Error('not XML (blocked or moved?)');
     if (xml.length > MAX_FEED_BYTES) throw new Error(`feed too large (${xml.length} bytes)`);
     items = parseRss(xml).slice(0, MAX_ITEMS_PER_FEED);
     console.log(`${feed.name}: ${items.length} items`);

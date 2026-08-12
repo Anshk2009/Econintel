@@ -33,11 +33,26 @@ create unique index if not exists documents_source_url_key on documents (source_
 -- library is small. To scale later, switch the column to halfvec(2048) and add:
 --   create index on documents using hnsw (embedding halfvec_cosine_ops);
 
+-- 3b. Full-text index so the keyword half of the search below is fast. The
+--     'english' config stems words ("banks" matches "banking").
+create index if not exists documents_fts_idx
+  on documents using gin (to_tsvector('english', coalesce(content, '')));
+
 -- 4. The search function the chat calls (via /rest/v1/rpc/match_documents).
---    Takes a question's embedding, returns the closest `match_count` rows.
+--    HYBRID: vector similarity + keyword search, merged with Reciprocal Rank
+--    Fusion. Pure similarity can't separate our crisis case studies (they all
+--    share "IMF / inflation / currency / crisis"); the terms that DO separate
+--    them are exact entities — "Volcker", "1997", "peg" — which keyword search
+--    nails and embeddings blur. So we run both and fuse.
+--
+--    IMPORTANT: functions/chat.js calls this with THREE arguments
+--    (query_embedding, match_count, query_text). Keep the signature in sync —
+--    a 2-arg version here makes every RPC call 404, and retrieveContext fails
+--    open, so the chat keeps answering with NO sources and nothing looks broken.
 create or replace function match_documents (
   query_embedding vector(2048),
-  match_count     int default 5
+  match_count     int  default 10,
+  query_text      text default null
 )
 returns table (
   id          bigint,
@@ -49,15 +64,53 @@ returns table (
 )
 language sql stable
 as $$
+  with
+  -- Vector leg: pull 2x match_count so fusion has real choices. The 0.30 floor
+  -- stops a totally off-topic question from always matching SOMETHING.
+  vec as (
+    select d.id, 1 - (d.embedding <=> query_embedding) as sim,
+           row_number() over (order by d.embedding <=> query_embedding) as rank
+    from documents d
+    where 1 - (d.embedding <=> query_embedding) > 0.30
+    order by d.embedding <=> query_embedding
+    limit match_count * 2
+  ),
+  -- Keyword leg: websearch_to_tsquery is safe on arbitrary user input (it never
+  -- throws on odd syntax). Skipped entirely when query_text is null.
+  kw as (
+    select d.id,
+           row_number() over (
+             order by ts_rank(to_tsvector('english', coalesce(d.content,'')),
+                              websearch_to_tsquery('english', query_text)) desc
+           ) as rank
+    from documents d
+    where query_text is not null
+      and to_tsvector('english', coalesce(d.content,''))
+          @@ websearch_to_tsquery('english', query_text)
+    limit match_count * 2
+  ),
+  -- RRF fusion: each doc scores 1/(60+rank) in each list it appears in (60 is
+  -- the standard damping constant), plus a small freshness bonus for news.
+  fused as (
+    select
+      coalesce(vec.id, kw.id) as id,
+      coalesce(1.0 / (60 + vec.rank), 0) + coalesce(1.0 / (60 + kw.rank), 0) as rrf,
+      coalesce(vec.sim, 0) as sim
+    from vec full outer join kw on vec.id = kw.id
+  )
   select
-    documents.id,
-    documents.content,
-    documents.source_name,
-    documents.source_url,
-    documents.publishable,
-    1 - (documents.embedding <=> query_embedding) as similarity   -- cosine similarity
-  from documents
-  order by documents.embedding <=> query_embedding                -- closest first
+    d.id, d.content, d.source_name, d.source_url, d.publishable,
+    fused.sim as similarity
+  from fused
+  join documents d on d.id = fused.id
+  order by
+    fused.rrf
+    + case
+        when d.category = 'news' and d.published_at is not null
+        then 0.008 * exp(-extract(epoch from (now() - d.published_at)) / (86400.0 * 14))
+        else 0
+      end
+    desc
   limit match_count;
 $$;
 
