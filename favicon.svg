@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- EconIntel favicon — the same 4-block "chart grid" as the nav logo mark.
+       The nav version is a thin stroked outline, which disappears at 16px, so
+       this is the FILLED version on a solid gradient tile: it keeps its own
+       background, staying legible on both light and dark browser tabs. -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <!-- Brand gradient: the same blue → violet used by the logo dot on the
+           blogs / newsletter / 404 pages. -->
+      <stop offset="0" stop-color="#5b8def"/>
+      <stop offset="1" stop-color="#7a5bff"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="url(#g)"/>
+  <!-- Block coordinates mirror the nav mark's polylines (a 24-unit grid,
+       shifted +4 to centre it inside the 32-unit tile). The two SMALL blocks are
+       widened 4→5 units with a tighter corner radius: at a real 16px favicon a
+       4-unit block renders as ~2px and its rounding washes it out to a blue-grey
+       smudge (measured), while 5 units stays solid white. 6 units tested no
+       better, so this is the smallest change that keeps the mark crisp. -->
+  <g fill="#fff">
+    <rect x="7"  y="7"  width="5" height="5" rx="0.8"/>
+    <rect x="18" y="7"  width="7" height="7" rx="1.4"/>
+    <rect x="18" y="18" width="7" height="7" rx="1.4"/>
+    <rect x="7"  y="18" width="5" height="7" rx="0.8"/>
+  </g>
+</svg>
