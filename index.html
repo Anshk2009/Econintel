@@ -399,6 +399,13 @@
     50% { opacity:0.4; transform:scale(1.4); }
   }
 
+  /* Brand tagline, demoted above the headline so the h1 can lead with the benefit. */
+  .hero-eyebrow {
+    font-size: 0.72rem; font-weight: 700;
+    letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 1rem;
+  }
+
   .hero-heading {
     font-family: 'Syne', sans-serif;
     font-size: clamp(3.25rem, 6.5vw, 5.5rem);
@@ -421,6 +428,12 @@
     font-size: 1.1rem; color: var(--text2);
     max-width: 500px; margin-top: 1rem;
     font-weight: 300; line-height: 1.7;
+  }
+
+  /* Risk-reversal line directly under the CTA. */
+  .hero-microcopy {
+    margin-top: 0.85rem; font-size: 0.82rem;
+    color: var(--text2); opacity: 0.8; font-weight: 300;
   }
 
   .hero-btns { display: flex; gap: 1rem; flex-wrap: wrap; }
@@ -1969,9 +1982,15 @@
   <div class="hero-grid">
     <!-- Left: Hero Text -->
     <div class="hero-left">
-      <h1 class="hero-heading">Structured<br />Reasoning,<br /><em>Not News</em></h1>
+      <!-- Brand line kept as the eyebrow so the h1 can lead with what the visitor
+           actually GETS. "Structured Reasoning, Not News" defines the product by
+           what it isn't, which means nothing to someone who doesn't know it yet. -->
+      <div class="hero-eyebrow">Structured Reasoning, Not News</div>
+      <h1 class="hero-heading">Understand <em>why</em><br />the economy moves</h1>
       <p class="hero-sub">
-        Economic analysis powered by AI. Get structured insights on crisis mechanisms, policy effects, and second-order impacts.
+        Ask about any crisis, policy, or market shift. Get the causal chain, the second-order
+        effects, and the historical parallel that rhymes — drawn from IMF, World Bank, and
+        central-bank primary sources.
       </p>
       <!-- Primary CTA — anchored to the hero text (left-aligned) instead of floating
            centered below the whole grid. This is the hero's main call-to-action. -->
@@ -1980,8 +1999,12 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
         </svg>
-        Enter Terminal
+        Ask your first question
       </a>
+      <!-- The free-trial terms were previously invisible until a visitor had already
+           committed to opening the chat. Stating them next to the CTA removes the
+           "will this ask for my card?" hesitation. -->
+      <p class="hero-microcopy">5 questions free — no signup, no card.</p>
     </div>
 
     <!-- Right: Spline 3D Robot -->
@@ -2161,24 +2184,52 @@
       <div class="faq-list">
         <div class="faq-item">
           <button class="faq-q" type="button" aria-expanded="false" onclick="toggleFaq(this)">
-            What makes EconIntel different from Bloomberg or Reuters?
+            Isn't this just ChatGPT with extra steps?
             <span class="faq-q-icon">+</span>
           </button>
-          <div class="faq-a">EconIntel provides structured causal reasoning — not raw news feeds. We map current conditions to historical analogues, surfacing the mechanisms behind economic events rather than just reporting them.</div>
+          <div class="faq-a">It runs on language models, so that's a fair question. The difference is constraint. EconIntel is scoped to economics and geopolitics, forced into a fixed shape — claim, mechanism, second-order effect, historical precedent — and grounded in a curated library of primary sources rather than open-ended recall. It's also instructed to say "I don't have current data on this" instead of inventing a number. A general chatbot will happily give you a confident paragraph about anything; this is built to be narrow and to show its reasoning.</div>
         </div>
         <div class="faq-item">
           <button class="faq-q" type="button" aria-expanded="false" onclick="toggleFaq(this)">
-            Which sources does EconIntel ingest?
+            How accurate is it? Does it make things up?
             <span class="faq-q-icon">+</span>
           </button>
-          <div class="faq-a">We ingest BBC World Service, The Hindu, Al Jazeera, IMF/World Bank/OECD datasets, central bank statements, and executive conference calls. Enterprise plans support custom source pipelines.</div>
+          <div class="faq-a">AI models can produce confident, wrong answers, and pretending otherwise would be dishonest. We reduce it by retrieving from primary sources before answering, by blocking the model from citing anything not in that retrieved material, and by telling it to admit a gap rather than fill it. It still won't be right every time. Treat it as a well-read analyst you argue with — not an oracle. Check anything you'd stake a decision or an exam answer on against the source.</div>
         </div>
         <div class="faq-item">
           <button class="faq-q" type="button" aria-expanded="false" onclick="toggleFaq(this)">
-            Can I cancel my subscription at any time?
+            Do I have to pay to try it?
             <span class="faq-q-icon">+</span>
           </button>
-          <div class="faq-a">Yes. Monthly plans cancel with no penalty. Annual plans include a 14-day money-back guarantee from the renewal date.</div>
+          <div class="faq-a">No. You get 5 questions with no account and no card — just open the terminal and type. A free account raises that to 100 questions a month, still without a card. Paid plans exist for people who hit that ceiling.</div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q" type="button" aria-expanded="false" onclick="toggleFaq(this)">
+            Will this actually help with UPSC, CA, or MBA prep?
+            <span class="faq-q-icon">+</span>
+          </button>
+          <div class="faq-a">That's who it's built for. The answer format is designed for the thing exams reward — explaining a mechanism and backing it with a precedent, rather than listing facts. Ask it why a rate hike cools inflation, what the second-order effects of a currency peg collapse are, or which historical episode a current crisis resembles, and you get a structure you can actually write from. It is a study aid, not a substitute for your syllabus or standard textbooks.</div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q" type="button" aria-expanded="false" onclick="toggleFaq(this)">
+            Which sources does EconIntel use?
+            <span class="faq-q-icon">+</span>
+          </button>
+          <div class="faq-a">IMF, World Bank and OECD publications, central-bank statements, and open datasets including FRED and data.gov.in, alongside reporting from BBC World Service, The Hindu and Al Jazeera. Non-Western outlets are included deliberately so the framing isn't drawn from one bloc. Institutional and open-data sources are the ones it's allowed to cite directly.</div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q" type="button" aria-expanded="false" onclick="toggleFaq(this)">
+            What happens to what I type?
+            <span class="faq-q-icon">+</span>
+          </button>
+          <div class="faq-a">Your questions are sent to our AI providers to generate the response, and your conversation history is stored so you can reopen it later. You can delete that history from inside the product at any time. We don't run advertising trackers or third-party analytics. Because chat content does reach third-party providers, don't paste confidential or sensitive information into it. Full detail is in the <a href="legal.html#privacy">Privacy Policy</a>.</div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q" type="button" aria-expanded="false" onclick="toggleFaq(this)">
+            Can I cancel any time?
+            <span class="faq-q-icon">+</span>
+          </button>
+          <div class="faq-a">Yes. Cancelling stops the next renewal and your plan runs to the end of the period you've already paid for — no cancellation fee. Monthly plans are refundable within 7 days of a charge, annual plans within 14 days. See the <a href="legal.html#refund">Refund &amp; Cancellation Policy</a>.</div>
         </div>
       </div>
     </div>
@@ -2273,10 +2324,10 @@
   <div class="footer-bottom">
     <span class="footer-copy">© 2026 EconIntel. All rights reserved.</span>
     <nav class="footer-legal">
-      <a href="#contact">Terms of Service</a>
-      <a href="#contact">Refund & Cancellation Policy</a>
-      <a href="#contact">Privacy Policy</a>
-      <a href="#contact">Cookie Policy</a>
+      <a href="legal.html#terms">Terms of Service</a>
+      <a href="legal.html#refund">Refund &amp; Cancellation Policy</a>
+      <a href="legal.html#privacy">Privacy Policy</a>
+      <a href="legal.html#cookies">Cookie Policy</a>
     </nav>
   </div>
 </footer>
