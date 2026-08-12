@@ -1,0 +1,48 @@
+name: Live smoke test
+
+# Catches the failure that matters most and is otherwise invisible: the site
+# serves, every page 200s, and the chat still returns an error instead of an
+# answer. Nothing else in CI types a question.
+#
+# Also crawls every page for broken links and dead in-page anchors.
+#
+# COST: one guest chat message per run (counts against the 5-per-IP-per-2h guest
+# bucket and against LLM credits). That is why this is scheduled + on
+# function/page changes, NOT on every push.
+
+on:
+  schedule:
+    # Daily, 05:19 UTC. Off-the-hour: GitHub delays or drops runs queued at :00.
+    - cron: "19 5 * * *"
+  workflow_dispatch: {}
+  push:
+    paths:
+      - "functions/**"
+      - "*.html"
+      - "config.js"
+      - "scripts/**"
+      - ".github/workflows/smoke.yml"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"   # built-in fetch(), no npm install
+
+      # EdgeOne deploys asynchronously after a push, so the script retries
+      # internally rather than racing the rollout and reporting a false red.
+      - name: Smoke test the live site
+        run: node scripts/smoke.mjs
+
+      - name: Check every link and anchor
+        # Runs even if the smoke test failed — a broken chat and a broken link
+        # are independent problems and you want to see both in one run.
+        if: always()
+        run: node scripts/check-links.mjs
