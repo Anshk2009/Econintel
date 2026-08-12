@@ -776,23 +776,13 @@
   /* Prose replacement for the old dot-meter rows (see the markup comment). */
   .bias-copy { font-size: 0.9rem; line-height: 1.7; color: var(--text2); }
   body.light .bias-copy { color: rgba(0,0,0,0.6); }
-  .bias-row {
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 1rem; margin-bottom: 1.1rem;
-  }
-  .bias-row:last-child { margin-bottom: 0; }
-  .bias-label { font-size: 0.8rem; color: var(--text2); }
-  .bias-meter { display: flex; gap: 0.3rem; flex-shrink: 0; }
-  .bias-dot { width: 9px; height: 9px; border-radius: 50%; background: rgba(255,255,255,0.12); }
-  .bias-dot.active { background: var(--accent); box-shadow: 0 0 8px rgba(14,165,233,0.5); }
 
   /* Light-mode overrides for new sections */
   body.light .case-card, body.light .bias-card { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.10); }
   body.light .case-name, body.light .source-name, body.light .bias-title { color: #1a1a1a; }
-  body.light .case-desc, body.light .bias-label, body.light .source-type { color: rgba(0,0,0,0.55); }
+  body.light .case-desc, body.light .source-type { color: rgba(0,0,0,0.55); }
   body.light .case-tag { border-color: rgba(0,0,0,0.15); color: rgba(0,0,0,0.5); }
   body.light .source-row { border-color: rgba(0,0,0,0.10); }
-  body.light .bias-dot { background: rgba(0,0,0,0.10); }
 
   @media (max-width: 860px) {
     .case-grid { grid-template-columns: 1fr; }
