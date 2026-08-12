@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<!-- SECURITY: same baseline CSP as the other static pages. A <meta> can't set
+     X-Frame-Options / HSTS / frame-ancestors — those are EdgeOne dashboard Rules. -->
+<meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'; form-action 'self'" />
+<!-- Don't let error pages into search results. -->
+<meta name="robots" content="noindex, follow" />
+<title>EconIntel — Page Not Found</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  @keyframes gradientShift { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+  @keyframes pulse { 0%,100%{opacity:.5;transform:scale(1)} 50%{opacity:1;transform:scale(1.15)} }
+  html, body { height: 100%; }
+  body {
+    font-family: 'DM Sans', sans-serif; color: #eef1f8; background: #05060c;
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 2rem 2rem 5rem; position: relative; overflow-x: hidden;
+  }
+  /* Same animated gradient field as blogs/newsletter so a 404 still feels like
+     part of the product, not a server default. */
+  body::before {
+    content: ''; position: fixed; inset: 0; z-index: -1;
+    background: linear-gradient(135deg, #06060d 0%, #0c1838 30%, #163a8c 50%, #0c1838 70%, #06060d 100%);
+    background-size: 220% 220%; animation: gradientShift 24s ease-in-out infinite;
+  }
+  .logo {
+    display: inline-flex; align-items: center; gap: .55rem; margin-bottom: 2rem;
+    font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.25rem; letter-spacing: -.01em;
+    color: #eef1f8; text-decoration: none;
+  }
+  .logo-dot { width: 12px; height: 12px; border-radius: 4px; background: linear-gradient(135deg,#5b8def,#7a5bff); animation: pulse 2.4s ease-in-out infinite; }
+  .eyebrow { font-size: .72rem; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: #6f9bff; margin-bottom: .8rem; }
+  h1 {
+    font-family: 'Syne', sans-serif; font-weight: 800; line-height: .95;
+    font-size: clamp(4.5rem, 20vw, 9rem); letter-spacing: -.04em; margin-bottom: .5rem;
+    background: linear-gradient(135deg,#ffffff 0%, #9ec0ff 60%, #b69bff 100%);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  h2 {
+    font-family: 'Syne', sans-serif; font-weight: 700; font-size: clamp(1.1rem, 4vw, 1.5rem);
+    letter-spacing: -.01em; margin-bottom: 1rem; color: #eef1f8;
+  }
+  p { color: rgba(235,240,255,.6); max-width: 440px; font-size: 1rem; line-height: 1.6; margin-bottom: 2rem; }
+
+  .actions { display: flex; flex-wrap: wrap; gap: .7rem; justify-content: center; margin-bottom: 2.5rem; }
+  .btn {
+    display: inline-flex; align-items: center; gap: .5rem; text-decoration: none;
+    padding: .7rem 1.4rem; border-radius: 999px; font-weight: 700; font-size: .9rem;
+    transition: transform .2s, box-shadow .2s, background .2s, border-color .2s;
+  }
+  .btn-primary { color: #05060c; background: #fff; }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 30px -10px rgba(110,150,255,.6); }
+  .btn-ghost { color: #eef1f8; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.16); }
+  .btn-ghost:hover { transform: translateY(-2px); background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.3); }
+
+  /* Quick links so a wrong URL routes somewhere useful instead of dead-ending. */
+  .links { display: flex; flex-wrap: wrap; gap: 0 1.5rem; justify-content: center; font-size: .82rem; }
+  .links a { color: rgba(235,240,255,.5); text-decoration: none; padding: .3rem 0; transition: color .2s; }
+  .links a:hover { color: #9ec0ff; }
+
+  .src-footer {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    padding: .6rem 1rem; font-size: .62rem; line-height: 1.5;
+    color: rgba(235,240,255,.4); text-align: center;
+    background: linear-gradient(to top, rgba(5,6,12,.9), transparent);
+  }
+  .src-footer strong { color: rgba(235,240,255,.58); font-weight: 700; }
+
+  @media (max-width: 480px) {
+    .actions { flex-direction: column; width: 100%; max-width: 280px; }
+    .btn { justify-content: center; }
+  }
+</style>
+</head>
+<body>
+  <a class="logo" href="index.html"><span class="logo-dot"></span>EconIntel</a>
+
+  <div class="eyebrow">Error 404</div>
+  <h1>404</h1>
+  <h2>This page isn't in the archive</h2>
+  <p>The link is broken or the page has moved. The analysis engine is still running — pick a direction below.</p>
+
+  <div class="actions">
+    <a class="btn btn-primary" href="chat.html">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+      </svg>
+      Enter Terminal
+    </a>
+    <a class="btn btn-ghost" href="index.html">← Back to home</a>
+  </div>
+
+  <nav class="links">
+    <a href="index.html#case-studies">Crisis Analogues</a>
+    <a href="index.html#pricing">Pricing</a>
+    <a href="index.html#sources">Sources</a>
+    <a href="blogs.html">Blogs</a>
+    <a href="newsletter.html">Newsletter</a>
+    <a href="index.html#contact">Contact</a>
+  </nav>
+
+  <!-- Sources & data attribution (CC-BY / open-data licence credit + trust). -->
+  <footer class="src-footer">
+    <strong>Sources &amp; data:</strong>
+    World Bank Open Data (CC BY 4.0) · FRED® (St.&nbsp;Louis Fed) · U.S. SEC EDGAR (public domain) · data.gov.in (GODL India) · and other primary sources.
+  </footer>
+</body>
+</html>
