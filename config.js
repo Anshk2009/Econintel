@@ -14,7 +14,6 @@ const BASE = isDev ? 'http://localhost:3000/functions' : '';
 
 const CONFIG = {
   // API Base URL (same origin in production)
-  apiBase: isDev ? 'http://localhost:3000' : '',
 
   // Auth endpoints — EdgeOne routes exact paths only, so we dispatch via ?action=
   auth: {

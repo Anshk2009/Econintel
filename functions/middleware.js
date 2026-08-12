@@ -300,7 +300,7 @@ export async function hashIP(ip) {
  * @param {object} env - EdgeOne environment bindings
  * @returns {string} the Supabase key to use
  */
-export function resolveSupabaseKey(env) {
+function resolveSupabaseKey(env) {
   if (env.SUPABASE_SERVICE_KEY_B64) {
     try {
       // .trim() guards against a trailing newline accidentally pasted into the
@@ -406,6 +406,25 @@ export function makeSupabase(env) {
 // ============================================================================
 // REQUEST HELPERS — bearer/cookie/token extraction (shared by all functions)
 // ============================================================================
+
+/**
+ * The client's IP, for rate-limit and quota buckets.
+ *
+ * SECURITY (H1): use EdgeOne's trusted EO-Connecting-IP header. EdgeOne sets it
+ * to the real client IP on every request and — per Tencent's docs — it CANNOT be
+ * overridden by the client. Earlier code read CF-Connecting-IP (a Cloudflare
+ * header that does not exist on EdgeOne) and then fell back to X-Forwarded-For,
+ * which IS attacker-controlled — so anyone could rotate XFF to mint a fresh
+ * rate-limit / quota bucket per request. We deliberately do NOT fall back to
+ * X-Forwarded-For. If EO-Connecting-IP is absent we use a single shared
+ * 'unknown' bucket, which fails safe (over-restrictive) rather than open.
+ *
+ * Lives here, not in each function, so this choice of trusted header has exactly
+ * one home — auth.js and chat.js previously carried their own copies.
+ */
+export function getClientIP(request) {
+  return request.headers.get('EO-Connecting-IP') || 'unknown';
+}
 
 /** Extract the Bearer token from the Authorization header, or null. */
 export function getBearerToken(request) {

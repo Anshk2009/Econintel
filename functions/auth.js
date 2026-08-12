@@ -20,6 +20,7 @@ import {
   makeSupabase,
   getToken,
   parseCookies,
+  getClientIP,
 } from './middleware.js';
 
 // Rate limiting thresholds
@@ -30,18 +31,6 @@ const RATE_LIMITS = {
   resetAttempts: { max: 3, window: 3600 },
 };
 
-// Get client IP from request
-function getClientIP(request) {
-  // SECURITY (H1): use EdgeOne's trusted EO-Connecting-IP header. EdgeOne sets it
-  // to the real client IP on every request and — per Tencent's docs — it CANNOT be
-  // overridden by the client. The old code read CF-Connecting-IP (a Cloudflare
-  // header that does not exist on EdgeOne) and then fell back to X-Forwarded-For,
-  // which IS attacker-controlled — so anyone could rotate XFF to mint a fresh
-  // rate-limit / quota bucket on every request. We deliberately do NOT fall back
-  // to X-Forwarded-For. If EO-Connecting-IP is somehow absent we use a single
-  // shared 'unknown' bucket, which fails safe (over-restrictive) rather than open.
-  return request.headers.get('EO-Connecting-IP') || 'unknown';
-}
 
 // Check rate limit using KV
 async function checkRateLimit(kv, key, maxAttempts, windowSeconds) {

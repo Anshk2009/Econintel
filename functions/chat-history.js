@@ -8,6 +8,30 @@ import { verifyJWT, jsonResponse, corsPreflightResponse, makeSupabase, getToken,
 // handleDeleteHistory) can use them — assigned at the top of onRequest.
 let supabaseRest, TOKENS, dbCheck;
 
+/**
+ * Authenticate a request: token from the Authorization header or the
+ * access_token cookie, then a full verifyJWT (signature, expiry, logout
+ * blacklist, token_version revocation).
+ *
+ * All three handlers in this file did this identically; one copy means the auth
+ * rules can't drift apart between them. Reads the module-scope TOKENS/dbCheck,
+ * which onRequest assigns before any handler runs.
+ *
+ * @returns {{ userId: string, payload: object }} on success,
+ *          or {@code { res: Response }} — an already-built 401 the caller returns as-is.
+ */
+async function requireUser(request, jwtSecret, allowedOrigin) {
+  const token = getToken(request);
+  if (!token) {
+    return { res: jsonResponse({ error: 'Missing Authorization header' }, 401, allowedOrigin) };
+  }
+  const payload = await verifyJWT(token, jwtSecret, { TOKENS, dbCheck });
+  if (!payload) {
+    return { res: jsonResponse({ error: 'Invalid or expired token' }, 401, allowedOrigin) };
+  }
+  return { userId: payload.userId, payload };
+}
+
 export async function onRequest(context) {
   const { request, env } = context;
 
@@ -69,19 +93,10 @@ export async function onRequest(context) {
  * Returns: { messages: Array<{id, role, content, created_at}> }
  */
 async function handleGetHistory(request, env, jwtSecret, allowedOrigin) {
-  // Authenticate (from Authorization header or access_token cookie)
-  let token = getToken(request);
+  const auth = await requireUser(request, jwtSecret, allowedOrigin);
+  if (auth.res) return auth.res;
+  const userId = auth.userId;
 
-  if (!token) {
-    return jsonResponse({ error: 'Missing Authorization header' }, 401, allowedOrigin);
-  }
-
-  const userPayload = await verifyJWT(token, jwtSecret, { TOKENS, dbCheck });
-  if (!userPayload) {
-    return jsonResponse({ error: 'Invalid or expired token' }, 401, allowedOrigin);
-  }
-
-  const userId = userPayload.userId;
   const url = new URL(request.url);
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 500); // Cap at 500
   const offset = parseInt(url.searchParams.get('offset') || '0');
@@ -129,18 +144,9 @@ async function handleGetHistory(request, env, jwtSecret, allowedOrigin) {
  * are small). Requires the conversation_id column (migration 0005).
  */
 async function handleListConversations(request, env, jwtSecret, allowedOrigin) {
-  // Authenticate (same as handleGetHistory)
-  let token = getToken(request);
-  if (!token) {
-    return jsonResponse({ error: 'Missing Authorization header' }, 401, allowedOrigin);
-  }
-
-  const userPayload = await verifyJWT(token, jwtSecret, { TOKENS, dbCheck });
-  if (!userPayload) {
-    return jsonResponse({ error: 'Invalid or expired token' }, 401, allowedOrigin);
-  }
-
-  const userId = userPayload.userId;
+  const auth = await requireUser(request, jwtSecret, allowedOrigin);
+  if (auth.res) return auth.res;
+  const userId = auth.userId;
 
   try {
     // Pull the user's recent threaded rows, newest first. conversation_id=not.is.null
@@ -203,20 +209,11 @@ async function handleDeleteHistory(request, env, jwtSecret, allowedOrigin) {
     return jsonResponse({ error: 'Invalid or missing CSRF token' }, 403, allowedOrigin);
   }
 
-  // Authenticate (Authorization header or access_token cookie) BEFORE the final
-  // CSRF check, so we know which user to bind the CSRF token to (M3).
-  let token = getToken(request);
-
-  if (!token) {
-    return jsonResponse({ error: 'Missing Authorization header' }, 401, allowedOrigin);
-  }
-
-  const userPayload = await verifyJWT(token, jwtSecret, { TOKENS, dbCheck });
-  if (!userPayload) {
-    return jsonResponse({ error: 'Invalid or expired token' }, 401, allowedOrigin);
-  }
-
-  const userId = userPayload.userId;
+  // Authenticate BEFORE the final CSRF check, so we know which user to bind the
+  // CSRF token to (M3).
+  const auth = await requireUser(request, jwtSecret, allowedOrigin);
+  if (auth.res) return auth.res;
+  const userId = auth.userId;
 
   // SECURITY (M3): the CSRF token must have been issued by this server AND belong
   // to THIS user. New tokens store { userId } as JSON; legacy tokens stored the

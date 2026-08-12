@@ -1,18 +1,8 @@
 # Dependencies
 node_modules/
-.pnp
-.pnp.js
 
 # Testing
 coverage/
-
-# Next.js
-.next/
-out/
-build/
-
-# Production
-dist/
 
 # Misc
 .DS_Store
@@ -35,10 +25,6 @@ pnpm-debug.log*
 *.swp
 *.swo
 *~
-
-# TypeScript
-*.tsbuildinfo
-next-env.d.ts
 
 # OS
 Thumbs.db

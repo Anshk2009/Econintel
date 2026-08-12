@@ -12,7 +12,7 @@
 //   - Supabase PostgreSQL database for chat history and API usage
 //   - Functions: middleware.js with crypto utilities
 
-import { verifyJWT, jsonResponse, corsPreflightResponse, hashIP, makeSupabase, getToken, generateId } from './middleware.js';
+import { verifyJWT, jsonResponse, corsPreflightResponse, hashIP, makeSupabase, getToken, generateId, getClientIP } from './middleware.js';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -275,7 +275,7 @@ export async function onRequest(context) {
     // cannot spoof it). The old CF-Connecting-IP || X-Forwarded-For fallback let an
     // attacker rotate X-Forwarded-For to mint unlimited fresh guest buckets — i.e.
     // unmetered free LLM calls on your OpenRouter key. No X-Forwarded-For fallback.
-    const clientIP = request.headers.get('EO-Connecting-IP') || 'unknown';
+    const clientIP = getClientIP(request);
     const ipHash = await hashIP(clientIP);
     const guestKey = `guest:quota:${ipHash}`;
     const used = parseInt(await TOKENS.get(guestKey) || '0', 10);
@@ -373,7 +373,7 @@ export async function onRequest(context) {
   // body/embedding/completion work below, so an over-limit caller bails cheap.
   // Paid users skip it (their own per-account caps below).
   if (!isPaidPlan) {
-    const freeIP = request.headers.get('EO-Connecting-IP') || 'unknown';
+    const freeIP = getClientIP(request);
     const freeIPHash = await hashIP(freeIP);
     const freeBucket = Math.floor(Date.now() / (FREE_IP_WINDOW * 1000));
     const freeKey = `free:ip:${freeIPHash}:${freeBucket}`;

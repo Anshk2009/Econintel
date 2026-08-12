@@ -1,7 +1,9 @@
 -- ============================================================================
 -- EconIntel RAG — HYBRID RETRIEVAL upgrade (vector + keyword, fused with RRF)
--- Run in Supabase SQL editor. PREREQUISITES: schema.sql + migration-add-publishable.sql
--- + migration-citeable-rpc.sql already ran (documents table with publishable column).
+-- Run in Supabase SQL editor. PREREQUISITE: schema.sql + migration-add-publishable.sql
+-- already ran (documents table with the publishable column).
+-- NOTE: this migration is for an EXISTING database. A fresh install gets the
+-- hybrid function straight from schema.sql and does not need to run this.
 --
 -- DEPLOY ORDER: run THIS SQL FIRST, then deploy the updated functions/chat.js.
 -- (If chat.js deploys first, its RPC call has a query_text param the old function
