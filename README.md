@@ -6,9 +6,23 @@ Static frontend for EconIntel: a polished, animated economics-analysis interface
 
 - `index.html` — Landing page (animated gradient background, crisis analogues, pricing, sources)
 - `chat.html` — Chat terminal (flat dark background, account modal, history)
+- `blogs.html` / `newsletter.html` — "Coming soon" placeholders (`noindex` until they carry real content)
+- `404.html` — Custom not-found page (EdgeOne serves it automatically)
 - `config.js` — Points the frontend at the backend API (EdgeOne)
+- `favicon.svg`, `robots.txt`, `sitemap.xml` — Site metadata
+- `functions/` — EdgeOne Edge Functions (auth, chat, chat history, shared middleware)
+- `rag/` — Local-only tooling that fills the Supabase `documents` table (never deployed)
+- `migrations/` — SQL run by hand in the Supabase SQL editor
 
 No build step. Pure HTML/CSS/JS.
+
+## Database setup
+
+Run `schema_supabase.sql` in the Supabase SQL editor to create the app tables
+(`users`, `chat_history`, `kv_store`, …). Without it, signup fails with a 500
+because the `users` table doesn't exist. The RAG `documents` table is separate —
+see `rag/schema.sql`. Numbered files in `migrations/` are applied after that, in
+order.
 
 ## Deploy (EdgeOne Pages)
 

@@ -1,14 +1,10 @@
 {
   "name": "econintel",
   "version": "1.0.0",
-  "description": "Economics AI chat app with security hardening",
+  "description": "Economics AI chat app — static HTML/CSS/JS + EdgeOne Edge Functions, no build step",
   "type": "module",
-  "main": "index.js",
+  "private": true,
   "engines": {
     "node": ">=22.11.0"
-  },
-  "dependencies": {
-    "@supabase/supabase-js": "^2.43.0"
-  },
-  "devDependencies": {}
+  }
 }
