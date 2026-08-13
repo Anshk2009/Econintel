@@ -30,8 +30,15 @@ jobs:
       - name: Syntax-check edge functions
         run: |
           echo "=== Syntax check: functions/ ==="
+          # These are .js files containing ESM `import`. On Node 20, `node --check`
+          # treats .js as CommonJS unless a package.json says "type":"module" — and
+          # that manifest is deliberately NOT in the repo root any more (it was
+          # being served publicly). Copying to .mjs makes the check depend only on
+          # the file itself, on any Node version.
+          mkdir -p /tmp/synt
           for f in functions/*.js; do
-            node --check "$f" && echo "  ✅ $f" || (echo "  ❌ $f — syntax error" && exit 1)
+            cp "$f" "/tmp/synt/$(basename "$f" .js).mjs"
+            node --check "/tmp/synt/$(basename "$f" .js).mjs" && echo "  ✅ $f" || (echo "  ❌ $f — syntax error" && exit 1)
           done
 
       - name: Syntax-check RAG scripts
@@ -42,15 +49,11 @@ jobs:
             node --check "$f" && echo "  ✅ $f" || (echo "  ❌ $f — syntax error" && exit 1)
           done
 
-      # ── 2. Dependency audit (package.json present) ──────────────────────────
-      - name: Install deps (audit-only)
-        run: npm install --ignore-scripts
-        if: hashFiles('package.json') != ''
-
-      - name: npm audit (high + critical only)
-        run: npm audit --audit-level=high
-        if: hashFiles('package.json') != ''
-        continue-on-error: true   # warn but don't block; pin deps to fix
+      # ── 2. (removed) Dependency audit ───────────────────────────────────────
+      # There is nothing to audit: this project has zero runtime dependencies and
+      # no lockfile, and the manifest that used to gate these steps now lives at
+      # .package.json (outside EdgeOne's public serving path). `npm audit` over a
+      # dependency-free manifest only ever reported "found 0 vulnerabilities".
 
       # ── 3. Hardcoded secret / credential scan ───────────────────────────────
       #    Looks for patterns that should NEVER appear in source code.

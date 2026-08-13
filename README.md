@@ -28,9 +28,16 @@ the website") were all publicly fetchable at e.g.
 database schema to anyone who guessed the path.
 
 The dot prefix is what keeps them private. **Do not rename `.rag/`,
-`.migrations/` or `.scripts/` back** without another way to exclude them, or they
-go public again silently. `functions/` is the exception: EdgeOne treats it as
-edge-function source and never serves it as static files.
+`.migrations/`, `.scripts/` or `.package.json` back** without another way to
+exclude them, or they go public again silently. `functions/` is the exception:
+EdgeOne treats it as edge-function source and never serves it as static files.
+
+One consequence worth knowing: with no `package.json` in the repo root, Node
+treats a `.js` file as CommonJS, so `node --check functions/*.js` fails on
+Node 20 (those files use ESM `import`). CI works around it by copying each file
+to `.mjs` before checking — see `.github/workflows/ci.yml`. Local Node 22.7+
+auto-detects ESM and passes either way, which is exactly why this is easy to
+break without noticing.
 
 To verify after any deploy:
 
