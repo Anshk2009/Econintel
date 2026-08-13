@@ -20,7 +20,7 @@ on:
       - "functions/**"
       - "*.html"
       - "config.js"
-      - "scripts/**"
+      - ".scripts/**"
       - ".github/workflows/smoke.yml"
 
 jobs:
@@ -39,10 +39,10 @@ jobs:
       # EdgeOne deploys asynchronously after a push, so the script retries
       # internally rather than racing the rollout and reporting a false red.
       - name: Smoke test the live site
-        run: node scripts/smoke.mjs
+        run: node .scripts/smoke.mjs
 
       - name: Check every link and anchor
         # Runs even if the smoke test failed — a broken chat and a broken link
         # are independent problems and you want to see both in one run.
         if: always()
-        run: node scripts/check-links.mjs
+        run: node .scripts/check-links.mjs

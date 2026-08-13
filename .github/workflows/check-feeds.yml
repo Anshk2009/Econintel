@@ -17,8 +17,8 @@ on:
     # Also verify whenever the feed list itself changes, so a typo'd or dead URL
     # is caught at commit time rather than a week later.
     paths:
-      - "rag/feeds.json"
-      - "rag/check-feeds.mjs"
+      - ".rag/feeds.json"
+      - ".rag/check-feeds.mjs"
       - ".github/workflows/check-feeds.yml"
 
 jobs:
@@ -35,5 +35,5 @@ jobs:
           node-version: "20"   # built-in fetch(), so no npm install
 
       - name: Check every feed in feeds.json
-        working-directory: rag
+        working-directory: .rag
         run: node check-feeds.mjs

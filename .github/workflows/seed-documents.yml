@@ -1,7 +1,7 @@
 name: Seed documents
 
-# Manually-triggered: embeds every file in rag/documents/ into Supabase.
-# Run this from the Actions tab whenever you add or change docs in rag/documents/.
+# Manually-triggered: embeds every file in .rag/documents/ into Supabase.
+# Run this from the Actions tab whenever you add or change docs in .rag/documents/.
 # (Separate from the live-news cron so your case studies aren't re-embedded every 3h.)
 
 on:
@@ -20,7 +20,7 @@ jobs:
           node-version: "20"
 
       - name: Run file ingester
-        working-directory: rag
+        working-directory: .rag
         env:
           OPENROUTER_EMBED_KEY: ${{ secrets.OPENROUTER_EMBED_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

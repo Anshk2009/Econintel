@@ -32,7 +32,7 @@ jobs:
           node-version: "20"   # Node 20 has fetch() built in — no npm install needed
 
       - name: Run live ingester
-        working-directory: rag    # ingest-live.mjs reads ./feeds.json from this folder
+        working-directory: .rag    # ingest-live.mjs reads ./feeds.json from this folder
         env:
           OPENROUTER_EMBED_KEY: ${{ secrets.OPENROUTER_EMBED_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

@@ -36,8 +36,8 @@ jobs:
 
       - name: Syntax-check RAG scripts
         run: |
-          echo "=== Syntax check: rag/ ==="
-          for f in rag/*.mjs rag/sources/*.mjs; do
+          echo "=== Syntax check: .rag/ ==="
+          for f in .rag/*.mjs .rag/sources/*.mjs; do
             [ -f "$f" ] || continue
             node --check "$f" && echo "  ✅ $f" || (echo "  ❌ $f — syntax error" && exit 1)
           done
@@ -124,10 +124,10 @@ jobs:
       - name: RLS posture check
         run: |
           echo "=== RLS posture ==="
-          LAST=$(ls migrations/*.sql 2>/dev/null | sort | tail -1)
+          LAST=$(ls .migrations/*.sql 2>/dev/null | sort | tail -1)
           if echo "$LAST" | grep -q "rollback_disable_rls\|disable_rls"; then
             echo "⚠️  WARNING: latest migration appears to DISABLE RLS ($LAST)."
-            echo "   Run migrations/0003_enable_rls.sql after setting SUPABASE_SERVICE_KEY_B64."
+            echo "   Run .migrations/0003_enable_rls.sql after setting SUPABASE_SERVICE_KEY_B64."
           else
             echo "  ℹ️  Latest migration: $LAST"
           fi

@@ -30,7 +30,7 @@ jobs:
           node-version: "20"   # built-in fetch() — no npm install needed
 
       - name: Run open-data ingester
-        working-directory: rag
+        working-directory: .rag
         env:
           OPENROUTER_EMBED_KEY: ${{ secrets.OPENROUTER_EMBED_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
