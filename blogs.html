@@ -3,69 +3,127 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>EconIntel — Blogs</title>
+<meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'; form-action 'self'" />
+<title>EconIntel — Blog</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-<meta name="description" content="Long-form economic analysis and crisis breakdowns from EconIntel — coming soon." />
+<meta name="description" content="Long-form economic analysis from EconIntel — crisis mechanisms, policy effects, and the historical parallels that rhyme." />
+<link rel="canonical" href="https://econintel.edgeone.app/blogs.html" />
+<!-- KEEP noindex until at least one real post is live. An empty or placeholder
+     blog index in the search results is worse than none. Remove this line, the
+     Disallow in robots.txt, and add the post URLs to sitemap.xml together. -->
 <meta name="robots" content="noindex, follow" />
 <meta name="theme-color" content="#05060c" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="EconIntel Blog — Structured Reasoning, Not News" />
+<meta property="og:description" content="Long-form economic analysis: crisis mechanisms, policy effects, and the historical parallels that rhyme." />
+<meta property="og:url" content="https://econintel.edgeone.app/blogs.html" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet" />
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  @keyframes gradientShift { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
-  @keyframes pulse { 0%,100%{opacity:.5;transform:scale(1)} 50%{opacity:1;transform:scale(1.15)} }
-  html, body { height: 100%; }
-  body {
-    font-family: 'DM Sans', sans-serif; color: #eef1f8; background: #05060c;
-    min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    text-align: center; padding: 2rem; position: relative; overflow: hidden;
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#05060c; --ink:#eef1f8; --muted:rgba(235,240,255,.6); --muted2:rgba(235,240,255,.45);
+    --line:rgba(255,255,255,.1); --accent:#6f9bff; --grad:linear-gradient(135deg,#5b8def,#7a5bff);
   }
-  body::before {
-    content: ''; position: fixed; inset: 0; z-index: -1;
-    background: linear-gradient(135deg, #06060d 0%, #0c1838 30%, #163a8c 50%, #0c1838 70%, #06060d 100%);
-    background-size: 220% 220%; animation: gradientShift 24s ease-in-out infinite;
+  @keyframes gradientShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+  @keyframes pulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.15)}}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);line-height:1.65;min-height:100vh}
+  /* Same animated field as the other standalone pages, but far more subdued —
+     this page is for reading, so the background must not compete with text. */
+  body::before{
+    content:'';position:fixed;inset:0;z-index:-1;
+    background:linear-gradient(135deg,#06060d 0%,#0a1230 35%,#101f52 50%,#0a1230 65%,#06060d 100%);
+    background-size:220% 220%;animation:gradientShift 30s ease-in-out infinite;opacity:.55;
   }
-  .logo {
-    display: inline-flex; align-items: center; gap: .55rem; margin-bottom: 2.2rem;
-    font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.25rem; letter-spacing: -.01em;
+  @media (prefers-reduced-motion: reduce){ body::before{animation:none} }
+
+  header{position:sticky;top:0;z-index:10;background:rgba(5,6,12,.88);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+  .bar{max-width:1080px;margin:0 auto;padding:.9rem 1.5rem;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+  .logo{display:inline-flex;align-items:center;gap:.5rem;font-family:'Syne',sans-serif;font-weight:800;font-size:1.05rem;color:var(--ink);text-decoration:none}
+  .logo-dot{width:11px;height:11px;border-radius:4px;background:var(--grad);animation:pulse 2.4s ease-in-out infinite}
+  .bar nav{margin-left:auto;display:flex;gap:1.1rem;flex-wrap:wrap;font-size:.83rem}
+  .bar nav a{color:var(--muted);text-decoration:none;transition:color .2s}
+  .bar nav a:hover,.bar nav a[aria-current]{color:var(--accent)}
+
+  main{max-width:1080px;margin:0 auto;padding:3.5rem 1.5rem 5rem}
+  .eyebrow{font-size:.72rem;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin-bottom:.9rem}
+  h1{font-family:'Syne',sans-serif;font-weight:800;font-size:clamp(2.2rem,6vw,3.4rem);letter-spacing:-.03em;line-height:1.05;margin-bottom:.8rem}
+  h1 em{font-style:normal;background:linear-gradient(135deg,#fff 0%,#9ec0ff 55%,#b69bff 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .lede{color:var(--muted);max-width:620px;font-size:1.05rem;font-weight:300;margin-bottom:3rem}
+
+  /* ── POST LIST ──
+     To add a post: copy one <article class="card"> block, change the href,
+     title, dek, date, read time and tag. No build step, nothing to compile. */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:1.1rem}
+  .card{
+    background:rgba(255,255,255,.035);border:1px solid var(--line);border-radius:14px;
+    padding:1.4rem 1.5rem;display:flex;flex-direction:column;
+    transition:transform .2s,border-color .2s,background .2s;
   }
-  .logo-dot { width: 12px; height: 12px; border-radius: 4px; background: linear-gradient(135deg,#5b8def,#7a5bff); animation: pulse 2.4s ease-in-out infinite; }
-  .eyebrow { font-size: .72rem; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: #6f9bff; margin-bottom: 1rem; }
-  h1 {
-    font-family: 'Syne', sans-serif; font-weight: 800; line-height: 1.02;
-    font-size: clamp(2.6rem, 9vw, 5rem); letter-spacing: -.03em; margin-bottom: 1.1rem;
-    background: linear-gradient(135deg,#ffffff 0%, #9ec0ff 60%, #b69bff 100%);
-    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
-  }
-  p { color: rgba(235,240,255,.6); max-width: 480px; font-size: 1.05rem; line-height: 1.6; margin-bottom: 2.2rem; }
-  .back {
-    display: inline-flex; align-items: center; gap: .5rem; text-decoration: none; color: #05060c;
-    background: #fff; padding: .7rem 1.4rem; border-radius: 999px; font-weight: 700; font-size: .9rem;
-    transition: transform .2s, box-shadow .2s;
-  }
-  .back:hover { transform: translateY(-2px); box-shadow: 0 12px 30px -10px rgba(110,150,255,.6); }
+  .card:hover{transform:translateY(-3px);border-color:rgba(255,255,255,.22);background:rgba(255,255,255,.055)}
+  .card .meta{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;font-size:.72rem;color:var(--muted2);margin-bottom:.7rem}
+  .tag{background:rgba(111,155,255,.14);color:#9ec0ff;border:1px solid rgba(111,155,255,.25);padding:.15rem .55rem;border-radius:999px;font-weight:600;letter-spacing:.03em}
+  .card h2{font-family:'Syne',sans-serif;font-weight:700;font-size:1.15rem;line-height:1.3;letter-spacing:-.01em;margin-bottom:.5rem}
+  .card h2 a{color:var(--ink);text-decoration:none}
+  .card h2 a:hover{color:#9ec0ff}
+  .card p{color:var(--muted);font-size:.9rem;font-weight:300;margin-bottom:1rem}
+  .card .more{margin-top:auto;font-size:.82rem;font-weight:600;color:var(--accent);text-decoration:none}
+  .card .more:hover{text-decoration:underline}
+
+  /* Shown when there are no posts yet. Delete once real posts exist. */
+  .empty{border:1px dashed var(--line);border-radius:14px;padding:2.5rem 1.5rem;text-align:center;color:var(--muted)}
+
+  footer.site{border-top:1px solid var(--line);margin-top:4rem;padding:1.5rem 0 0;color:var(--muted2);font-size:.78rem;text-align:center}
+  footer.site a{color:var(--muted);text-decoration:none}
+  footer.site a:hover{color:var(--accent)}
 </style>
 </head>
 <body>
-  <div class="logo"><span class="logo-dot"></span>EconIntel</div>
-  <div class="eyebrow">Blogs</div>
-  <h1>Coming&nbsp;Soon</h1>
-  <p>Long-form analysis, crisis breakdowns, and structured economic reasoning — in the works. Check back shortly.</p>
-  <a class="back" href="index.html">← Back to home</a>
-  <!-- Sources & data attribution (CC-BY / open-data licence credit + trust). -->
-  <footer class="src-footer">
-    <strong>Sources &amp; data:</strong>
-    World Bank Open Data (CC BY 4.0) · FRED® (St.&nbsp;Louis Fed) · U.S. SEC EDGAR (public domain) · data.gov.in (GODL India) · and other primary sources.
+<header>
+  <div class="bar">
+    <a class="logo" href="index.html"><span class="logo-dot"></span>EconIntel</a>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="chat.html">Terminal</a>
+      <a href="blogs.html" aria-current="page">Blog</a>
+      <a href="newsletter.html">Newsletter</a>
+      <a href="index.html#pricing">Pricing</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="eyebrow">The Archive</div>
+  <h1>Structured reasoning,<br /><em>written down</em></h1>
+  <p class="lede">
+    Long-form breakdowns of how economies actually move — the mechanism behind the
+    headline, the second-order effects, and the historical episode it rhymes with.
+  </p>
+
+  <div class="grid" id="post-grid">
+    <!-- ══ POST CARD TEMPLATE — copy this block for each new post ══ -->
+    <article class="card">
+      <div class="meta">
+        <span class="tag">Placeholder</span>
+        <span>—</span>
+        <span>Awaiting first post</span>
+      </div>
+      <h2><a href="blog/example-post.html">Your first post title goes here</a></h2>
+      <p>
+        A one or two line summary of the piece — the claim it makes, not a description
+        of what it covers. This is the text that decides whether someone clicks.
+      </p>
+      <a class="more" href="blog/example-post.html">Read the piece →</a>
+    </article>
+    <!-- ══ END TEMPLATE ══ -->
+  </div>
+
+  <footer class="site">
+    <a href="index.html">← Back to EconIntel</a> ·
+    <a href="newsletter.html">Newsletter</a> ·
+    <a href="legal.html">Legal</a>
   </footer>
-  <style>
-    .src-footer {
-      position: fixed; left: 0; right: 0; bottom: 0;
-      padding: .6rem 1rem; font-size: .62rem; line-height: 1.5;
-      color: rgba(235,240,255,.4); text-align: center;
-      background: linear-gradient(to top, rgba(5,6,12,.9), transparent);
-    }
-    .src-footer strong { color: rgba(235,240,255,.58); font-weight: 700; }
-  </style>
+</main>
 </body>
 </html>
