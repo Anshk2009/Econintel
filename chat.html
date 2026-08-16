@@ -10,6 +10,9 @@
 <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'; form-action 'self'" />
 <title>EconIntel — Chat</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
+<link rel="manifest" href="site.webmanifest" />
 <meta name="description" content="Ask EconIntel anything about the economy, markets or geopolitics and get a structured, source-grounded answer instead of a news summary." />
 <link rel="canonical" href="https://econintel.edgeone.app/chat.html" />
 <meta name="theme-color" content="#05060c" />
@@ -1943,7 +1946,9 @@ function addMessage(role, content, opts = {}) {
     el.innerHTML = '<span class="think-dots"><i></i><i></i><i></i></span>';
   } else if (opts.imageDataUrl) {
     // User bubble with an image attachment + optional text
-    el.innerHTML = `<img src="${opts.imageDataUrl}" style="max-width:220px;max-height:160px;border-radius:8px;display:block${content ? ';margin-bottom:0.5rem' : ''}">${content ? escapeHTML(content) : ''}`;
+    // alt describes what the image IS to a screen reader. The filename is
+    // user-supplied, so it must be escaped like any other untrusted value.
+    el.innerHTML = `<img src="${opts.imageDataUrl}" alt="${escapeHTML(opts.imageName || 'Image you attached')}" style="max-width:220px;max-height:160px;border-radius:8px;display:block${content ? ';margin-bottom:0.5rem' : ''}">${content ? escapeHTML(content) : ''}`;
   } else {
     el.textContent = content;
   }
@@ -1999,7 +2004,7 @@ async function sendMessage() {
 
   // Display the user bubble
   if (att?.type === 'image') {
-    addMessage('user', text, { imageDataUrl: att.dataUrl });
+    addMessage('user', text, { imageDataUrl: att.dataUrl, imageName: att.name });
   } else if (att?.type === 'text') {
     addMessage('user', `[${att.name}]\n${text || '(no additional text)'}`.trim());
   } else {
@@ -2252,7 +2257,7 @@ function renderChip() {
   if (!pendingAttachment) { area.innerHTML = ''; area.classList.remove('has-chip'); return; }
   const isImg = pendingAttachment.type === 'image';
   const preview = isImg
-    ? `<img src="${pendingAttachment.dataUrl}" alt="preview">`
+    ? `<img src="${pendingAttachment.dataUrl}" alt="Preview of ${escapeHTML(pendingAttachment.name || 'the image you attached')}">`
     : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
   area.innerHTML = `<div class="attach-chip">${preview}<span class="attach-chip-name">${escapeHTML(pendingAttachment.name)}</span><button class="attach-chip-remove" onclick="clearAttachment()" title="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>`;
   area.classList.add('has-chip');
