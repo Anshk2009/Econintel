@@ -663,6 +663,51 @@
   }
   .terminal-cta svg { width: 15px; height: 15px; }
 
+  /* ── STICKY MOBILE CTA ──
+     Phones only. The hero CTA scrolls away after ~600px, and the pricing/contact
+     sections are far down — this keeps the primary action reachable at all times
+     without stealing space on desktop, where the nav is always visible anyway.
+     Hidden until the hero CTA is off-screen (JS toggles .show) so it never covers
+     the hero it duplicates. */
+  .sticky-cta {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+    display: none; align-items: center; gap: .75rem;
+    padding: .7rem 1rem calc(.7rem + env(safe-area-inset-bottom));
+    background: rgba(5,5,8,.92); backdrop-filter: blur(14px);
+    border-top: 1px solid rgba(255,255,255,0.1);
+    transform: translateY(110%); transition: transform .28s ease;
+  }
+  .sticky-cta.show { transform: translateY(0); }
+  .sticky-cta-text { flex: 1; min-width: 0; font-size: .72rem; line-height: 1.35; color: var(--text2); }
+  .sticky-cta-text b { display: block; color: var(--text); font-size: .82rem; font-weight: 600; }
+  /* min-height 44px: WCAG 2.5.5 target size. At .65rem padding this button
+     measured 39px tall, which is a genuinely fiddly tap on a phone. */
+  .sticky-cta .terminal-cta { padding: .65rem 1.1rem; font-size: .72rem; white-space: nowrap; min-height: 44px; }
+  @media (max-width: 768px) { .sticky-cta { display: flex; } }
+  /* Room so the fixed bar never covers the last of the page content. */
+  @media (max-width: 768px) { body.has-sticky-cta { padding-bottom: 4.5rem; } }
+  @media (prefers-reduced-motion: reduce) { .sticky-cta { transition: none; } }
+
+  /* ── SCROLL TO TOP ──
+     Appears after a screenful of scrolling. Sits above the sticky CTA on mobile
+     so the two never overlap. */
+  .to-top {
+    position: fixed; right: 1rem; z-index: 55;
+    bottom: 1.25rem;
+    width: 40px; height: 40px; border-radius: 50%;
+    display: grid; place-items: center; cursor: pointer;
+    background: rgba(255,255,255,0.08); color: var(--text);
+    border: 1px solid rgba(255,255,255,0.16);
+    backdrop-filter: blur(10px);
+    opacity: 0; visibility: hidden; transform: translateY(8px);
+    transition: opacity .25s, transform .25s, visibility .25s, background .2s;
+  }
+  .to-top.show { opacity: 1; visibility: visible; transform: translateY(0); }
+  .to-top:hover { background: rgba(255,255,255,0.16); }
+  .to-top svg { width: 18px; height: 18px; }
+  @media (max-width: 768px) { .to-top { bottom: 5.25rem; } }
+  @media (prefers-reduced-motion: reduce) { .to-top { transition: none; } }
+
   /* Responsive */
   @media (max-width: 640px) {
     #hero { padding: 100px 1.5rem 1rem; min-height: auto; }
@@ -3174,6 +3219,64 @@ if (!currentCSRFToken) {
 })();
 </script>
 
+<!-- ── STICKY MOBILE CTA (phones only, shown once the hero CTA scrolls away) ── -->
+<div class="sticky-cta" id="sticky-cta">
+  <div class="sticky-cta-text">
+    <b>Ask your first question</b>
+    5 free — no signup, no card.
+  </div>
+  <a href="chat.html" class="terminal-cta" data-cta="sticky-mobile">Start</a>
+</div>
+
+<!-- ── SCROLL TO TOP ── -->
+<button class="to-top" id="to-top" type="button" aria-label="Scroll back to top">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <polyline points="18 15 12 9 6 15"/>
+  </svg>
+</button>
+
+<script>
+(function () {
+  var stickyCta = document.getElementById('sticky-cta');
+  var toTop     = document.getElementById('to-top');
+  var heroCta   = document.querySelector('.hero-cta');
+
+  // Reserve space for the sticky bar so it can't cover the footer's last line.
+  document.body.classList.add('has-sticky-cta');
+
+  // Show the sticky CTA only once the hero's own CTA has scrolled out of view —
+  // duplicating a button that's already on screen just wastes space.
+  var heroCtaGone = false;
+  if (heroCta && 'IntersectionObserver' in window) {
+    new IntersectionObserver(function (entries) {
+      heroCtaGone = !entries[0].isIntersecting;
+      stickyCta.classList.toggle('show', heroCtaGone);
+    }, { rootMargin: '-10px 0px 0px 0px' }).observe(heroCta);
+  } else if (heroCta) {
+    heroCtaGone = true;   // no IO support: just show it
+    stickyCta.classList.add('show');
+  }
+
+  // Scroll-to-top appears after one screen of scrolling.
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () {
+      toTop.classList.toggle('show', window.scrollY > window.innerHeight * 0.9);
+      ticking = false;
+    });
+  }
+  addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  toTop.addEventListener('click', function () {
+    // Honour a reduced-motion preference instead of always smooth-scrolling.
+    var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+  });
+})();
+</script>
 
 </body>
 </html>
