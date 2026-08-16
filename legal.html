@@ -58,6 +58,7 @@
   .back { display:inline-block; margin-top:3rem; color:var(--muted); text-decoration:none; font-size:.9rem; }
   .back:hover { color:var(--accent); }
 </style>
+<link rel="stylesheet" href="consent.css" />
 </head>
 <body>
 <header>
@@ -211,15 +212,45 @@
   <!-- ═══════════════ COOKIES ═══════════════ -->
   <section id="cookies">
     <h2>Cookie Policy</h2>
-    <p>We only use cookies and browser storage that are needed to sign you in and keep the Service secure. There are no advertising cookies and no third-party analytics or tracking cookies on this site.</p>
+    <p>We use cookies and browser storage that are strictly necessary to sign you in and keep the Service secure. There are no advertising cookies on this site, and we do not sell or share your data with advertisers.</p>
+    <p><strong>Analytics are optional and off by default.</strong> We ask before measuring anything, nothing analytics-related loads unless you accept, and declining is a single click that takes effect immediately. If your browser sends a Global Privacy Control signal we treat that as a decline and never ask.</p>
+    <p>
+      Your current choice:
+      <strong id="consent-state">checking…</strong> —
+      <a href="#cookies" id="consent-change">change it</a>.
+    </p>
 
     <table>
       <tr><th>Name</th><th>Purpose</th><th>Life</th></tr>
       <tr><td><code>access_token</code></td><td>Keeps you signed in. HttpOnly, so page scripts cannot read it.</td><td>15 minutes</td></tr>
       <tr><td><code>refresh_token</code></td><td>Renews your session without making you log in again. HttpOnly.</td><td>30 days</td></tr>
       <tr><td><code>csrf_token</code></td><td>Protects against cross-site request forgery. Readable by the page by design, so it can be echoed back as a header.</td><td>24 hours</td></tr>
-      <tr><td>Local storage</td><td>Remembers your display name, plan and theme so the interface loads correctly.</td><td>Until you clear it</td></tr>
+      <tr><td>Local storage</td><td>Remembers your display name, plan and theme so the interface loads correctly, and records your analytics choice so we stop asking.</td><td>Until you clear it</td></tr>
+      <tr><td>Google Analytics<br /><em>(only if you accept)</em></td><td>Anonymous page-view measurement, with IP anonymisation on and all advertising/personalisation signals disabled. Never loaded unless you click Accept.</td><td>Up to 2 years</td></tr>
     </table>
+
+    <script>
+      // Reflect the visitor's actual stored choice, and let them change it here.
+      // Reading it live avoids a policy page that claims one thing while the
+      // browser is doing another.
+      (function () {
+        var label = document.getElementById('consent-state');
+        var link  = document.getElementById('consent-change');
+        function render() {
+          var c = window.econintelConsent && window.econintelConsent.get();
+          label.textContent = c === 'granted' ? 'analytics accepted'
+                            : c === 'denied'  ? 'analytics declined'
+                            : 'not set yet';
+        }
+        link.addEventListener('click', function (e) {
+          e.preventDefault();
+          if (window.econintelConsent) { window.econintelConsent.reopen(); setTimeout(render, 50); }
+        });
+        // consent.js is deferred, so wait for it before the first read.
+        if (document.readyState === 'complete') render();
+        else addEventListener('load', render);
+      })();
+    </script>
 
     <p>Because all of these are strictly necessary to operate the Service, they are set without a consent banner. Blocking them in your browser will stop sign-in from working. Fonts and the 3D hero element load from Google Fonts and unpkg, which may set their own cookies under their policies.</p>
 
@@ -228,5 +259,7 @@
 
   <a class="back" href="index.html">← Back to EconIntel</a>
 </main>
+<script src="config.js"></script>
+<script src="consent.js" defer></script>
 </body>
 </html>

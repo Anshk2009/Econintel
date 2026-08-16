@@ -1,0 +1,58 @@
+/* consent.css — styling for the consent banner injected by consent.js.
+   Kept as its own file so all eight pages share one copy. */
+
+.ei-consent {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 90;                 /* above the sticky mobile CTA (60) */
+  background: rgba(8, 9, 16, 0.97);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  color: #eef1f8;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  animation: ei-consent-in 0.3s ease;
+}
+@keyframes ei-consent-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .ei-consent { animation: none; } }
+
+.ei-consent-inner {
+  max-width: 1000px; margin: 0 auto;
+  padding: 1rem 1.25rem calc(1rem + env(safe-area-inset-bottom));
+  display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap;
+}
+.ei-consent-text {
+  flex: 1; min-width: 260px;
+  font-size: 0.82rem; line-height: 1.55;
+  color: rgba(235, 240, 255, 0.72); font-weight: 300;
+}
+.ei-consent-text strong {
+  display: block; color: #eef1f8;
+  font-size: 0.9rem; font-weight: 600; margin-bottom: 0.2rem;
+}
+.ei-consent-text a { color: #6f9bff; }
+
+.ei-consent-actions { display: flex; gap: 0.6rem; flex-shrink: 0; }
+
+/* Reject and Accept are deliberately the SAME size and weight. Making the
+   decline path visually weaker is the dark pattern regulators penalise. */
+.ei-btn {
+  font-family: inherit; font-size: 0.8rem; font-weight: 700;
+  padding: 0.7rem 1.4rem; border-radius: 999px; cursor: pointer;
+  min-height: 44px;            /* WCAG 2.5.5 target size */
+  transition: background 0.2s, border-color 0.2s, transform 0.2s;
+}
+.ei-btn:focus-visible { outline: 2px solid #6f9bff; outline-offset: 2px; }
+.ei-btn-solid { background: #fff; color: #05060c; border: 1px solid #fff; }
+.ei-btn-solid:hover { transform: translateY(-1px); background: #e8eeff; }
+.ei-btn-ghost {
+  background: rgba(255, 255, 255, 0.07); color: #eef1f8;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+.ei-btn-ghost:hover { transform: translateY(-1px); background: rgba(255, 255, 255, 0.13); }
+
+@media (max-width: 560px) {
+  .ei-consent-actions { width: 100%; }
+  .ei-btn { flex: 1; }        /* equal width on mobile — same prominence */
+}
+
+@media print { .ei-consent { display: none !important; } }

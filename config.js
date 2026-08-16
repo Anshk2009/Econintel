@@ -13,6 +13,11 @@ const isDev = window.location.hostname === 'localhost' || window.location.hostna
 const BASE = isDev ? 'http://localhost:3000/functions' : '';
 
 const CONFIG = {
+  // GA4 measurement ID ("G-XXXXXXXXXX"). Leave EMPTY to run no analytics at all.
+  // consent.js only loads analytics after the visitor accepts AND this is set,
+  // so an empty value means the site tracks nothing regardless of consent.
+  analyticsId: '',
+
   // API Base URL (same origin in production)
 
   // Auth endpoints — EdgeOne routes exact paths only, so we dispatch via ?action=
