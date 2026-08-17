@@ -35,7 +35,13 @@
 <meta name="theme-color" content="#050508" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300;1,400&display=swap" rel="stylesheet" />
+<!-- Archivo Black backs up Arial Black for the figure numbers. Arial Black ships
+     with Windows and macOS but NOT Android, which maps Arial to Roboto and has no
+     black cut — so on the phones most of this audience reads on, "Arial Black"
+     would silently degrade to ordinary Arial. Browsers only download a webfont
+     that is actually needed to render, so desktops matching Arial Black locally
+     never fetch this file. -->
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Archivo+Black&display=swap" rel="stylesheet" />
 <style>
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
   :root{
@@ -104,7 +110,7 @@
      font-weight:900 makes any fallback in the stack render at its heaviest.
      Arial Black is a wide face, so the negative tracking is eased from -.02em to
      -.01em to stop the digits colliding. */
-  .fig b{display:block;font-family:'Arial Black','Arial Bold',Arial,Helvetica,sans-serif;font-size:1.35rem;font-weight:900;color:var(--ink);letter-spacing:-.01em;line-height:1.15}
+  .fig b{display:block;font-family:'Arial Black','Archivo Black',Arial,Helvetica,sans-serif;font-size:1.35rem;font-weight:900;color:var(--ink);letter-spacing:-.01em;line-height:1.15}
   .fig span{display:block;font-size:.72rem;color:var(--muted2);margin-top:.3rem;line-height:1.4}
 
   table{width:100%;border-collapse:collapse;margin:1.8rem 0;font-size:.9rem;display:block;overflow-x:auto}
