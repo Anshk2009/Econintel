@@ -7,7 +7,6 @@
 User-agent: *
 Allow: /
 Disallow: /reset-password.html
-Disallow: /blogs.html
 Disallow: /newsletter.html
 
 Sitemap: https://econintel.edgeone.app/sitemap.xml

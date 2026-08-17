@@ -11,11 +11,7 @@
 <link rel="manifest" href="manifest.json" />
 <meta name="description" content="Long-form economic analysis from EconIntel — crisis mechanisms, policy effects, and the historical parallels that rhyme." />
 <link rel="canonical" href="https://econintel.edgeone.app/blogs.html" />
-<!-- KEEP noindex until at least one real post is live. An empty or placeholder
-     blog index in the search results is worse than none. Remove this line, the
-     Disallow in robots.txt, and add the post URLs to sitemap.xml together. -->
-<meta name="robots" content="noindex, follow" />
-<meta name="theme-color" content="#05060c" />
+<meta name="theme-color" content="#050508" />
 <meta property="og:type" content="website" />
 <meta property="og:title" content="EconIntel Blog — Structured Reasoning, Not News" />
 <meta property="og:description" content="Long-form economic analysis: crisis mechanisms, policy effects, and the historical parallels that rhyme." />
@@ -26,22 +22,26 @@
 <style>
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
   :root{
-    --bg:#05060c; --ink:#eef1f8; --muted:rgba(235,240,255,.6); --muted2:rgba(235,240,255,.45);
+    --bg:#050508; --ink:#eef1f8; --muted:rgba(235,240,255,.6); --muted2:rgba(235,240,255,.45);
     --line:rgba(255,255,255,.1); --accent:#6f9bff; --grad:linear-gradient(135deg,#5b8def,#7a5bff);
   }
-  @keyframes gradientShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
   @keyframes pulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.15)}}
   body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);line-height:1.65;min-height:100vh}
-  /* Same animated field as the other standalone pages, but far more subdued —
-     this page is for reading, so the background must not compete with text. */
+  /* Background matched to the landing page: flat --bg with the same subtle dot
+     grid the hero uses, masked so it fades toward the edges. Replaces the
+     animated blue gradient these pages used to carry, which read as a different
+     product from index.html. */
   body::before{
     content:'';position:fixed;inset:0;z-index:-1;
-    background:linear-gradient(135deg,#06060d 0%,#0a1230 35%,#101f52 50%,#0a1230 65%,#06060d 100%);
-    background-size:220% 220%;animation:gradientShift 30s ease-in-out infinite;opacity:.55;
+    background-color:#050508;
+    background-image:radial-gradient(circle, #444 1px, transparent 1px);
+    background-size:40px 40px;
+    opacity:.18;
+    -webkit-mask-image:radial-gradient(ellipse 80% 80% at 50% 40%, black, transparent);
+            mask-image:radial-gradient(ellipse 80% 80% at 50% 40%, black, transparent);
   }
-  @media (prefers-reduced-motion: reduce){ body::before{animation:none} }
 
-  header{position:sticky;top:0;z-index:10;background:rgba(5,6,12,.88);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+  header{position:sticky;top:0;z-index:10;background:rgba(5,5,8,.88);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
   .bar{max-width:1080px;margin:0 auto;padding:.9rem 1.5rem;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
   .logo{display:inline-flex;align-items:center;gap:.5rem;font-family:'Syne',sans-serif;font-weight:800;font-size:1.05rem;color:var(--ink);text-decoration:none}
   .logo-dot{width:11px;height:11px;border-radius:4px;background:var(--grad);animation:pulse 2.4s ease-in-out infinite}
@@ -106,21 +106,23 @@
   </p>
 
   <div class="grid" id="post-grid">
-    <!-- ══ POST CARD TEMPLATE — copy this block for each new post ══ -->
+    <!-- ══ POST CARD — copy this block for each new post ══ -->
     <article class="card">
       <div class="meta">
-        <span class="tag">Placeholder</span>
-        <span>—</span>
-        <span>Awaiting first post</span>
+        <span class="tag">Payments</span>
+        <span>17 Aug 2026</span>
+        <span>·</span>
+        <span>7 min read</span>
       </div>
-      <h2><a href="blog/example-post.html">Your first post title goes here</a></h2>
+      <h2><a href="blog/upi-who-pays.html">UPI won. Now someone has to pay for it.</a></h2>
       <p>
-        A one or two line summary of the piece — the claim it makes, not a description
-        of what it covers. This is the text that decides whether someone clicks.
+        23.66 billion payments a month, zero merchant fees, and an average transaction
+        that shrinks 7% a year. The cost of the rails rises with success — India has
+        not decided who carries it.
       </p>
-      <a class="more" href="blog/example-post.html">Read the piece →</a>
+      <a class="more" href="blog/upi-who-pays.html">Read the piece →</a>
     </article>
-    <!-- ══ END TEMPLATE ══ -->
+    <!-- ══ END CARD ══ -->
   </div>
 
   <footer class="site">

@@ -18,7 +18,7 @@ import process from 'node:process';
 const BASE = (process.env.BASE_URL || 'https://econintel.edgeone.app').replace(/\/$/, '');
 const STRICT_EXTERNAL = process.env.STRICT_EXTERNAL === '1';
 
-const PAGES = ['/', '/chat.html', '/legal.html', '/blogs.html', '/newsletter.html', '/reset-password.html', '/404.html'];
+const PAGES = ['/', '/chat.html', '/legal.html', '/blogs.html', '/newsletter.html', '/reset-password.html', '/404.html', '/blog/upi-who-pays.html'];
 
 // Browser UA: several sites 403 anything that looks automated.
 const UA = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' };
@@ -71,9 +71,17 @@ function classify(href, fromPage) {
   }
   if (h.startsWith('#')) return { kind: 'anchor', page: fromPage, id: h.slice(1) };
   if (h.startsWith('//')) return { kind: 'external', url: 'https:' + h };
-  // relative
+  // Relative href. Resolve it with the URL parser rather than string-prefixing a
+  // slash — a page in /blog/ links to "../legal.html", which naive concatenation
+  // turns into "/../legal.html" and reports as a broken link that works fine in
+  // any browser.
   const [pathPart, hash] = h.split('#');
-  const path = pathPart ? (pathPart.startsWith('/') ? pathPart : '/' + pathPart) : fromPage;
+  let path;
+  try {
+    path = new URL(pathPart || fromPage, 'http://x' + fromPage).pathname;
+  } catch {
+    path = pathPart && pathPart.startsWith('/') ? pathPart : '/' + (pathPart || '');
+  }
   return hash ? { kind: 'anchor', page: canon(path), id: hash } : { kind: 'internal', path: canon(path) };
 }
 

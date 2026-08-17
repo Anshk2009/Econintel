@@ -144,3 +144,19 @@ pre:hover .ei-copy, .ei-copy:focus-visible { opacity: 1; }
 .ei-copy:focus-visible { outline: 2px solid #6f9bff; outline-offset: 2px; }
 @media (hover: none) { .ei-copy { opacity: 1; } }   /* touch: no hover, always show */
 @media print { .ei-copy { display: none !important; } }
+
+/* ── "Quote" button raised by a text selection in an article ── */
+.ei-quote-btn {
+  position: absolute; z-index: 95;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 0.75rem; font-weight: 700; letter-spacing: 0.02em;
+  padding: 0.45rem 0.85rem; border-radius: 8px; cursor: pointer;
+  background: #fff; color: #05060c; border: 1px solid #fff;
+  box-shadow: 0 8px 22px -8px rgba(0, 0, 0, 0.7);
+  animation: ei-quote-in 0.12s ease;
+}
+@keyframes ei-quote-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .ei-quote-btn { animation: none; } }
+.ei-quote-btn:hover { background: #e8eeff; }
+.ei-quote-btn:focus-visible { outline: 2px solid #6f9bff; outline-offset: 2px; }
+@media print { .ei-quote-btn { display: none !important; } }

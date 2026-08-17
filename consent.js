@@ -272,3 +272,119 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();
+
+/**
+ * ARTICLE → CHAT HANDOFF (blog pages only)
+ *
+ * Two behaviours, both routed through sessionStorage because the article text is
+ * far too long for a query string and must survive a normal page navigation:
+ *
+ *  1. CONTEXT. Clicking "Ask a follow-up question" stashes the article so the
+ *     terminal can answer about the piece the reader just finished. The terminal
+ *     injects it as an INVISIBLE message — the model sees it, the reader does not
+ *     see a wall of their own article pasted into the chat.
+ *
+ *  2. QUOTE. Selecting text raises a small "Quote" button. Using it carries the
+ *     selection over and pre-fills the composer with it, visibly, so the reader
+ *     can see exactly what they are asking about.
+ *
+ * Capped at ARTICLE_CHARS: functions/chat.js enforces a per-plan request body
+ * limit (16 KB on free), and blowing that would fail the very first message.
+ */
+(function () {
+  'use strict';
+  var CTX_KEY   = 'econintel:articleContext';
+  var QUOTE_KEY = 'econintel:pendingQuote';
+  var ARTICLE_CHARS = 4000;
+  var QUOTE_CHARS   = 600;
+
+  var article = document.querySelector('article');
+  if (!article) return;                       // not a post page
+
+  /** Readable article text, minus the furniture a model gains nothing from. */
+  function articleText() {
+    var clone = article.cloneNode(true);
+    clone.querySelectorAll('.post-footer, .disclaimer, .post-meta, .ei-copy, script').forEach(function (n) { n.remove(); });
+    return clone.innerText.replace(/\n{3,}/g, '\n\n').trim().slice(0, ARTICLE_CHARS);
+  }
+
+  function stashContext() {
+    var h1 = document.querySelector('h1');
+    try {
+      sessionStorage.setItem(CTX_KEY, JSON.stringify({
+        title: h1 ? h1.textContent.trim() : document.title,
+        url:   location.href,
+        text:  articleText(),
+        at:    Date.now()
+      }));
+    } catch (e) { /* private mode: chat just opens without context */ }
+  }
+
+  // 1 ── any link into the terminal carries the article with it.
+  document.querySelectorAll('a[href*="chat.html"]').forEach(function (a) {
+    a.addEventListener('click', stashContext);
+  });
+
+  // 2 ── selection -> Quote
+  var btn = null;
+  function hideBtn() { if (btn) { btn.remove(); btn = null; } }
+
+  function showBtn(rect, text) {
+    hideBtn();
+    btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ei-quote-btn';
+    btn.textContent = 'Quote';
+    btn.setAttribute('aria-label', 'Quote this passage in the terminal');
+    // Position above the selection — but if the selection sits near the top of
+    // the viewport, "above" is off-screen, so flip it below instead.
+    var ABOVE = 44;
+    var top;
+    if (rect.top < ABOVE + 8) {
+      top = rect.bottom + window.scrollY + 8;      // flip below
+    } else {
+      top = rect.top + window.scrollY - ABOVE;
+    }
+    var left = Math.min(
+      Math.max(8, rect.left + window.scrollX + rect.width / 2 - 40),
+      document.documentElement.clientWidth - 90
+    );
+    btn.style.top  = top + 'px';
+    btn.style.left = left + 'px';
+
+    btn.addEventListener('mousedown', function (e) { e.preventDefault(); }); // keep the selection
+    btn.addEventListener('click', function () {
+      stashContext();                                   // model still gets the whole piece
+      try {
+        sessionStorage.setItem(QUOTE_KEY, JSON.stringify({
+          quote: text.slice(0, QUOTE_CHARS),
+          title: (document.querySelector('h1') || {}).textContent || document.title,
+          url: location.href
+        }));
+      } catch (e) {}
+      hideBtn();
+      location.href = new URL('../chat.html', location.href).pathname;
+    });
+    document.body.appendChild(btn);
+  }
+
+  function onSelect() {
+    var sel = window.getSelection();
+    if (!sel || sel.isCollapsed) { hideBtn(); return; }
+    var text = sel.toString().trim();
+    // Ignore stray clicks and accidental one-word drags.
+    if (text.length < 12) { hideBtn(); return; }
+    if (!article.contains(sel.anchorNode)) { hideBtn(); return; }
+    var rect = sel.getRangeAt(0).getBoundingClientRect();
+    if (!rect || !rect.width) { hideBtn(); return; }
+    showBtn(rect, text);
+  }
+
+  document.addEventListener('mouseup', function () { setTimeout(onSelect, 10); });
+  document.addEventListener('keyup', function (e) { if (e.shiftKey) setTimeout(onSelect, 10); });
+  document.addEventListener('selectionchange', function () {
+    var sel = window.getSelection();
+    if (!sel || sel.isCollapsed) hideBtn();
+  });
+  addEventListener('scroll', hideBtn, { passive: true });
+})();
