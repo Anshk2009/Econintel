@@ -139,3 +139,38 @@
     init();
   }
 })();
+
+/**
+ * Scroll progress bar — appended here rather than duplicated into every page.
+ * Only added when the page is actually long enough to scroll meaningfully
+ * (>1.6 screens), so short pages like 404 or the placeholders don't get a bar
+ * that jumps straight to 100%. The blog post template has its own #progress
+ * bar, so skip it there to avoid two bars stacked on top of each other.
+ */
+(function () {
+  'use strict';
+  function init() {
+    if (document.getElementById('progress')) return;               // post template already has one
+    var doc = document.documentElement;
+    if (doc.scrollHeight < window.innerHeight * 1.6) return;        // not worth a bar
+
+    var bar = document.createElement('div');
+    bar.className = 'ei-progress';
+    bar.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(bar);
+
+    var ticking = false;
+    function update() {
+      var max = doc.scrollHeight - doc.clientHeight;
+      bar.style.width = (max > 0 ? (doc.scrollTop / max) * 100 : 0) + '%';
+      ticking = false;
+    }
+    addEventListener('scroll', function () {
+      if (!ticking) { ticking = true; requestAnimationFrame(update); }
+    }, { passive: true });
+    addEventListener('resize', update, { passive: true });
+    update();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();

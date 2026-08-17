@@ -56,3 +56,73 @@
 }
 
 @media print { .ei-consent { display: none !important; } }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PRINT STYLESHEET
+   Loaded on every page (this file already is), so one copy covers the site.
+   Printing a dark-themed site wastes a cartridge of ink and prints white text
+   on white paper. Legal pages in particular get printed and filed, so they
+   must come out readable on paper.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media print {
+  /* Ink-saving, readable base. !important is warranted: the page's own dark
+     theme is set with high specificity and inline <style> blocks. */
+  *, *::before, *::after {
+    background: transparent !important;
+    color: #000 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  body {
+    background: #fff !important;
+    font-size: 11pt;
+    line-height: 1.45;
+  }
+
+  /* Screen furniture that means nothing on paper. */
+  .nav-wrap, nav, header, .sticky-cta, .to-top, .ei-consent,
+  .hero-robot-wrap, spline-viewer, .hero-dots, #hero-spotlight,
+  .ruixen-globe-sm, .globe-coverage-globe-wrap, #particles-js,
+  .modal-overlay, #progress, .nav-mobile-overlay, .theme-toggle,
+  .faq-q-icon, .case-link-label {
+    display: none !important;
+  }
+
+  /* Print the destination of a link — a bare "Read article" is useless on paper.
+     Skip in-page anchors and javascript: links, which would just add noise. */
+  a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 9pt;
+    word-break: break-all;
+  }
+
+  /* Keep blocks intact across page breaks. */
+  h1, h2, h3 { break-after: avoid-page; page-break-after: avoid; }
+  p, li, blockquote, tr, .case-card, .pricing-card { break-inside: avoid; page-break-inside: avoid; }
+  table { break-inside: auto; }
+
+  /* Undo gradient-clipped headings: they print as invisible white text. */
+  h1, h2, h3, .hero-heading em, h1 em {
+    -webkit-text-fill-color: #000 !important;
+    background: none !important;
+  }
+
+  /* Let long-form content use the full page width. */
+  article, main, .bar { max-width: 100% !important; }
+
+  @page { margin: 1.6cm; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SCROLL PROGRESS BAR
+   Injected by consent.js on long pages. Fixed at the very top, above the
+   sticky nav. Purely decorative, so aria-hidden and no announced role.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.ei-progress {
+  position: fixed; top: 0; left: 0; height: 2px; width: 0;
+  background: linear-gradient(90deg, #5b8def, #7a5bff);
+  z-index: 100; pointer-events: none;
+  transition: width 0.08s linear;
+}
+@media (prefers-reduced-motion: reduce) { .ei-progress { transition: none; } }
+@media print { .ei-progress { display: none !important; } }
