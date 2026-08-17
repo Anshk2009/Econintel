@@ -1703,6 +1703,25 @@
     margin-bottom: 1.25rem;
   }
   .modal-submit:hover { box-shadow: 0 0 24px rgba(14,165,233,0.5); transform: translateY(-1px); }
+  /* Disabled = a request is in flight. Make that visible, and stop the hover
+     lift firing on a button that no longer does anything. */
+  .modal-submit:disabled { opacity: 0.65; cursor: progress; transform: none; box-shadow: none; }
+
+  /* ── INLINE FORM FEEDBACK (replaces alert()) ── */
+  .modal-msg {
+    margin: 0 0 0.9rem; padding: 0.65rem 0.85rem;
+    border-radius: 10px; font-size: 0.82rem; line-height: 1.5;
+    border: 1px solid transparent;
+  }
+  .modal-msg[hidden] { display: none; }
+  .modal-msg.is-error {
+    background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.35); color: #ffb4ab;
+  }
+  .modal-msg.is-success {
+    background: rgba(34, 197, 94, 0.1); border-color: rgba(34, 197, 94, 0.35); color: #86efac;
+  }
+  /* Mark the field that actually caused the error, not just the form. */
+  .modal-input[aria-invalid="true"] { border-color: rgba(239, 68, 68, 0.6); }
 
   .modal-signup {
     text-align: center; font-size: 0.8rem; color: rgba(255,255,255,0.3);
@@ -2413,6 +2432,11 @@
       <a href="#" class="modal-forgot">Forgot password?</a>
     </div>
 
+    <!-- Inline form feedback. role="alert" + aria-live make a screen reader
+         announce the message the moment it appears; an alert() dialog is
+         disruptive, unstyleable, and loses the user's place in the form. -->
+    <p class="modal-msg" id="signin-msg" role="alert" aria-live="assertive" hidden></p>
+
     <button class="modal-submit" type="submit">Sign In</button>
     <p class="modal-signup">Don't have an account? <a href="#">Create one →</a></p>
     </form>
@@ -2715,8 +2739,35 @@ let currentUser = null; // Phase 6: Store user info in memory
  * Calls /functions/auth/login or /functions/auth/signup based on mode
  * Phase 6: Stores CSRF token in memory, JWT in secure httpOnly cookie (set by server)
  */
+
+// ── INLINE FORM FEEDBACK ───────────────────────────────────────────────────
+// Replaces alert() in the sign-in modal. alert() blocks the page, cannot be
+// styled, is announced inconsistently by screen readers, and on mobile it
+// dismisses the keyboard and loses the user's place in the form.
+// showFormMsg also marks the offending field with aria-invalid and focuses it,
+// so keyboard and screen-reader users are taken straight to what to fix.
+function showFormMsg(text, kind, fieldId) {
+  const el = document.getElementById('signin-msg');
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'modal-msg ' + (kind === 'success' ? 'is-success' : 'is-error');
+  el.hidden = false;
+  // Clear any previous field marking before applying a new one.
+  document.querySelectorAll('#signin-form .modal-input').forEach(i => i.removeAttribute('aria-invalid'));
+  if (fieldId) {
+    const f = document.getElementById(fieldId);
+    if (f) { f.setAttribute('aria-invalid', 'true'); f.focus(); }
+  }
+}
+function clearFormMsg() {
+  const el = document.getElementById('signin-msg');
+  if (el) { el.hidden = true; el.textContent = ''; el.className = 'modal-msg'; }
+  document.querySelectorAll('#signin-form .modal-input').forEach(i => i.removeAttribute('aria-invalid'));
+}
+
 async function submitSignIn(e) {
   e.preventDefault();
+  clearFormMsg();
 
   const name = document.getElementById('signin-name').value.trim();
   const email = document.getElementById('signin-email').value.trim().toLowerCase();
@@ -2724,12 +2775,12 @@ async function submitSignIn(e) {
 
   // Validate inputs
   if (!email || !password) {
-    alert('Please enter email and password');
+    showFormMsg('Please enter both your email and password.', 'error', !email ? 'signin-email' : 'signin-password');
     return;
   }
 
   if (isSignupMode && !name) {
-    alert('Please enter your name');
+    showFormMsg('Please enter your name.', 'error', 'signin-name');
     return;
   }
 
@@ -2737,7 +2788,7 @@ async function submitSignIn(e) {
   // policy may have shorter passwords, and login must still work for them.
   // The server does the real enforcement on signup.
   if (isSignupMode && password.length < 12) {
-    alert('Password must be at least 12 characters');
+    showFormMsg('Password must be at least 12 characters.', 'error', 'signin-password');
     return;
   }
 
@@ -2746,14 +2797,14 @@ async function submitSignIn(e) {
     // Login rate limiting
     const lockMsg = checkLock(email);
     if (lockMsg) {
-      alert(lockMsg);
+      showFormMsg(lockMsg, 'error');
       return;
     }
   } else {
     // Signup rate limiting
     const signupMsg = checkSignupLimit();
     if (signupMsg) {
-      alert(signupMsg);
+      showFormMsg(signupMsg, 'error');
       return;
     }
   }
@@ -2786,17 +2837,17 @@ async function submitSignIn(e) {
         // Signup hit an existing account — flip the form back to sign-in mode.
         // (toggleSignupMode() flips the current mode, so we only call it if
         // we are currently in signup mode)
-        alert('Email or username already registered. Try signing in instead.');
+        showFormMsg('That email is already registered — signing you in instead.', 'error', 'signin-password');
         if (isSignupMode) toggleSignupMode();
       } else if (res.status === 401 && !isSignupMode) {
         // Login rejected. Could be wrong email OR wrong password — never
         // reveal which one (that would let attackers test which emails exist)
         failAttempt(email);
-        alert('Invalid email or password.');
+        showFormMsg('Invalid email or password.', 'error', 'signin-password');
       } else {
         // Any other failure — count it against the login lockout too
         if (!isSignupMode) failAttempt(email);
-        alert(data.error || 'Authentication failed. Try again.');
+        showFormMsg(data.error || 'Authentication failed. Please try again.', 'error');
       }
       // Always re-enable the button so the user can retry
       // (previously the 401 path returned early and left it stuck on "Signing in...")
@@ -2831,34 +2882,36 @@ async function submitSignIn(e) {
         localStorage.setItem('econintel:csrf', currentCSRFToken);
       } catch (storageErr) {}
 
+      // Confirm success before navigating — a form that just vanishes leaves
+      // the user unsure whether it worked.
+      showFormMsg(isSignupMode ? 'Account created. Opening the terminal…' : 'Signed in. Opening the terminal…', 'success');
       refreshSignInBtn();
-      closeSignIn();
 
-      // Redirect to chat after brief delay to show success
       setTimeout(() => {
+        closeSignIn();
         window.location.href = 'chat.html';
-      }, 300);
+      }, 700);
     } else if (data.message) {
       // Server returned its generic anti-enumeration message — typically the
       // email/username is already registered. Signup deliberately does NOT
       // confirm which (so attackers can't probe for valid accounts), so instead
       // of a scary "error" we nudge the user toward signing in.
-      alert(isSignupMode
-        ? 'That email may already be registered. Try signing in instead.'
-        : data.message);
+      showFormMsg(isSignupMode
+        ? 'That email may already be registered — try signing in instead.'
+        : data.message, 'error');
       if (isSignupMode) toggleSignupMode(); // flip the form to sign-in mode
       btn.disabled = false;
       btn.textContent = originalText;
     } else {
       // Genuinely unexpected: OK status but neither a session token nor a
       // message — don't leave the button stuck on "Signing in..."
-      alert('Unexpected server response. Please try again.');
+      showFormMsg('Unexpected server response. Please try again.', 'error');
       btn.disabled = false;
       btn.textContent = originalText;
     }
   } catch (err) {
     console.error('[auth] Error:', err);
-    alert('Network error. Make sure the backend is reachable.');
+    showFormMsg('Could not reach the server. Check your connection and try again.', 'error');
     const btn = document.querySelector('.modal-submit');
     btn.disabled = false;
     btn.textContent = isSignupMode ? 'Sign Up' : 'Sign In';
