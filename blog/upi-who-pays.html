@@ -98,7 +98,13 @@
   /* Key-figure strip: the numbers a reader should leave with. */
   .figures{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.8rem;margin:2rem 0}
   .fig{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:12px;padding:.9rem 1rem}
-  .fig b{display:block;font-family:'Syne',sans-serif;font-size:1.35rem;font-weight:800;color:var(--ink);letter-spacing:-.02em;line-height:1.15}
+  /* Figures use Arial Black — there is no font called "Arial Extra Bold"; Arial's
+     heaviest real cut is Arial Black, which is what an extra-bold Arial means in
+     practice. It ships with Windows and macOS, so no webfont request is needed.
+     font-weight:900 makes any fallback in the stack render at its heaviest.
+     Arial Black is a wide face, so the negative tracking is eased from -.02em to
+     -.01em to stop the digits colliding. */
+  .fig b{display:block;font-family:'Arial Black','Arial Bold',Arial,Helvetica,sans-serif;font-size:1.35rem;font-weight:900;color:var(--ink);letter-spacing:-.01em;line-height:1.15}
   .fig span{display:block;font-size:.72rem;color:var(--muted2);margin-top:.3rem;line-height:1.4}
 
   table{width:100%;border-collapse:collapse;margin:1.8rem 0;font-size:.9rem;display:block;overflow-x:auto}
