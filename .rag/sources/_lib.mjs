@@ -40,6 +40,15 @@ export async function fetchWithTimeout(url, options = {}, ms = TIMEOUT_MS) {
 
 // Turn text into a 2048-dim embedding — SAME model as every other ingester and
 // the chat, so the vectors live in the same space.
+//
+// !! CHANGING THE MODEL NAME BELOW IS A DATA MIGRATION, NOT A ONE-LINE EDIT. !!
+// Nothing re-embeds existing rows: ingest-live inserts with
+// `resolution=ignore-duplicates` and never revisits a URL, and seed-documents is
+// manual-dispatch. So every row already in `documents` keeps its OLD vector,
+// and cosine distance between two models' spaces is noise — those rows become
+// unreachable AND they pollute ranking. This already happened once (commit
+// 8280329, 2026-07-19). If you change it, run .rag/fix-mixed-embedding-space.sql
+// and re-run the Seed documents workflow in the same session.
 export async function embed(text) {
   return (await embedBatch([text]))[0];
 }

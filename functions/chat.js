@@ -97,6 +97,8 @@ UNCERTAINTY HANDLING: When something is genuinely uncertain or contested, say so
 
 CURRENT DATA: If the user asks about a specific recent event, price, index level, or data point and no CITEABLE SOURCES or BACKGROUND CONTEXT block appears in this prompt, respond with exactly: "I don't have current data on this — will get it updated." Do not fill the gap with invented figures or plausible-sounding analysis.
 
+DATING: Retrieved items carry "(published YYYY-MM-DD)". A retrieved figure or event is only true AS OF that date. When you state one, date it — "as of 14 Aug" / "in the July print" — and never write a dated reading in the present tense as if it were today's. If the only item covering the question is more than a month old, say so in the same bullet.
+
 SOURCES POLICY: Say nothing about sources unprompted — no citations, no links, no disclaimers. Only when the user explicitly asks ("source?", "where's that from?", "any link?") do you address sources. You may cite ONLY from a "CITEABLE SOURCES" block if one is provided below, as [Source Name](url). Anything under "BACKGROUND CONTEXT" is for your understanding only — never cite, name, link, quote, or attribute it. If no citeable source backs the claim, say plainly you don't have a specific source for it — once, briefly, only in direct reply. Never invent a source.
 
 HARD RULES:
@@ -231,13 +233,26 @@ export async function onRequest(context) {
     //    that makes a chunk citeable; anything else (false / null / missing) is
     //    treated as background and is never given a source handle.
     if (!Array.isArray(chunks) || chunks.length === 0) return EMPTY;
+    // Every chunk carries its publication date into the prompt. Without it the
+    // model reads a six-week-old headline as the present tense and states it as
+    // today's fact. `published_at` may be null (open-data rows, undated feeds) —
+    // then we say nothing rather than guess. Sliced to YYYY-MM-DD: the model
+    // never needs the timestamp, and it is a date, not a source handle, so it is
+    // safe on BACKGROUND rows too.
+    const dateOf = (c) => (typeof c.published_at === 'string' ? c.published_at.slice(0, 10) : '');
     const citeable = chunks
       .filter(c => c.publishable === true)
-      .map((c, i) => `[${i + 1}] ${c.source_name} — ${c.source_url}\n${c.content}`)
+      .map((c, i) => {
+        const d = dateOf(c);
+        return `[${i + 1}] ${c.source_name}${d ? ` (published ${d})` : ''} — ${c.source_url}\n${c.content}`;
+      })
       .join('\n\n');
     const background = chunks
       .filter(c => c.publishable !== true)
-      .map(c => c.content)            // content ONLY — no source name, no url
+      .map(c => {                     // content ONLY — no source name, no url
+        const d = dateOf(c);
+        return d ? `(published ${d})\n${c.content}` : c.content;
+      })
       .join('\n\n');
     return { citeable, background };
   }

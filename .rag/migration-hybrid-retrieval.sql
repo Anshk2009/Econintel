@@ -1,4 +1,10 @@
 -- ============================================================================
+-- SUPERSEDED — HISTORY ONLY. DO NOT RUN THIS FILE.
+-- The current match_documents lives in schema.sql, which is safe to re-run on an
+-- existing database. Running this one now would revert the 2026-08-17 ranking
+-- fixes (freshness bonus 0.008 -> 0.0005, relevance floor moved after fusion,
+-- published_at returned).
+-- ============================================================================
 -- EconIntel RAG — HYBRID RETRIEVAL upgrade (vector + keyword, fused with RRF)
 -- Run in Supabase SQL editor. PREREQUISITE: schema.sql + migration-add-publishable.sql
 -- already ran (documents table with the publishable column).

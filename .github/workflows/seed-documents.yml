@@ -6,6 +6,18 @@ name: Seed documents
 
 on:
   workflow_dispatch: {}
+  # Also run automatically when the things that INVALIDATE the stored vectors
+  # change. Manual-dispatch-only is how the case studies ended up stranded in a
+  # dead embedding space for a month: the model name in sources/_lib.mjs changed
+  # and nothing re-embedded them. Upserts are on source_url with
+  # merge-duplicates, so an extra run is idempotent — it just rewrites the same
+  # rows. Cheap insurance against a one-line edit silently killing retrieval.
+  push:
+    branches: [main]
+    paths:
+      - '.rag/documents/**'
+      - '.rag/sources/_lib.mjs'
+      - '.rag/ingest-files.mjs'
 
 jobs:
   seed:
