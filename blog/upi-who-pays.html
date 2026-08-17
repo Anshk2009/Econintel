@@ -110,7 +110,15 @@
      font-weight:900 makes any fallback in the stack render at its heaviest.
      Arial Black is a wide face, so the negative tracking is eased from -.02em to
      -.01em to stop the digits colliding. */
-  .fig b{display:block;font-family:'Arial Black','Archivo Black',Arial,Helvetica,sans-serif;font-size:1.35rem;font-weight:900;color:var(--ink);letter-spacing:-.01em;line-height:1.15}
+  /* Archivo Black is listed FIRST, not Arial Black, and that ordering is load-bearing.
+     Linux and Android don't ship Arial Black but DO alias the name to a substitute
+     (Liberation Sans / Roboto), so the browser reports it as available and never
+     falls through — the numbers silently render as ordinary Arial. Leading with the
+     webfont makes the face identical on every device.
+     font-weight is 400 because Archivo Black ships exactly one cut at 400; asking
+     for 900 makes the browser synthesise a fake bold on top of an already-black
+     face, which smears the digits. */
+  .fig b{display:block;font-family:'Archivo Black','Arial Black',Arial,Helvetica,sans-serif;font-size:1.3rem;font-weight:400;color:var(--ink);letter-spacing:-.01em;line-height:1.2}
   .fig span{display:block;font-size:.72rem;color:var(--muted2);margin-top:.3rem;line-height:1.4}
 
   table{width:100%;border-collapse:collapse;margin:1.8rem 0;font-size:.9rem;display:block;overflow-x:auto}
