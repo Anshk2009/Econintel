@@ -126,3 +126,21 @@
 }
 @media (prefers-reduced-motion: reduce) { .ei-progress { transition: none; } }
 @media print { .ei-progress { display: none !important; } }
+
+/* ── COPY BUTTON on <pre> code blocks ── */
+.ei-copy {
+  position: absolute; top: 0.5rem; right: 0.5rem;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 0.7rem; font-weight: 600; letter-spacing: 0.02em;
+  padding: 0.3rem 0.6rem; border-radius: 6px; cursor: pointer;
+  background: rgba(255, 255, 255, 0.1); color: #eef1f8;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  opacity: 0; transition: opacity 0.18s, background 0.18s;
+}
+pre:hover .ei-copy, .ei-copy:focus-visible { opacity: 1; }
+.ei-copy:hover { background: rgba(255, 255, 255, 0.18); }
+.ei-copy.is-done { background: rgba(34, 197, 94, 0.22); border-color: rgba(34, 197, 94, 0.45); }
+/* Keyboard users can't hover — never hide it from them. */
+.ei-copy:focus-visible { outline: 2px solid #6f9bff; outline-offset: 2px; }
+@media (hover: none) { .ei-copy { opacity: 1; } }   /* touch: no hover, always show */
+@media print { .ei-copy { display: none !important; } }

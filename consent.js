@@ -174,3 +174,101 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();
+
+/**
+ * UTM / referral attribution.
+ *
+ * Captures utm_* (and gclid/fbclid) from the landing URL and keeps them for the
+ * session, so a signup or a chat visit can still be credited to the campaign
+ * that produced it even after the visitor clicks through several pages — the
+ * parameters only exist on the FIRST url, and are lost the moment they navigate.
+ *
+ * Stored in sessionStorage, not a cookie, and only FIRST-touch is kept (later
+ * campaign params don't overwrite the original source). No personal data is
+ * involved, and nothing is transmitted anywhere by this code — it just makes the
+ * value available to whatever you wire up later (analytics event, signup field).
+ * Read it with:  window.econintelAttribution.get()
+ */
+(function () {
+  'use strict';
+  var KEY = 'econintel:attribution';
+  var FIELDS = ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','gclid','fbclid','ref'];
+
+  function read() {
+    try { return JSON.parse(sessionStorage.getItem(KEY) || 'null'); } catch (e) { return null; }
+  }
+
+  function capture() {
+    var params;
+    try { params = new URLSearchParams(location.search); } catch (e) { return; }
+
+    var found = {};
+    FIELDS.forEach(function (f) {
+      var v = params.get(f);
+      // Cap length: these end up in analytics labels and should never carry a
+      // payload. 200 chars is far more than any real campaign name.
+      if (v) found[f] = String(v).slice(0, 200);
+    });
+    if (!Object.keys(found).length) return;
+
+    // First touch wins — don't let a later campaign steal credit for the visit
+    // that actually brought the person in.
+    if (read()) return;
+
+    found.landing_page = location.pathname;
+    found.captured_at = new Date().toISOString();
+    if (document.referrer) found.referrer = document.referrer.slice(0, 200);
+    try { sessionStorage.setItem(KEY, JSON.stringify(found)); } catch (e) {}
+  }
+
+  window.econintelAttribution = {
+    get: read,
+    /** Flat object suitable for spreading into an analytics event. */
+    params: function () { return read() || {}; },
+    clear: function () { try { sessionStorage.removeItem(KEY); } catch (e) {} }
+  };
+
+  capture();
+})();
+
+/**
+ * Copy buttons on <pre> code blocks (blog posts).
+ * Uses the async clipboard API, which needs a secure context — falls back to
+ * doing nothing visible rather than throwing on http://.
+ */
+(function () {
+  'use strict';
+  function init() {
+    var blocks = document.querySelectorAll('pre');
+    if (!blocks.length) return;
+
+    blocks.forEach(function (pre) {
+      if (pre.querySelector('.ei-copy')) return;
+      pre.style.position = pre.style.position || 'relative';
+
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ei-copy';
+      btn.textContent = 'Copy';
+      btn.setAttribute('aria-label', 'Copy code to clipboard');
+
+      btn.addEventListener('click', function () {
+        var code = pre.querySelector('code');
+        var text = (code || pre).innerText;
+        if (!navigator.clipboard) { btn.textContent = 'Unavailable'; return; }
+        navigator.clipboard.writeText(text).then(function () {
+          btn.textContent = 'Copied';
+          btn.classList.add('is-done');
+          setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('is-done'); }, 1600);
+        }, function () {
+          btn.textContent = 'Failed';
+          setTimeout(function () { btn.textContent = 'Copy'; }, 1600);
+        });
+      });
+
+      pre.appendChild(btn);
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
