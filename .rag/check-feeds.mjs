@@ -7,10 +7,21 @@
 // loud, and CI runs it weekly.
 //
 // Exit codes:
-//   0 = healthy enough
-//   1 = a CITEABLE feed is down, or more than a third of all feeds are down
-// A citeable feed failing is always a hard fail: those are the only sources the
-// chat is allowed to cite, so losing one directly degrades answer quality.
+//   0 = healthy enough (individual dead feeds are still printed, loudly)
+//   1 = 3+ primary/institutional feeds down, or more than a third of all feeds
+//
+// The threshold used to be "ANY citeable feed down = fail". That was calibrated
+// when there were 5 of them, hand-picked. There are now 21, so on a weekly run
+// the chance that at least one government site is having a bad morning is high —
+// the old rule would have gone red most weeks, and a check that is red most
+// weeks is a check nobody reads. Same reasoning as the retrieval-failure notice
+// in chat.js: a warning only works while it stays rare. Three at once is a real
+// signal (a shared CDN, a UA block, our own network); one is weather.
+//
+// The rationale changed too: citeable no longer means "the only rows the chat
+// may cite" — retrieval attributes every chunk now — it means "rows we may
+// REPUBLISH". These feeds still get the stricter watch, because they are the
+// primary sources the product's central claim rests on.
 //
 // Run locally:  node check-feeds.mjs
 import { readFile } from 'node:fs/promises';
@@ -56,9 +67,12 @@ for (const r of results) {
 console.log(`\n${results.length - bad.length}/${results.length} feeds healthy ` +
             `(citeable: ${citeableAll.length - badCiteable.length}/${citeableAll.length})`);
 
+// Always SAY it, even when we do not fail on it — the point is visibility.
 if (badCiteable.length) {
-  console.error(`\nFAIL: ${badCiteable.length} CITEABLE feed(s) down: ${badCiteable.map(r => r.name).join(', ')}`);
-  console.error('These are the only sources the chat may cite — fix or replace them in feeds.json.');
+  console.error(`\n${badCiteable.length} primary/institutional feed(s) down: ${badCiteable.map(r => r.name).join(', ')}`);
+}
+if (badCiteable.length >= 3) {
+  console.error('FAIL: three or more primary sources down at once — that is a pattern, not weather. Look for a shared host, a UA block or a network fault before editing feeds.json.');
   process.exit(1);
 }
 if (bad.length > results.length / 3) {

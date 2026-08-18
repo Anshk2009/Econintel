@@ -3,18 +3,35 @@
 // short, citeable time-series document the chat can retrieve for analogue/chart talk.
 import { fetchWithTimeout, upsertDoc } from './_lib.mjs';
 
-// Curated indicators — keeps the pull small, relevant, and cheap. Extend freely.
+// Curated indicators. Every row this writes is publishable=true — World Bank
+// Open Data is CC BY 4.0, so these are corpus we may both cite AND republish,
+// which is exactly the material the product claims to be grounded in.
+// Widened 2026-08-18 (7 -> 12) to cover the questions the chat actually gets:
+// currency/reserves, external debt, and investment, not just growth and prices.
+// Cost note: upsertDoc() now skips the embedding call when a series is
+// unchanged, and these are annual series — so after the first seed this whole
+// job costs close to zero embedding requests no matter how long the lists get.
 const INDICATORS = [
   { id: 'NY.GDP.MKTP.CD',    label: 'GDP (current US$)' },
   { id: 'NY.GDP.MKTP.KD.ZG', label: 'GDP growth (annual %)' },
+  { id: 'NY.GDP.PCAP.CD',    label: 'GDP per capita (current US$)' },
   { id: 'FP.CPI.TOTL.ZG',    label: 'Inflation, consumer prices (annual %)' },
+  { id: 'FR.INR.RINR',       label: 'Real interest rate (%)' },
   { id: 'SL.UEM.TOTL.ZS',    label: 'Unemployment (% of labour force)' },
   { id: 'GC.DOD.TOTL.GD.ZS', label: 'Central government debt (% of GDP)' },
   { id: 'NE.EXP.GNFS.ZS',    label: 'Exports of goods & services (% of GDP)' },
+  { id: 'NE.IMP.GNFS.ZS',    label: 'Imports of goods & services (% of GDP)' },
   { id: 'BN.CAB.XOKA.GD.ZS', label: 'Current account balance (% of GDP)' },
+  { id: 'FI.RES.TOTL.MO',    label: 'Total reserves (months of imports)' },
+  { id: 'BX.KLT.DINV.WD.GD.ZS', label: 'Foreign direct investment, net inflows (% of GDP)' },
 ];
-// World Bank country codes (ISO2 + WLD aggregate). The API accepts these.
-const COUNTRIES = ['WLD', 'US', 'CN', 'IN', 'JP', 'DE', 'GB', 'BR', 'RU', 'ZA'];
+// World Bank country codes (ISO2 + aggregates). Widened to the economies this
+// audience actually asks about — India's trade partners, the Gulf, ASEAN and
+// the South Asian neighbours — not just the G7.
+const COUNTRIES = [
+  'WLD', 'IN', 'US', 'CN', 'JP', 'DE', 'GB', 'FR',
+  'BR', 'RU', 'ZA', 'KR', 'ID', 'SA', 'AE', 'BD',
+];
 
 export async function ingestWorldBank() {
   let added = 0, failed = 0;

@@ -1,0 +1,35 @@
+name: Check retrieval quality
+
+# The signal that was missing when four retrieval defects shipped unnoticed.
+# Weekly + on any change to the RAG pipeline, because that is when ranking,
+# chunking or the embedding model can silently stop working. NOT on every ingest:
+# each run spends one embedding request on the same capped free key the live chat
+# uses, and starving the chat is the failure this whole effort exists to prevent.
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "17 5 * * 1"        # Mondays 05:17 UTC (off the hour: top-of-hour runs get dropped under load)
+  push:
+    branches: [main]
+    paths:
+      - '.rag/schema.sql'
+      - '.rag/golden.json'
+      - '.rag/check-retrieval.mjs'
+      - '.rag/sources/_lib.mjs'
+      - '.rag/ingest-files.mjs'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Ask the library the questions it exists to answer
+        working-directory: .rag
+        env:
+          OPENROUTER_EMBED_KEY: ${{ secrets.OPENROUTER_EMBED_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: node check-retrieval.mjs

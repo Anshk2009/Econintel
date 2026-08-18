@@ -7,7 +7,7 @@
 //
 // Resilient: a source that errors (e.g. missing API key) is skipped and the
 // others still run. The run only fails (exit 1) if EVERY source errored.
-import { requireEnv } from './sources/_lib.mjs';
+import { requireEnv, prune } from './sources/_lib.mjs';
 import { ingestWorldBank } from './sources/worldbank.mjs';
 import { ingestEdgar } from './sources/edgar.mjs';
 import { ingestFred } from './sources/fred.mjs';
@@ -37,6 +37,11 @@ async function main() {
       console.warn(`${name} skipped: ${e.message}`);
     }
   }
+
+  // Retention runs here, on the DAILY job, not on the 3-hourly news cron —
+  // once a day is plenty to hold a size ceiling, and it keeps the hot path
+  // (ingest-live) to fetching and embedding. Best-effort: never fails the run.
+  await prune();
 
   console.log(`ingest-data done. total added ${totalAdded}, sources ran ${ranOK}, errored ${errored}`);
   // Only a hard failure (nothing ran at all) should mark the run red. A source

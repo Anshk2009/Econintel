@@ -1,0 +1,19 @@
+{
+  "_comment": "Golden queries for check-retrieval.mjs. Each entry is a question a real reader would ask, plus `expect`: a substring that MUST appear in the source_name of at least one of the top `k` retrieved chunks. Deliberately anchored on the CASE STUDIES and OPEN DATA, because those are the two things the product's pitch rests on and the two that failed silently for a month in 2026-07. Keep questions phrased the way a user types them, not the way the document is written — retrieval that only works when you quote the document back at it is not retrieval. Add a case whenever a retrieval bug is found, so the same bug cannot return unnoticed.",
+  "k": 6,
+  "min_pass_rate": 0.7,
+  "queries": [
+    { "q": "why did India nearly default in 1991 and what did it have to pledge",     "expect": "1991 India" },
+    { "q": "what happens when a country pegs its currency and runs out of reserves", "expect": "1997 Asian" },
+    { "q": "how did the Fed break inflation in the early 1980s",                     "expect": "Volcker" },
+    { "q": "when did the dollar stop being convertible into gold",                   "expect": "Nixon Shock" },
+    { "q": "what caused the 2008 banking collapse",                                  "expect": "2008 Global" },
+    { "q": "how did Greece end up needing a bailout",                                "expect": "Eurozone" },
+    { "q": "what did governments do to the economy during covid",                    "expect": "COVID" },
+    { "q": "is there a historical parallel for a sudden stop in capital flows",      "expect": "Crisis" },
+    { "q": "India GDP growth rate recent years",                                     "expect": "World Bank" },
+    { "q": "how much does India hold in foreign exchange reserves",                  "expect": "World Bank" },
+    { "q": "inflation in the United States over the last few years",                 "expect": "World Bank" },
+    { "q": "current account deficit as a share of GDP",                              "expect": "World Bank" }
+  ]
+}

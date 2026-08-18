@@ -31,7 +31,21 @@ const MAX_ITEMS_PER_FEED = 25;
 const MAX_FEED_BYTES = 2 * 1024 * 1024;
 
 // How many items to embed + insert per batch (one embeddings API call each).
-const BATCH_SIZE = 10;
+// 25 not 10: the embeddings endpoint takes an array, so batch size is purely a
+// REQUEST-COUNT lever, and requests — not tokens — are what the free tier caps.
+// Matched to MAX_ITEMS_PER_FEED so one feed's haul is normally one request.
+const BATCH_SIZE = 25;
+
+// Hard ceiling on embedding requests per run. The embeddings key is a free
+// OpenRouter model with a daily REQUEST cap, and functions/chat.js draws on the
+// SAME key to embed every user question. Ingestion must therefore never be able
+// to eat the whole day's allowance — a starved chat fails open and answers with
+// no sources at all, which is the exact failure this pipeline exists to prevent.
+// Arithmetic: cron runs 8x/day, so 20 x 8 = 160 requests/day worst case, leaving
+// the rest of a 1,000/day (credited) allowance for live chat. Anything skipped
+// is picked up on the next run — feeds are polled every 3h and items persist.
+// If you raise the cron frequency or the feed count a lot, re-do this sum.
+const MAX_EMBED_REQUESTS_PER_RUN = 20;
 
 // Read one RSS/XML feed and pull out its items as {title, url, description, date}.
 // This is a lightweight regex parser — good enough for standard RSS, no library.
@@ -176,9 +190,14 @@ async function main() {
 
   // Embed + insert in batches: one embeddings call + one insert per BATCH_SIZE
   // items, instead of one of each PER item.
-  let added = 0, failed = 0;
+  let added = 0, failed = 0, requests = 0, deferred = 0;
   for (let i = 0; i < fresh.length; i += BATCH_SIZE) {
     const batch = fresh.slice(i, i + BATCH_SIZE);
+    // Budget exhausted: stop cleanly rather than burn the chat's allowance.
+    // These items are NOT lost — they were never inserted, so the next run's
+    // dedupe check still sees them as new and picks them up.
+    if (requests >= MAX_EMBED_REQUESTS_PER_RUN) { deferred += batch.length; continue; }
+    requests++;
     try {
       // The text we embed = headline + summary. Enough for the chat to find
       // and cite the real source; keep it small to stay cheap.
@@ -207,7 +226,8 @@ async function main() {
     }
   }
 
-  console.log(`Done. Added ${added}, failed ${failed}.`);
+  console.log(`Done. Added ${added}, failed ${failed}, embed requests ${requests}/${MAX_EMBED_REQUESTS_PER_RUN}` +
+              (deferred ? `, deferred ${deferred} to the next run (budget reached)` : '.'));
 
   // If items failed AND nothing new was added, ingestion is genuinely broken
   // (embeddings key/model dead, Supabase unreachable, etc.) — exit non-zero so

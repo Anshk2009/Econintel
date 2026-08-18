@@ -73,6 +73,16 @@ export async function embedBatch(texts) {
 // index). Retries WITHOUT `publishable` if that column doesn't exist yet, so a
 // pre-migration run still ingests (the migration backfill flags it later).
 export async function upsertDoc({ content, source_name, source_url, category, published_at = null, publishable = true }) {
+  // QUOTA GUARD — check BEFORE embedding, not after.
+  // The open-data ingesters re-run daily over stable source_urls (World Bank
+  // country x indicator, FRED series...), but the underlying data changes
+  // annually or monthly. Embedding first meant ~70 requests a day spent
+  // rewriting byte-identical rows. The embeddings key is a FREE OpenRouter
+  // model with a hard daily request cap that the CHAT also draws on, so wasted
+  // ingest requests translate directly into failed retrieval for real users.
+  // One cheap Supabase GET (effectively unmetered) buys back one embed call.
+  if (await unchanged(source_url, content)) return { skipped: true };
+
   const embedding = await embed(content);
   const row = { content, source_name, source_url, category, published_at, publishable, embedding };
   const post = (body) => fetchWithTimeout(`${SUPABASE_URL}/rest/v1/documents?on_conflict=source_url`, {
@@ -96,6 +106,79 @@ export async function upsertDoc({ content, source_name, source_url, category, pu
       throw new Error(`Upsert failed (retry without publishable): ${res2.status} ${await res2.text()}`);
     }
     throw new Error(`Upsert failed: ${res.status} ${errText}`);
+  }
+}
+
+// RETENTION. Nothing here ever deleted a row, so the library only grew — and at
+// 2048 float4 dimensions every row costs ~8 KB of vector alone. 43 feeds polled
+// 8x a day would cross Supabase's 500 MB free-tier ceiling within months, and
+// the vector column has NO index (pgvector's HNSW caps at 2000 dims, this model
+// emits 2048), so every search is a sequential scan whose cost is linear in row
+// count. Unbounded growth is therefore both a storage cliff AND a latency ramp.
+//
+// The windows differ because the rows are worth different things. A commercial
+// news blurb is superseded within weeks and its feed dropped it long ago. A
+// central-bank press release or an NBER paper stays referenceable for years.
+// Case studies, open data and anything hand-written are never pruned.
+const RETENTION_DAYS = {
+  // churn: headlines + syndicated summaries from commercial press
+  churn:       90,
+  // institutional: central banks, statistical agencies, open-access research
+  institution: 365,
+};
+const CHURN_CATEGORIES       = ['news', 'india', 'analysis'];
+const INSTITUTION_CATEGORIES = ['institution', 'research'];
+
+// Delete rows past their window. Best-effort: logs and returns on failure rather
+// than throwing, because a failed cleanup must never mark an otherwise good
+// ingestion run red. Safe to run repeatedly — it is a no-op once caught up.
+export async function prune() {
+  const cutoff = (days) => new Date(Date.now() - days * 86400_000).toISOString();
+  const del = async (categories, days) => {
+    const list = categories.map(c => `"${c}"`).join(',');
+    // published_at=lt.<cutoff> deliberately leaves undated rows alone — we
+    // cannot know their age, and deleting on a guess loses real material.
+    const url = `${SUPABASE_URL}/rest/v1/documents`
+      + `?category=in.(${encodeURIComponent(list)})`
+      + `&published_at=lt.${encodeURIComponent(cutoff(days))}`;
+    const r = await fetchWithTimeout(url, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'apikey': SUPABASE_KEY,
+        'Prefer': 'count=exact',                 // Content-Range tells us how many went
+      },
+    });
+    if (!r.ok) { console.warn(`  prune(${categories.join('/')}) failed: ${r.status}`); return 0; }
+    const range = r.headers.get('content-range') || '';   // e.g. "0-11/12"
+    return Number(range.split('/')[1]) || 0;
+  };
+
+  try {
+    const churn = await del(CHURN_CATEGORIES, RETENTION_DAYS.churn);
+    const inst  = await del(INSTITUTION_CATEGORIES, RETENTION_DAYS.institution);
+    console.log(`prune: removed ${churn} churn rows (>${RETENTION_DAYS.churn}d) `
+              + `and ${inst} institutional rows (>${RETENTION_DAYS.institution}d)`);
+  } catch (e) {
+    console.warn(`prune skipped: ${e.message}`);
+  }
+}
+
+// Is this source_url already stored with byte-identical content?
+// Returns false on ANY doubt (row missing, request failed, bad JSON) so the
+// caller embeds and upserts as before — this is a cost optimisation, and it
+// must never be the reason a genuine update gets skipped.
+async function unchanged(source_url, content) {
+  try {
+    const r = await fetchWithTimeout(
+      `${SUPABASE_URL}/rest/v1/documents?source_url=eq.${encodeURIComponent(source_url)}&select=content&limit=1`,
+      { headers: { 'Authorization': `Bearer ${SUPABASE_KEY}`, 'apikey': SUPABASE_KEY } },
+    );
+    if (!r.ok) return false;
+    const rows = await r.json();
+    return Array.isArray(rows) && rows.length === 1 && rows[0].content === content;
+  } catch {
+    return false;
   }
 }
 
