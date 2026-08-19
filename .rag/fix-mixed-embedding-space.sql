@@ -67,30 +67,40 @@ order by rows desc;
 
 
 -- ─── 3. DELETE THE STRANDED CHURN ───────────────────────────────────────────
--- Put the boundary id from section 1 in place of :boundary — the LAST id of the
--- last noise-looking bucket. News is disposable: it is stale as journalism, the
--- feeds dropped those items long ago, and nothing re-adds it.
+-- MEASURED 2026-08-19: boundary at id 13310, 4,364 stranded rows, split as
+--   india 3302 · institution 460 · filing 333 · analysis 196 · data 66 · case-study 7
+-- Of those, only india + analysis (3,498 rows) are churn: publishable=0 on every
+-- one, stale as journalism, dropped by their feeds long ago, nothing re-adds
+-- them. Deleting them is free and it is ~28 MB of vector back.
 --
--- Case studies, open data and anything hand-written are NEVER deleted here.
--- They are re-embedded in place instead, by running the "Seed documents"
--- workflow (Actions tab), which upserts on source_url with merge-duplicates.
+-- Everything else in that list is repaired, NOT deleted — see section 4.
 --
--- Check the count first:
+-- Count first (expect ~3,498):
 -- select count(*) from documents
---  where id <= :boundary and category in ('news','india','analysis');
+--  where id <= 13310 and category in ('india','analysis');
 --
--- Then, once the number looks right:
+-- Then, once the number matches:
 -- delete from documents
---  where id <= :boundary and category in ('news','india','analysis');
+--  where id <= 13310 and category in ('india','analysis');
 
 
--- ─── 4. STRANDED INSTITUTIONAL ROWS ─────────────────────────────────────────
--- If section 1 shows stranded rows in 'institution' or 'research', do NOT delete
--- them the same way — central-bank releases and papers stay referenceable for
--- years and there is no feed to re-fetch them from. Re-embedding is the fix, and
--- there is no script for that yet: it needs a one-off pass that reads content,
--- calls the current model, and writes the vector back. Worth building only if
--- section 1 actually shows a stranded institutional block.
+-- ─── 4. REPAIR THE REST — DO NOT DELETE IT ──────────────────────────────────
+-- institution 460, filing 333, data 66, case-study 7 = 866 rows, 862 publishable.
+-- These are primary sources and hand-written material. There is no feed to
+-- re-fetch a two-month-old central-bank release from, and the 7 case studies
+-- exist nowhere else — deleting them destroys the corpus the product's central
+-- claim rests on. They keep their text; only the vector is wrong.
+--
+-- Fix, from a terminal with the ingest secrets set:
+--     cd .rag && node reembed.mjs
+-- Re-embeds stored content onto the current model, in batches, under a request
+-- budget so it cannot starve live chat. Resumable — run it again until it says
+-- "Nothing to repair". ~35 embedding requests for all 866 rows.
+--
+-- NOTE the case studies are the urgent seven. Section D of audit-followup.sql
+-- showed all 7 still at ~0.00 on 2026-08-19, i.e. the "Seed documents" workflow
+-- did NOT repair them (almost certainly the exhausted embedding key). Until
+-- reembed.mjs runs green, the historical-analogue feature is offline.
 
 
 -- ─── 5. VERIFY ──────────────────────────────────────────────────────────────

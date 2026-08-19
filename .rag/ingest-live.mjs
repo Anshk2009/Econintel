@@ -14,7 +14,7 @@
 
 import { readFile } from 'node:fs/promises';
 // embedBatch() + fetchWithTimeout() are shared with the data-source ingesters.
-import { embedBatch, fetchWithTimeout, FEED_HEADERS } from './sources/_lib.mjs';
+import { embedBatch, fetchWithTimeout, FEED_HEADERS, EMBED_MODEL } from './sources/_lib.mjs';
 
 // --- Config: set these as environment variables before running ---
 const SUPABASE_URL   = process.env.SUPABASE_URL;          // https://xxxx.supabase.co
@@ -124,8 +124,8 @@ async function insertRows(rows) {
     // (migration-add-publishable.sql). If that column isn't there yet, retry once
     // WITHOUT the flag so ingestion never breaks — the rows just store as
     // non-citeable until the migration + backfill run.
-    if (/publishable|does not exist|PGRST204/i.test(errText)) {
-      const stripped = rows.map(({ publishable, ...rest }) => rest);
+    if (/publishable|embedding_model|does not exist|PGRST204/i.test(errText)) {
+      const stripped = rows.map(({ publishable, embedding_model, ...rest }) => rest);
       const res2 = await post(stripped);
       if (res2.ok) return;
       throw new Error(`Insert failed (retry without publishable): ${res2.status} ${await res2.text()}`);
@@ -214,6 +214,10 @@ async function main() {
         // DEFAULT false) — never cited.
         publishable:  it.feed.citeable === true ? true : undefined,
         embedding:    embeddings[j],
+        // Stamp the space this vector lives in, so a future model change is a
+        // detectable, repairable event instead of a silent third of the library
+        // going unreachable (see EMBED_MODEL in sources/_lib.mjs).
+        embedding_model: EMBED_MODEL,
       }));
       await insertRows(rows);
       added += rows.length;

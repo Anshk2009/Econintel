@@ -38,17 +38,23 @@ export async function fetchWithTimeout(url, options = {}, ms = TIMEOUT_MS) {
   }
 }
 
+// The embedding model, named ONCE. Every ingester, the repair job and the
+// `documents.embedding_model` column all read this constant, so "which space is
+// this vector in" has exactly one answer in the codebase.
+//
+// Changing it is still a data migration — but it is now a SELF-HEALING one.
+// Every row records the model that embedded it, so `unchanged()` below refuses
+// to skip a row whose model no longer matches, and reembed.mjs sweeps up the
+// backlog. Before this column existed, changing this string (commit 8280329,
+// 2026-07-19) silently stranded 4,364 rows — 29% of the library — in a dead
+// coordinate space for a month, because cosine distance between two models'
+// vectors is just noise and nothing anywhere recorded which model a row used.
+//
+// After changing it: run `node reembed.mjs` until it reports 0 remaining.
+export const EMBED_MODEL = 'nvidia/nemotron-3-embed-1b:free';
+
 // Turn text into a 2048-dim embedding — SAME model as every other ingester and
 // the chat, so the vectors live in the same space.
-//
-// !! CHANGING THE MODEL NAME BELOW IS A DATA MIGRATION, NOT A ONE-LINE EDIT. !!
-// Nothing re-embeds existing rows: ingest-live inserts with
-// `resolution=ignore-duplicates` and never revisits a URL, and seed-documents is
-// manual-dispatch. So every row already in `documents` keeps its OLD vector,
-// and cosine distance between two models' spaces is noise — those rows become
-// unreachable AND they pollute ranking. This already happened once (commit
-// 8280329, 2026-07-19). If you change it, run .rag/fix-mixed-embedding-space.sql
-// and re-run the Seed documents workflow in the same session.
 export async function embed(text) {
   return (await embedBatch([text]))[0];
 }
@@ -62,7 +68,7 @@ export async function embedBatch(texts) {
   const r = await fetchWithTimeout('https://openrouter.ai/api/v1/embeddings', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${OPENROUTER_EMBED_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'nvidia/nemotron-3-embed-1b:free', input: texts }),
+    body: JSON.stringify({ model: EMBED_MODEL, input: texts }),
   });
   if (!r.ok) throw new Error(`Embedding failed: ${r.status} ${await r.text()}`);
   const data = (await r.json()).data;
@@ -84,7 +90,8 @@ export async function upsertDoc({ content, source_name, source_url, category, pu
   if (await unchanged(source_url, content)) return { skipped: true };
 
   const embedding = await embed(content);
-  const row = { content, source_name, source_url, category, published_at, publishable, embedding };
+  const row = { content, source_name, source_url, category, published_at, publishable, embedding,
+                embedding_model: EMBED_MODEL };
   const post = (body) => fetchWithTimeout(`${SUPABASE_URL}/rest/v1/documents?on_conflict=source_url`, {
     method: 'POST',
     headers: {
@@ -99,8 +106,10 @@ export async function upsertDoc({ content, source_name, source_url, category, pu
   let res = await post(row);
   if (!res.ok) {
     const errText = await res.text();
-    if (row.publishable !== undefined && /publishable|does not exist|PGRST204/i.test(errText)) {
-      const { publishable: _drop, ...rest } = row;
+    // Pre-migration databases may lack `publishable` OR `embedding_model`; drop
+    // both and retry so ingestion never blocks on a column that is not there yet.
+    if (/publishable|embedding_model|does not exist|PGRST204/i.test(errText)) {
+      const { publishable: _p, embedding_model: _m, ...rest } = row;
       const res2 = await post(rest);
       if (res2.ok) return;
       throw new Error(`Upsert failed (retry without publishable): ${res2.status} ${await res2.text()}`);
@@ -164,19 +173,30 @@ export async function prune() {
   }
 }
 
-// Is this source_url already stored with byte-identical content?
-// Returns false on ANY doubt (row missing, request failed, bad JSON) so the
-// caller embeds and upserts as before — this is a cost optimisation, and it
-// must never be the reason a genuine update gets skipped.
+// Is this source_url already stored with byte-identical content AND embedded by
+// the model we are running now?
+//
+// The model check is not a refinement, it is the point. Content-only skipping
+// looked correct and was actively harmful: the 66 stranded World Bank rows have
+// content that never changes, so a content-only guard would have skipped them on
+// every daily run forever — the quota optimisation would have made the dead
+// embedding space PERMANENT for exactly the rows that self-heal today.
+//
+// Returns false on ANY doubt (row missing, request failed, bad JSON, no model
+// recorded) so the caller embeds and upserts as before. This is a cost
+// optimisation and it must never be the reason a row stays broken.
 async function unchanged(source_url, content) {
   try {
     const r = await fetchWithTimeout(
-      `${SUPABASE_URL}/rest/v1/documents?source_url=eq.${encodeURIComponent(source_url)}&select=content&limit=1`,
+      `${SUPABASE_URL}/rest/v1/documents?source_url=eq.${encodeURIComponent(source_url)}&select=content,embedding_model&limit=1`,
       { headers: { 'Authorization': `Bearer ${SUPABASE_KEY}`, 'apikey': SUPABASE_KEY } },
     );
     if (!r.ok) return false;
     const rows = await r.json();
-    return Array.isArray(rows) && rows.length === 1 && rows[0].content === content;
+    if (!Array.isArray(rows) || rows.length !== 1) return false;
+    // A null embedding_model means the row predates the column, i.e. it may well
+    // be from the old space. Re-embed it rather than trust it.
+    return rows[0].content === content && rows[0].embedding_model === EMBED_MODEL;
   } catch {
     return false;
   }

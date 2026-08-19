@@ -27,8 +27,21 @@ create table if not exists documents (
   -- republished). The chat searches ALL rows; only blog/page generation filters
   -- on publishable = true.
   publishable  boolean not null default false,
-  embedding    vector(2048)     -- the "meaning fingerprint" (2048 numbers)
+  embedding    vector(2048),    -- the "meaning fingerprint" (2048 numbers)
+  -- WHICH model produced `embedding`. Without this column the 2026-07-19 model
+  -- swap stranded 4,364 rows (29% of the library) in a dead coordinate space,
+  -- invisibly, for a month: vectors from two different models are mutually
+  -- random, so those rows scored ~0.00 against every query and simply stopped
+  -- being retrievable. Nothing could detect it, because nothing recorded which
+  -- model a row belonged to. Now the ingesters write it and re-embed anything
+  -- that does not match the model they are running, so a model change repairs
+  -- itself on the next cron instead of silently killing a third of the corpus.
+  embedding_model text
 );
+-- Existing databases: add the column without touching data.
+alter table documents add column if not exists embedding_model text;
+-- Finding rows left behind by a model change is the repair job's hot path.
+create index if not exists documents_embedding_model_idx on documents (embedding_model);
 -- Fast "give me only the publishable rows" lookups for page generation.
 create index if not exists documents_publishable_idx on documents (publishable);
 
@@ -121,7 +134,20 @@ as $$
   -- a single stemmed word ("bank" matching "banking"). Recomputing similarity
   -- here costs nothing — it runs over the <= 2*match_count fused rows, not the
   -- table — and it also makes `similarity` a real number for keyword-only hits.
-  where 1 - (d.embedding <=> query_embedding) > 0.30
+  --
+  -- 0.20, MEASURED, not guessed. This model's cosine distribution is compressed.
+  -- Sampling one row against the live corpus (2026-08-19, 10,704 rows) gave a
+  -- true match at 0.5725 — a Hindi PIB release and the English Economic Times
+  -- story on the same policy, so the model itself is good — good matches at
+  -- 0.30-0.35, and merely-related at 0.26. At a 0.30 floor only FOUR rows in
+  -- 10,704 cleared it, and one of those was the query row itself. A live
+  -- question is also SHORT text scored against LONG articles, which pushes
+  -- cosine lower still, so 0.30 left no margin whatever — and the failure it
+  -- produces is the invisible kind: zero rows, retrieval fails open, every
+  -- answer ungrounded and looking completely normal. 0.20 keeps ~0.7% of the
+  -- corpus, still a hard filter, and RANKING decides what is used, not the floor.
+  -- Re-measure with .rag/audit-followup.sql section B if the model ever changes.
+  where 1 - (d.embedding <=> query_embedding) > 0.20
   order by
     fused.rrf
     -- Freshness bonus for news, decaying over ~2 weeks. Sized against the RRF
