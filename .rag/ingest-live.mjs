@@ -14,7 +14,7 @@
 
 import { readFile } from 'node:fs/promises';
 // embedBatch() + fetchWithTimeout() are shared with the data-source ingesters.
-import { embedBatch, fetchWithTimeout, FEED_HEADERS, EMBED_MODEL } from './sources/_lib.mjs';
+import { embedBatch, fetchWithTimeout, FEED_HEADERS, EMBED_MODEL, EMBED_BUDGET } from './sources/_lib.mjs';
 
 // --- Config: set these as environment variables before running ---
 const SUPABASE_URL   = process.env.SUPABASE_URL;          // https://xxxx.supabase.co
@@ -41,11 +41,23 @@ const BATCH_SIZE = 25;
 // SAME key to embed every user question. Ingestion must therefore never be able
 // to eat the whole day's allowance — a starved chat fails open and answers with
 // no sources at all, which is the exact failure this pipeline exists to prevent.
-// Arithmetic: cron runs 8x/day, so 20 x 8 = 160 requests/day worst case, leaving
-// the rest of a 1,000/day (credited) allowance for live chat. Anything skipped
-// is picked up on the next run — feeds are polled every 3h and items persist.
-// If you raise the cron frequency or the feed count a lot, re-do this sum.
-const MAX_EMBED_REQUESTS_PER_RUN = 20;
+//
+// SIZE THIS AGAINST THE TIER YOU ARE ACTUALLY ON. OpenRouter's free allowance is
+// ~50 requests/DAY across the whole key; buying $10 of credit raises it to
+// ~1,000/day permanently. The cron runs 8x/day, so:
+//     uncredited (~50/day):  3 per run =  24/day, leaving ~26 for live chat
+//     credited (~1,000/day): 20 per run = 160/day, leaving the rest for chat
+// The default is the SAFE one. A budget sized for credit you have not bought
+// yet does not fail politely — it exhausts the key, and then ingestion, seeding,
+// the retrieval check AND live chat retrieval all fail together.
+//
+// After buying credit, raise it without editing code:
+//     INGEST_EMBED_BUDGET: 20   (in the workflow's env: block)
+//
+// The number itself lives in sources/_lib.mjs, which enforces it inside
+// embedBatch() as a backstop for every ingester. Imported rather than re-read
+// from env so the two can never disagree about what the budget is.
+const MAX_EMBED_REQUESTS_PER_RUN = EMBED_BUDGET;
 
 // Read one RSS/XML feed and pull out its items as {title, url, description, date}.
 // This is a lightweight regex parser — good enough for standard RSS, no library.
@@ -190,7 +202,13 @@ async function main() {
 
   // Embed + insert in batches: one embeddings call + one insert per BATCH_SIZE
   // items, instead of one of each PER item.
-  let added = 0, failed = 0, requests = 0, deferred = 0;
+  // FEED ORDER IS PRIORITY ORDER. allSettled preserves input order, so `fresh`
+  // comes back grouped by feed in the order feeds.json lists them — and on a
+  // small budget only the first few batches get embedded. feeds.json therefore
+  // lists central banks, statistical agencies and research FIRST, commercial
+  // press last, so a starved run still ingests the primary sources the product's
+  // claim rests on. Reordering that file silently reprioritises the corpus.
+  let added = 0, failed = 0, requests = 0, deferred = 0, quotaHit = false;
   for (let i = 0; i < fresh.length; i += BATCH_SIZE) {
     const batch = fresh.slice(i, i + BATCH_SIZE);
     // Budget exhausted: stop cleanly rather than burn the chat's allowance.
@@ -227,6 +245,9 @@ async function main() {
       // surfaces instead of passing silently.
       failed += batch.length;
       console.warn(`  batch failed (${batch.length} items): ${err.message}`);
+      // Out of allowance: every remaining batch would fail identically, and each
+      // attempt still costs a request. Stop now — retrying just digs deeper.
+      if (err.quota) { quotaHit = true; break; }
     }
   }
 
@@ -238,6 +259,19 @@ async function main() {
   // the GitHub Actions run shows RED and notifies you, instead of a green check
   // that quietly added zero news. (0 added with 0 failed = simply no new items,
   // which is fine and stays green.)
+  // Quota exhaustion is a KNOWN, EXPECTED state on the free tier, not a fault:
+  // the key resets daily and the items were never inserted, so the next run
+  // simply picks them up. Say so loudly and exit 0. Failing red every three
+  // hours for a condition that is understood and time-based trains you to ignore
+  // the one red run that means something. The retrieval check is what should go
+  // red if the library actually stops being able to answer.
+  if (quotaHit) {
+    console.error('\nEMBEDDING QUOTA EXHAUSTED for today — stopped early, nothing lost.');
+    console.error(`OpenRouter's free allowance is ~50 requests/DAY across this key, shared with live chat.`);
+    console.error(`Budget per run is ${MAX_EMBED_REQUESTS_PER_RUN} (env INGEST_EMBED_BUDGET). $10 of credit raises the cap to ~1,000/day, after which 20 is the right value.`);
+    return;
+  }
+
   if (failed > 0 && added === 0) {
     console.error('Every attempted item failed and nothing was added — failing the run so it is visible.');
     process.exit(1);

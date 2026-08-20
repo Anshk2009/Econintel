@@ -27,7 +27,7 @@
 // Idempotent and resumable: it only ever selects rows whose recorded model is
 // not the current one, so an interrupted run just picks up where it stopped.
 import process from 'node:process';
-import { embedBatch, fetchWithTimeout, requireEnv, EMBED_MODEL } from './sources/_lib.mjs';
+import { embedBatch, fetchWithTimeout, requireEnv, EMBED_MODEL, setEmbedBudget } from './sources/_lib.mjs';
 
 requireEnv(['OPENROUTER_EMBED_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']);
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -42,6 +42,10 @@ const BATCH_SIZE = 25;
 // key to embed every user question, so a repair job must not be able to eat the
 // day's allowance in one go. Run it again tomorrow; it resumes automatically.
 const BUDGET = Number(process.env.REEMBED_BUDGET || 40);
+// This is a job you run deliberately and watch, not a cron, so it overrides the
+// shared per-run cron budget in _lib.mjs (which defaults to 3 and would stop
+// this after 75 rows). Still bounded — it cannot run away with the daily key.
+setEmbedBudget(BUDGET);
 
 // Churn is meant to be DELETED, not repaired — re-embedding 3,498 stale
 // headlines would burn the budget on rows that should not exist. --all overrides.

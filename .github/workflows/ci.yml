@@ -49,6 +49,19 @@ jobs:
             node --check "$f" && echo "  ✅ $f" || (echo "  ❌ $f — syntax error" && exit 1)
           done
 
+      # ── 1b. Self-checks ─────────────────────────────────────────────────────
+      #    Two pieces of logic that syntax-checking cannot vouch for and that have
+      #    both already caused a production failure: the SSE framing of the
+      #    retrieval-failure notice, and the embedding request budget. No network,
+      #    no secrets, no framework — plain node + assert, so they cost nothing.
+      - name: Run self-checks
+        run: |
+          echo "=== Self-checks ==="
+          for t in .scripts/test-*.mjs; do
+            [ -f "$t" ] || continue
+            node "$t" || (echo "  ❌ $t failed" && exit 1)
+          done
+
       # ── 2. (removed) Dependency audit ───────────────────────────────────────
       # There is nothing to audit: this project has zero runtime dependencies and
       # no lockfile, and the manifest that used to gate these steps now lives at

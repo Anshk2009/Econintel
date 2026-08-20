@@ -64,13 +64,44 @@ export async function embed(text) {
 // fewer chances to trip OpenRouter's free-tier rate limit. Returns embeddings
 // in the same order as `texts` (sorted by the response's index field, since
 // the API doesn't guarantee response order).
+// ── THE EMBEDDING REQUEST BUDGET ────────────────────────────────────────────
+// Enforced HERE, inside the one function every ingester ultimately calls, so no
+// script can forget it. That matters most for the open-data path: upsertDoc()
+// embeds ONE document per call, so World Bank alone (16 countries x 12
+// indicators) is 192 requests — nearly 4x the entire free daily allowance, spent
+// before ingest-live or live chat get a look in.
+//
+// OpenRouter free tier is ~50 requests/DAY for the whole key; $10 of credit
+// raises it to ~1,000/day. Default 3 is sized for the uncredited tier with the
+// 8x/day news cron in mind. Raise via INGEST_EMBED_BUDGET once credit is bought.
+export const EMBED_BUDGET = Number(process.env.INGEST_EMBED_BUDGET || 3);
+let embedBudget = EMBED_BUDGET;
+export const embedBudgetLeft = () => embedBudget;
+// For deliberate one-off jobs (reembed.mjs) that carry their own, larger budget.
+export const setEmbedBudget = (n) => { embedBudget = n; };
+
 export async function embedBatch(texts) {
+  if (embedBudget <= 0) {
+    const e = new Error(`Embedding budget for this run is exhausted (INGEST_EMBED_BUDGET=${EMBED_BUDGET}). Nothing was requested, so no allowance was spent.`);
+    e.budget = true;   // distinct from err.quota: we stopped ourselves, upstream did not stop us
+    throw e;
+  }
+  embedBudget--;
   const r = await fetchWithTimeout('https://openrouter.ai/api/v1/embeddings', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${OPENROUTER_EMBED_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ model: EMBED_MODEL, input: texts }),
   });
-  if (!r.ok) throw new Error(`Embedding failed: ${r.status} ${await r.text()}`);
+  if (!r.ok) {
+    const body = await r.text();
+    const err = new Error(`Embedding failed: ${r.status} ${body}`);
+    // 402 = out of credits, 429 = daily/minute request cap. Tagged so callers can
+    // tell "we ran out of allowance today" (expected, wait for the reset) from
+    // "something is broken" (investigate). Treating the two the same is how you
+    // end up with a workflow that is red every three hours and therefore unread.
+    err.quota = r.status === 402 || r.status === 429;
+    throw err;
+  }
   const data = (await r.json()).data;
   return data.sort((a, b) => a.index - b.index).map(d => d.embedding);
 }
@@ -88,6 +119,12 @@ export async function upsertDoc({ content, source_name, source_url, category, pu
   // ingest requests translate directly into failed retrieval for real users.
   // One cheap Supabase GET (effectively unmetered) buys back one embed call.
   if (await unchanged(source_url, content)) return { skipped: true };
+
+  // Budget gone: return quietly instead of throwing. The open-data sources call
+  // this in tight loops and each would log its own failure — 192 identical error
+  // lines that look like a broken run when the truth is "we deliberately stopped
+  // spending". Nothing is lost: source_url is stable, so the next run retries it.
+  if (embedBudgetLeft() <= 0) return { skipped: true, reason: 'budget' };
 
   const embedding = await embed(content);
   const row = { content, source_name, source_url, category, published_at, publishable, embedding,
