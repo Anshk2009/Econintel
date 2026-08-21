@@ -229,6 +229,14 @@ export function makeBatches(items, maxChars = MAX_BATCH_CHARS, maxItems = BATCH_
   return batches;
 }
 
+// --dry-run: fetch and parse every feed, and plan the embedding requests, but
+// call neither the embeddings API nor Supabase. Costs nothing, needs no secrets,
+// and answers "is the pipeline healthy?" without waiting for a cron or burning
+// allowance to find out. Everything upstream of the paid call is exercised for
+// real — fetch, parse, item validity, batch sizing — which is where the 2026-08
+// outage actually lived.
+const DRY_RUN = process.argv.includes('--dry-run');
+
 async function main() {
   // Fail loud if a required secret is missing. Without this, a blank key sends
   // "Bearer undefined" to OpenRouter/Supabase, every request 401s, and the run
@@ -238,8 +246,14 @@ async function main() {
   if (!SUPABASE_URL)         missing.push('SUPABASE_URL');
   if (!SUPABASE_KEY)         missing.push('SUPABASE_ANON_KEY');
   if (missing.length) {
-    console.error(`Missing required env var(s): ${missing.join(', ')}. Set them as GitHub repo Secrets.`);
-    process.exit(1);
+    // A dry run touches neither API, so missing secrets are expected — say so
+    // and carry on, instead of refusing to do the part that needs no keys.
+    if (DRY_RUN) {
+      console.log(`(dry run — no secrets needed; ${missing.join(', ')} not set, so the dedupe query is skipped and every item counts as new)\n`);
+    } else {
+      console.error(`Missing required env var(s): ${missing.join(', ')}. Set them as GitHub repo Secrets.`);
+      process.exit(1);
+    }
   }
 
   const { feeds } = JSON.parse(await readFile('./feeds.json', 'utf8'));
@@ -265,6 +279,18 @@ async function main() {
     // dedupe check still sees them as new and picks them up.
     if (requests >= MAX_EMBED_REQUESTS_PER_RUN) { deferred += batch.length; continue; }
     requests++;
+    if (DRY_RUN) {
+      // Report the plan and the margin. `chars` is what the outage was about:
+      // the model's context window is shared across the batch, so this number,
+      // not the item count, is what has to stay inside it.
+      const chars = batch.reduce((a, it) => a + embedTextOf(it).length, 0);
+      const feedsIn = [...new Set(batch.map(b => b.feed.name))];
+      console.log(`  request ${String(requests).padStart(2)}: ${String(batch.length).padStart(2)} items, ` +
+                  `${String(chars).padStart(6)} chars (~${Math.round(chars / 3.5)} tokens, ` +
+                  `${Math.round(chars / 3.5 / 8192 * 100)}% of window) — ${feedsIn.join(', ')}`);
+      added += batch.length;
+      continue;
+    }
     try {
       // The text we embed = headline + summary. Enough for the chat to find
       // and cite the real source; keep it small to stay cheap.
@@ -298,6 +324,14 @@ async function main() {
       // attempt still costs a request. Stop now — retrying just digs deeper.
       if (err.quota) { quotaHit = true; break; }
     }
+  }
+
+  if (DRY_RUN) {
+    console.log(`\nDRY RUN — nothing embedded, nothing written.`);
+    console.log(`Would have made ${requests} embedding request(s) for ${added} items` +
+                (deferred ? `, deferring ${deferred} to the next run (budget ${MAX_EMBED_REQUESTS_PER_RUN})` : '') + '.');
+    console.log('Any request above ~100% of window is the failure mode that broke ingestion in August.');
+    return;
   }
 
   console.log(`Done. Added ${added}, failed ${failed}, embed requests ${requests}/${MAX_EMBED_REQUESTS_PER_RUN}` +
