@@ -1,10 +1,10 @@
 // EconIntel — Chat Edge Function (Secured)
-// Proxies requests to OpenRouter, with authentication and rate limiting.
+// Proxies requests to NVIDIA (build.nvidia.com), with auth and rate limiting.
 // Deploy this file to: functions/chat.js in your EdgeOne project.
 //
 // SECURITY: API key and JWT secret are read from environment variables.
 // Set these in EdgeOne dashboard under Environment Variables:
-//   OPENROUTER_API_KEY = your-openrouter-api-key
+//   NVIDIA_API_KEY = your build.nvidia.com key (chat AND embeddings)
 //   JWT_SECRET = your-jwt-secret (>32 bytes)
 //   ALLOWED_ORIGIN = https://yourdomain.com
 //
@@ -14,7 +14,6 @@
 
 import { verifyJWT, jsonResponse, corsPreflightResponse, hashIP, makeSupabase, getToken, generateId, getClientIP } from './middleware.js';
 
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // Emit `text` as one OpenAI-shaped SSE delta, then pipe `body` through unchanged.
 // Used to put a notice in front of a reply without touching the client parser:
@@ -35,10 +34,10 @@ export function prependNotice(body, text) {
   });
 }
 
-// NVIDIA's build.nvidia.com trial endpoint (OpenAI-compatible, same SSE stream
-// format as OpenRouter). BETA-TESTING ONLY: the free trial credits are licensed
-// for development/testing/evaluation — move tiers back to OpenRouter (or a paid
-// endpoint) before real launch.
+// NVIDIA's build.nvidia.com endpoint (OpenAI-compatible SSE). The models used
+// here are FREE endpoints, rate-limited to 40 requests/minute and 10,000
+// requests/day per key — measured from the model pages, not guessed. Those two
+// numbers are the real capacity ceiling for the whole product.
 const NVIDIA_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
 // Embeddings live on the SAME NVIDIA account and the SAME key as chat. They used
 // to run on OpenRouter with a separate key, which meant a working NVIDIA key did
@@ -52,31 +51,26 @@ const NVIDIA_EMBED_URL = 'https://integrate.api.nvidia.com/v1/embeddings';
 const EMBED_MODEL = 'nvidia/nemotron-3-embed-1b';
 
 // ── MODEL BUCKETS — one per plan tier (guests count as 'free') ──────────────
-// To re-route any tier later, edit ITS line only: provider is 'nvidia' or
-// 'openrouter', model is that provider's model id. Nothing else to touch.
-// BETA: all three tiers currently on NVIDIA — paid tiers get Super 120B
-// (strongest fast model), free/guests get Nano 30B (quick, cheap on the
-// shared 40 req/min trial limit).
+// One provider now, so a bucket is just a model id. To re-route a tier, edit
+// ITS line only. Paid tiers get Super 120B; free/guests get 3.5 Lightning.
+// Both are free endpoints on build.nvidia.com: 40 rpm, 10,000 requests/day.
+//
+// The `provider` field and the OpenRouter fallback that used to live here are
+// gone deliberately. A "fallback" to a provider with no key is not a fallback,
+// it is a disguised outage — it swaps a loud failure for a quiet one, which is
+// the same trap that let a dead embedding path sit unnoticed.
 const MODEL_BUCKETS = {
-  free:       { provider: 'nvidia', model: 'nvidia/nemotron-3.5-lightning-30b-a3b' },
-  pro:        { provider: 'nvidia', model: 'nvidia/nemotron-3-super-120b-a12b' },
-  enterprise: { provider: 'nvidia', model: 'nvidia/nemotron-3-super-120b-a12b' },
-};
-// Safety net: if a bucket says 'nvidia' but NVIDIA_API_KEY isn't set in the
-// EdgeOne env, that tier silently falls back to these OpenRouter models — a
-// missing key degrades to the old behaviour instead of breaking chat.
-const OPENROUTER_FALLBACK = {
-  free:       'google/gemma-4-31b-it:free',
-  pro:        'nvidia/nemotron-3-ultra-550b-a55b:free',
-  enterprise: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+  free:       'nvidia/nemotron-3.5-lightning-30b-a3b',
+  pro:        'nvidia/nemotron-3-super-120b-a12b',
+  enterprise: 'nvidia/nemotron-3-super-120b-a12b',
 };
 
 // Per-IP quota for the FREE tier: free/guest traffic draws on the provider's
 // SHARED allowance for our single key, so we cap how much any one network can pull —
 // 30 messages per 36 hours per IP. Separate from the per-account daily cap and
 // per-minute throttle below. ponytail: per-IP is coarse (IPv6 rotation can dodge
-// it), but shared-quota protection is the point; OpenRouter's free-tier limit and
-// the $1/day spend cap are the hard backstops.
+// it), but shared-quota protection is the point; NVIDIA's 40 rpm / 10,000-per-day
+// free-endpoint limits are the hard backstops.
 const FREE_IP_LIMIT  = 30;
 const FREE_IP_WINDOW = 129600; // 36 hours, in seconds
 
@@ -165,8 +159,15 @@ function isBlocked(text) {
 export async function onRequest(context) {
   const { request, env } = context;
 
-  // Read secrets from environment variables (fail loud if missing)
-  if (!env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY not configured');
+  // Read secrets from environment variables (fail loud if missing).
+  //
+  // This gate used to demand OPENROUTER_API_KEY — and it is what actually broke
+  // "the NVIDIA key doesn't work". EdgeOne held that variable set-but-EMPTY,
+  // '' is falsy, so this threw on the FIRST line of every request and the
+  // handler 500'd before a single line of NVIDIA code ran. The key was never
+  // rejected; it was never reached. Nothing here uses OpenRouter any more, so
+  // the gate now guards the provider actually in use.
+  if (!(env.NVIDIA_API_KEY || '').trim()) throw new Error('NVIDIA_API_KEY not configured');
   // SECURITY (L2): reject a short/guessable HS256 secret — it could be brute-forced
   // offline to forge valid JWTs. Require >= 32 chars.
   if (!env.JWT_SECRET || env.JWT_SECRET.length < 32) throw new Error('JWT_SECRET missing or too short (need >= 32 chars)');
@@ -174,19 +175,15 @@ export async function onRequest(context) {
   if (!env.SUPABASE_URL) throw new Error('SUPABASE_URL not configured');
   if (!env.SUPABASE_ANON_KEY) throw new Error('SUPABASE_ANON_KEY not configured');
 
-  const OPENROUTER_API_KEY = env.OPENROUTER_API_KEY;
   const JWT_SECRET = env.JWT_SECRET;
   const ALLOWED_ORIGIN = env.ALLOWED_ORIGIN;
-  // Optional: when set, paid tiers route to NVIDIA's trial endpoint instead of
-  // OpenRouter (separate quota pool — unblocks beta testing while the OpenRouter
-  // shared free-model cap is exhausted). No throw: absent = OpenRouter as before.
   // .trim() is not cosmetic. Env values pasted into the EdgeOne dashboard pick up
   // trailing whitespace, and the two ways that breaks are both silent-ish: a
   // trailing SPACE is sent verbatim and NVIDIA answers 403 "Authorization
   // failed" (indistinguishable from a dead key), while a trailing NEWLINE makes
   // fetch() throw on header construction and the whole request 502s. Trimming
-  // also makes an all-whitespace value read as falsy, so the OpenRouter fallback
-  // below fires — degraded, but answering — instead of 403ing every request.
+  // also makes an all-whitespace value read as falsy, so the guard above throws
+  // a named error instead of every request coming back 403 from upstream.
   const NVIDIA_API_KEY = (env.NVIDIA_API_KEY || '').trim();
 
   // Supabase REST + KV helpers (shared factory in middleware.js). supabaseUrl /
@@ -223,7 +220,7 @@ export async function onRequest(context) {
     // source-grounding can give when its grounding is not actually there.
     const EMPTY  = { sources: '', failed: false };
     const FAILED = { sources: '', failed: true };
-    // 1. Embed the question (text -> a list of 2048 numbers) via OpenRouter.
+    // 1. Embed the question (text -> a list of 2048 numbers) via NVIDIA.
     let queryEmbedding;
     try {
       // SECURITY (L3): time out the embeddings call (8s) so a hung upstream can't
@@ -363,7 +360,7 @@ ${c.content}`;
     // SECURITY (H1): use EdgeOne's trusted EO-Connecting-IP header (the client
     // cannot spoof it). The old CF-Connecting-IP || X-Forwarded-For fallback let an
     // attacker rotate X-Forwarded-For to mint unlimited fresh guest buckets — i.e.
-    // unmetered free LLM calls on your OpenRouter key. No X-Forwarded-For fallback.
+    // unmetered free LLM calls on your NVIDIA key. No X-Forwarded-For fallback.
     const clientIP = getClientIP(request);
     const ipHash = await hashIP(clientIP);
     const guestKey = `guest:quota:${ipHash}`;
@@ -398,15 +395,15 @@ ${c.content}`;
     // SECURITY (H1): per-minute burst throttle, checked FIRST so a script that is
     // hammering the endpoint bails after a single KV read (before the daily read).
     // queriesPerMinute was defined in RATE_LIMITS but never actually enforced. It
-    // guards a DIFFERENT failure than the daily cap or the $1/day OpenRouter spend
-    // cap: without it a burst can fire an account's whole daily budget in seconds
+    // guards a DIFFERENT failure than the daily cap or NVIDIA's 10,000/day ceiling:
+    // without it a burst can fire an account's whole daily budget in seconds
     // (each message = an embedding call PLUS a completion call), spiking cost and
     // concurrency and taking the app down for everyone. Enterprise = Infinity.
     // Fixed window: the key includes the current minute number, so it resets
     // cleanly on the minute boundary — no TTL that slides forward on every write.
     // ponytail: the get-then-put is not atomic, so a truly-simultaneous burst can
-    // sneak a few extra through; the $1/day OpenRouter cap is the hard money
-    // backstop, so that slippage is benign. Upgrade path only if abuse is measured:
+    // sneak a few extra through; NVIDIA's own 40 rpm limit is the hard backstop,
+    // so that slippage is benign. Upgrade path only if abuse is measured:
     // an atomic Postgres INSERT .. ON CONFLICT .. RETURNING counter (RPC).
     if (plan.queriesPerMinute !== Infinity) {
       const thisMinute = Math.floor(Date.now() / 60000);
@@ -445,18 +442,12 @@ ${c.content}`;
 
   // Pick this tier's bucket (see MODEL_BUCKETS at the top — guests count as
   // 'free'). If the bucket wants NVIDIA but the key isn't configured, fall back
-  // to the tier's OpenRouter model so chat keeps working.
   const tier = (userPlan === 'pro' || userPlan === 'enterprise') ? userPlan : 'free';
   const isPaidPlan = tier !== 'free';
-  let bucket = MODEL_BUCKETS[tier];
-  if (bucket.provider === 'nvidia' && !NVIDIA_API_KEY) {
-    bucket = { provider: 'openrouter', model: OPENROUTER_FALLBACK[tier] };
-  }
-  const viaNvidia = bucket.provider === 'nvidia';
-  const model = bucket.model;
+  const model = MODEL_BUCKETS[tier];
 
   // Per-IP quota for the free tier (30 per 36h) — protects the provider's shared
-  // allowance (OpenRouter free pool / NVIDIA trial credits) from being drained by
+  // allowance (NVIDIA's 40 rpm / 10,000 per day) from being drained by
   // one network. Fixed 36h window (the bucket number is baked into the key) so it
   // resets deterministically, not on a sliding TTL. Checked HERE, before the
   // body/embedding/completion work below, so an over-limit caller bails cheap.
@@ -537,7 +528,7 @@ ${c.content}`;
     return jsonResponse({ error: 'Message contains prohibited content.' }, 400, ALLOWED_ORIGIN);
   }
 
-  // Step 4: Forward request to OpenRouter (with system prompt + validated model + sanitized messages)
+  // Step 4: Forward request to NVIDIA (system prompt + validated model + sanitized messages)
   // Declared out here, not inside the try, because the STREAMING code further
   // down has to read it to prepend the visible notice.
   let retrievalFailed = false;
@@ -597,17 +588,15 @@ RETRIEVAL UNAVAILABLE: the source library could not be reached for this question
     const aiCtl = new AbortController();
     const aiTimer = setTimeout(() => aiCtl.abort(), 30000);
     try {
-      // Same OpenAI-compatible request either way; only the URL + key differ.
-      // enable_thinking:false (NVIDIA only): Nemotron models emit reasoning
-      // tokens by default, which would burn most of the 550-token budget before
-      // the visible answer starts — and our SSE parser only reads delta.content,
-      // so those tokens would be paid for and thrown away. OpenRouter ignores
-      // unknown fields, but we only send it on the NVIDIA path to be safe.
-      upstream = await fetch(viaNvidia ? NVIDIA_URL : OPENROUTER_URL, {
+      // enable_thinking:false — Nemotron models emit reasoning tokens by default,
+      // which would burn most of the token budget before the visible answer
+      // starts, and our SSE parser only reads delta.content: those tokens would
+      // be generated and thrown away.
+      upstream = await fetch(NVIDIA_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${viaNvidia ? NVIDIA_API_KEY : OPENROUTER_API_KEY}`,
+          'Authorization': `Bearer ${NVIDIA_API_KEY}`,
           'HTTP-Referer': ALLOWED_ORIGIN,
           'X-Title': 'EconIntel',
         },
@@ -622,7 +611,7 @@ RETRIEVAL UNAVAILABLE: the source library could not be reached for this question
           temperature: 0.5,
           top_p: 0.9,
           stream: true, // tokens arrive immediately instead of waiting for full response
-          ...(viaNvidia ? { chat_template_kwargs: { enable_thinking: false } } : {}),
+          chat_template_kwargs: { enable_thinking: false },
         }),
         signal: aiCtl.signal,
       });
@@ -630,7 +619,7 @@ RETRIEVAL UNAVAILABLE: the source library could not be reached for this question
       clearTimeout(aiTimer);
     }
   } catch (err) {
-    console.error('[chat] OpenRouter fetch failed:', err);
+    console.error('[chat] NVIDIA fetch failed:', err);
     return jsonResponse(
       { error: 'Upstream service unavailable' },
       502,
@@ -638,7 +627,7 @@ RETRIEVAL UNAVAILABLE: the source library could not be reached for this question
     );
   }
 
-  // If OpenRouter returned an error (4xx/5xx), its body is JSON not SSE —
+  // If NVIDIA returned an error (4xx/5xx), its body is JSON not SSE —
   // read it and forward a structured error so the frontend can display it.
   if (!upstream.ok) {
     let errData;

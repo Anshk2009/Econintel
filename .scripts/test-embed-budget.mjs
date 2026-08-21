@@ -72,4 +72,19 @@ await assert.rejects(
   },
 );
 
+// 6. The 40 rpm limit is a RATE, and a per-run budget cannot express one — so
+//    embedBatch spaces its own calls. Without this a sweep trips 429 around
+//    request 40 and reembed.mjs halts the entire run on the first one.
+globalThis.fetch = async () => ({
+  ok: true, status: 200,
+  async json() { return { data: [{ index: 0, embedding: [0.1] }] }; },
+  async text() { return ''; },
+});
+lib.setEmbedBudget(3);
+const t0 = Date.now();
+await lib.embedBatch(['a']);
+await lib.embedBatch(['b']);
+const gap = Date.now() - t0;
+assert.ok(gap >= 1400, `back-to-back batches must be spaced for 40 rpm, got ${gap}ms`);
+
 console.log('PASS  embed budget: per-request accounting, hard stop before the network, quota vs budget distinguished');

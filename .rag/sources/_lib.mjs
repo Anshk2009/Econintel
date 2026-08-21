@@ -83,7 +83,7 @@ export async function embed(text, inputType = 'passage') {
 
 // Embed MANY texts in one API call (the embeddings endpoint accepts an array).
 // One request for 10 items instead of 10 requests — faster ingestion and far
-// fewer chances to trip OpenRouter's free-tier rate limit. Returns embeddings
+// fewer chances to trip NVIDIA's 40 rpm limit. Returns embeddings
 // in the same order as `texts` (sorted by the response's index field, since
 // the API doesn't guarantee response order).
 // ── THE EMBEDDING REQUEST BUDGET ────────────────────────────────────────────
@@ -93,17 +93,21 @@ export async function embed(text, inputType = 'passage') {
 // indicators) is 192 requests — nearly 4x the entire free daily allowance, spent
 // before ingest-live or live chat get a look in.
 //
-// ON THE NUMBER: it is a ceiling, not a measured limit, and it should not be set
-// tighter than what already worked. Before any budget existed, ingest-live ran
-// uncapped — 23 feeds, batches of 10, up to ~58 requests per run — for months
-// without exhausting anything. So quota has never been the binding constraint
-// here, and a budget that stops ingestion is worse than no budget at all.
-// (An earlier revision of this file put the default at 3, on a "~50 requests
-// per day" figure carried over from the CHAT model's free pool. That number was
-// never verified for embeddings and the evidence contradicts it.)
-// 20 is therefore comfortably below observed-working behaviour, while still
-// guaranteeing ingestion cannot run away with a key that live chat depends on.
-export const EMBED_BUDGET = Number(process.env.INGEST_EMBED_BUDGET || 20);
+// ON THE NUMBER — now measured, not guessed. build.nvidia.com publishes the free
+// endpoint's limits on each model page: 40 requests/MINUTE, 10,000/DAY.
+//
+// That retires the reason this budget was ever set to 20. The old number came
+// from OpenRouter's free pool, where the binding constraint was a DAILY request
+// cap small enough that one ingest run could exhaust it and take live chat down
+// with it. On NVIDIA the daily ceiling is 10,000 — a full 43-feed run is ~60
+// requests, i.e. 0.6% of it — so the daily cap is no longer the thing to defend
+// against. The per-MINUTE limit is, and a budget cannot express a rate; that is
+// what RPM_DELAY_MS below is for.
+//
+// 400 leaves ingestion room to actually grow the library (10,000 rows/run at
+// batch 25) while still bounding a runaway loop, since chat draws on the same
+// key. Override per-workflow with INGEST_EMBED_BUDGET.
+export const EMBED_BUDGET = Number(process.env.INGEST_EMBED_BUDGET || 400);
 let embedBudget = EMBED_BUDGET;
 export const embedBudgetLeft = () => embedBudget;
 // For deliberate one-off jobs (reembed.mjs) that carry their own, larger budget.
@@ -113,6 +117,14 @@ export const setEmbedBudget = (n) => { embedBudget = n; };
 // The exception is check-retrieval.mjs, which embeds golden QUESTIONS and must
 // pass 'query' — otherwise the eval that certifies this pipeline is scoring a
 // path production never takes, and a green run would mean nothing.
+// 40 rpm = one request every 1.5s. Spacing them here — in the single function
+// every ingester funnels through — is the only place a rate limit can actually
+// be honoured; a per-run request BUDGET cannot express "per minute" at all.
+// Without this a sweep fires batches as fast as the network allows, trips 429
+// around request 40, and (reembed.mjs) stops the whole run on the first one.
+const RPM_DELAY_MS = 1500;
+let lastEmbedAt = 0;
+
 export async function embedBatch(texts, inputType = 'passage') {
   if (embedBudget <= 0) {
     const e = new Error(`Embedding budget for this run is exhausted (INGEST_EMBED_BUDGET=${EMBED_BUDGET}). Nothing was requested, so no allowance was spent.`);
@@ -120,6 +132,9 @@ export async function embedBatch(texts, inputType = 'passage') {
     throw e;
   }
   embedBudget--;
+  const waitFor = lastEmbedAt + RPM_DELAY_MS - Date.now();
+  if (waitFor > 0) await new Promise(r => setTimeout(r, waitFor));
+  lastEmbedAt = Date.now();
   // input_type: 'passage' — the INDEXING side of this model's two modes. Live
   // questions embed as 'query' (functions/chat.js). Getting this wrong does not
   // error; it just quietly wrecks retrieval accuracy, which is the worst kind of

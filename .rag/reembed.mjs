@@ -57,14 +57,32 @@ const includeChurn = process.argv.includes('--all');
 // Rows needing repair = recorded model is missing, or is not the current one.
 // Two queries instead of PostgREST's or(...) syntax, because the model name
 // contains '/' and ':' and quoting it inside or() is a footgun for no gain.
+// One GET cannot carry the whole backlog. At the workflow's default budget of
+// 600 this is asked for 15,000 rows of full article `content` — megabytes —
+// through fetchWithTimeout's 20s abort (sources/_lib.mjs:48). It aborts, and it
+// aborts BEFORE a single row is repaired, so the sweep looks broken rather than
+// slow. Paging keeps every request small and the abort meaningful.
+// Safe to page by offset here: fetchStale() runs to completion at :89 before the
+// first PATCH, so no row shifts underneath the cursor mid-scan.
+const PAGE = 500;
+
 async function fetchStale(limit) {
   const cols = 'id,content,category';
   const skip = includeChurn ? '' : `&category=not.in.(${CHURN.join(',')})`;
-  const common = `select=${cols}${skip}&content=not.is.null&order=id.asc&limit=${limit}`;
+  const common = `select=${cols}${skip}&content=not.is.null&order=id.asc`;
   const get = async (filter) => {
-    const r = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/documents?${filter}&${common}`, { headers: AUTH });
-    if (!r.ok) throw new Error(`fetch failed: ${r.status} ${(await r.text()).slice(0, 160)}`);
-    return r.json();
+    const out = [];
+    while (out.length < limit) {
+      const size = Math.min(PAGE, limit - out.length);
+      const url = `${SUPABASE_URL}/rest/v1/documents?${filter}&${common}` +
+                  `&limit=${size}&offset=${out.length}`;
+      const r = await fetchWithTimeout(url, { headers: AUTH });
+      if (!r.ok) throw new Error(`fetch failed: ${r.status} ${(await r.text()).slice(0, 160)}`);
+      const page = await r.json();
+      out.push(...page);
+      if (page.length < size) break;   // ran out of matching rows
+    }
+    return out;
   };
   // Rows predating the embedding_model column read as null — that is the whole
   // backlog on the first run, so it is checked first.
