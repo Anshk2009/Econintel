@@ -22,10 +22,16 @@ on:
   workflow_dispatch:
     inputs:
       scope:
-        description: "Which rows to repair"
+        description: "Which rows to repair (start with preflight-only)"
         type: choice
-        default: all
+        default: preflight-only
         options:
+          # Measures whether the sweep is needed AT ALL, and writes nothing.
+          # Default on purpose: OpenRouter was a ROUTER, so the old
+          # `...:free` model was very likely NVIDIA's own inference — same
+          # weights, same space — in which case sweeping 11,500 rows spends
+          # hundreds of requests to change a string. 3 requests to find out.
+          - preflight-only
           - all           # every stale row, including news/india/analysis churn
           - primary-only  # skip churn: institution, research, filing, data, case-study
       budget:
@@ -46,7 +52,21 @@ jobs:
         with:
           node-version: "20"
 
+      # Always runs, including before a sweep — 3 requests is a trivial price for
+      # knowing whether the next 460 are needed, and the answer is printed above
+      # the sweep's own output so the log reads in the order you'd reason in.
+      - name: Preflight — is the sweep actually needed?
+        working-directory: .rag
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node probe-embeddings.mjs
+
       - name: Re-embed stale rows
+        # Skipped for preflight-only: that mode exists to measure, not to write.
+        if: ${{ inputs.scope != 'preflight-only' }}
         working-directory: .rag
         env:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
