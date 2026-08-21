@@ -27,9 +27,13 @@ const SUPABASE_KEY   = process.env.SUPABASE_ANON_KEY;
 const MAX_ITEMS_PER_FEED = 25;
 
 // Refuse to parse feeds bigger than this. Our regex parser scans the whole
-// text; a malformed/hostile multi-megabyte response could make that scan
-// crawl. 2 MB is ~10x a normal RSS feed.
-const MAX_FEED_BYTES = 2 * 1024 * 1024;
+// text; a malformed/hostile multi-megabyte response could make that scan crawl.
+// Raised 2 MB -> 6 MB: NY Fed Liberty Street Economics syndicates FULL articles
+// rather than summaries and weighs 2.8 MB, so the old ceiling silently dropped a
+// primary source every run. The guard is against a pathological response, not
+// against a wordy publisher, and per-item truncation (MAX_ITEM_CHARS) already
+// bounds what a fat feed can cost downstream.
+const MAX_FEED_BYTES = 6 * 1024 * 1024;
 
 // Upper bound on items per embedding request. Requests, not tokens, are what the
 // free tier caps, so bigger batches are cheaper — but see MAX_BATCH_CHARS: this
@@ -192,6 +196,17 @@ async function collectFeed(feed) {
 // this is still stored in full for the chat to read, only its VECTOR is computed
 // from the opening MAX_ITEM_CHARS. A feed that syndicates whole articles (some
 // do) must not be able to blow the context window on its own.
+// RSS dates are whatever the publisher felt like emitting. `new Date(x)` returns
+// an Invalid Date for anything it cannot parse, and `.toISOString()` then THROWS
+// — which killed the entire batch, not just the offending item. Two batches were
+// lost to this on 2026-08-21. An undated row is fine (published_at is nullable
+// and the chat renders "date unknown"); a thrown exception is not.
+export function toISO(value) {
+  if (!value) return null;
+  const t = new Date(value);
+  return Number.isNaN(t.getTime()) ? null : t.toISOString();
+}
+
 export function embedTextOf(it) {
   return `${it.title}\n${it.description}`.slice(0, MAX_ITEM_CHARS);
 }
@@ -300,12 +315,17 @@ async function main() {
         source_name:  it.feed.name,
         source_url:   it.url,
         category:     it.feed.category || 'news',
-        published_at: it.date ? new Date(it.date).toISOString() : null,
-        // CITEABLE primary/open-data feeds (feeds.json "citeable": true) are the
-        // only ones marked publishable=true, so the chat may cite them when a
-        // user asks. Everything else stays retrieval-only BACKGROUND (column
-        // DEFAULT false) — never cited.
-        publishable:  it.feed.citeable === true ? true : undefined,
+        published_at: toISO(it.date),
+        // ALWAYS a boolean, never undefined. PostgREST bulk insert requires every
+        // object in the array to have the SAME KEYS ("All object keys must match",
+        // PGRST102), and JSON.stringify DROPS undefined keys — so the old
+        // `? true : undefined` silently produced two different row shapes, and any
+        // batch spanning a citeable and a non-citeable feed was rejected whole.
+        // Sizing batches by characters made cross-feed batches the norm, which is
+        // what turned a latent bug into every-run breakage.
+        // true = we may REPUBLISH it (gov / central bank / open research);
+        // false = retrieval and attribution only. Both are cited to the reader.
+        publishable:  it.feed.citeable === true,
         embedding:    embeddings[j],
         // Stamp the space this vector lives in, so a future model change is a
         // detectable, repairable event instead of a silent third of the library

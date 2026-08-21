@@ -40,6 +40,31 @@ create table if not exists documents (
 );
 -- Existing databases: add the column without touching data.
 alter table documents add column if not exists embedding_model text;
+
+-- ROW-LEVEL SECURITY: OFF for this table, deliberately.
+-- On 2026-08-21 every ingestion run failed with
+--   42501 "new row violates row-level security policy for table documents"
+-- because RLS was on with no policy granting the anon role INSERT. Both writers
+-- (GitHub Actions) and the reader (the edge function) authenticate as anon —
+-- EdgeOne refuses to store a service_role key, which is why this project uses
+-- anon server-side throughout.
+--
+-- The quieter half of that failure matters more: match_documents runs as the
+-- CALLER by default, so RLS-with-no-policy does not error on reads, it returns
+-- ZERO ROWS. retrieveContext sees an empty result, treats it as "library had
+-- nothing", shows no warning, and the chat answers ungrounded looking perfectly
+-- normal. Writes fail loudly; reads fail silently. That is the worse one.
+--
+-- WHAT THIS COSTS: anyone holding the anon key can write to `documents`, and
+-- because the chat reads this table, that is a prompt-injection surface. The key
+-- is server-side only here (edge function env + GitHub secrets, never in client
+-- code), so this is acceptable — but it is a real trade, not a free one.
+-- The stricter alternative, worth doing when there is time: keep RLS ON, give
+-- the ingesters a SUPABASE_SERVICE_ROLE_KEY secret (GitHub Actions has no
+-- EdgeOne restriction, so it CAN hold one), and let reads through the
+-- security-definer function below. User tables keep their own RLS either way —
+-- this decision is about `documents` only, which holds public news summaries.
+alter table documents disable row level security;
 -- Finding rows left behind by a model change is the repair job's hot path.
 create index if not exists documents_embedding_model_idx on documents (embedding_model);
 -- Fast "give me only the publishable rows" lookups for page generation.
@@ -89,6 +114,17 @@ returns table (
   similarity   float
 )
 language sql stable
+-- SECURITY DEFINER so retrieval cannot be silently switched off by a change to
+-- this table's RLS. As SECURITY INVOKER (the default) the function runs as the
+-- caller, so enabling RLS without a SELECT policy makes it return zero rows
+-- rather than an error — and retrieveContext fails open, so every answer goes
+-- out ungrounded with nothing to show that it did. Reading this table is a
+-- deliberately public capability; pin it here instead of leaving it to whatever
+-- the table's RLS happens to be that week.
+-- search_path is fixed because a SECURITY DEFINER function that resolves names
+-- through the caller's search_path can be tricked into reading the wrong table.
+security definer
+set search_path = public, pg_temp
 as $$
   with
   -- Vector leg: pull 2x match_count so fusion has real choices. (The relevance
