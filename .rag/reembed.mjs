@@ -1,5 +1,6 @@
 // reembed.mjs — repair rows whose vectors are in a dead embedding space.
-// Run: node reembed.mjs            (needs OPENROUTER_EMBED_KEY, SUPABASE_URL, SUPABASE_ANON_KEY)
+// Run: node reembed.mjs            (needs OPENROUTER_EMBED_KEY, SUPABASE_URL,
+//                                    and SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY)
 //      node reembed.mjs --all      (include churn categories too — normally you DELETE those)
 //      REEMBED_BUDGET=10 node reembed.mjs   (smaller bite; safe to run repeatedly)
 //
@@ -27,11 +28,12 @@
 // Idempotent and resumable: it only ever selects rows whose recorded model is
 // not the current one, so an interrupted run just picks up where it stopped.
 import process from 'node:process';
-import { embedBatch, fetchWithTimeout, requireEnv, EMBED_MODEL, setEmbedBudget } from './sources/_lib.mjs';
+import { embedBatch, fetchWithTimeout, requireEnv, EMBED_MODEL, setEmbedBudget,
+         SUPABASE_URL, SUPABASE_KEY } from './sources/_lib.mjs';
 
-requireEnv(['OPENROUTER_EMBED_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']);
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const KEY = process.env.SUPABASE_ANON_KEY;
+requireEnv(['OPENROUTER_EMBED_KEY', 'SUPABASE_URL']);
+if (!SUPABASE_KEY) throw new Error('Missing env var(s): SUPABASE_ANON_KEY or SUPABASE_SERVICE_ROLE_KEY');
+const KEY = SUPABASE_KEY;
 const AUTH = { 'Authorization': `Bearer ${KEY}`, 'apikey': KEY };
 
 // Same batching logic as the ingesters: the embeddings endpoint takes an array,

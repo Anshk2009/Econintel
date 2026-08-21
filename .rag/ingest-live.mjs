@@ -6,8 +6,11 @@
 //   1. Reads the list of RSS feeds from feeds.json
 //   2. Fetches ALL feeds in parallel (a slow feed no longer delays the others)
 //   3. Skips anything already stored (ONE dedupe query per feed, not per item)
-//   4. Embeds new items in BATCHES of 10 (one API call for 10 items) and saves
-//      them to Supabase in one insert per batch
+//   4. Embeds new items in batches sized by TOTAL CHARACTERS (see MAX_BATCH_CHARS
+//      — the model's context window is shared across a batch) and saves them to
+//      Supabase in one insert per batch
+//
+// Dry run, no keys and no cost:  node .rag/ingest-live.mjs --dry-run
 //
 // Schedule it (Windows Task Scheduler / GitHub Actions cron) every few hours
 // so the library always reflects what's happening in the world.
@@ -15,11 +18,14 @@
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 // embedBatch() + fetchWithTimeout() are shared with the data-source ingesters.
-import { embedBatch, fetchWithTimeout, FEED_HEADERS, EMBED_MODEL, EMBED_BUDGET } from './sources/_lib.mjs';
+import { embedBatch, fetchWithTimeout, FEED_HEADERS, EMBED_MODEL, EMBED_BUDGET,
+         SUPABASE_URL, SUPABASE_KEY, USING_SERVICE_ROLE } from './sources/_lib.mjs';
 
 // --- Config: set these as environment variables before running ---
-const SUPABASE_URL   = process.env.SUPABASE_URL;          // https://xxxx.supabase.co
-const SUPABASE_KEY   = process.env.SUPABASE_ANON_KEY;
+// Credentials come from sources/_lib.mjs, which prefers a service-role key when
+// one is set and falls back to anon. Imported rather than re-read from env so
+// this file cannot end up authenticating as a different role than the shared
+// helpers it calls (findStored here, prune/upsertDoc there).
 
 // Take at most this many items per feed per run. Bounds embedding cost and
 // keeps one hyperactive feed from flooding the library in a single run —
@@ -259,7 +265,7 @@ async function main() {
   const missing = [];
   if (!process.env.OPENROUTER_EMBED_KEY) missing.push('OPENROUTER_EMBED_KEY');
   if (!SUPABASE_URL)         missing.push('SUPABASE_URL');
-  if (!SUPABASE_KEY)         missing.push('SUPABASE_ANON_KEY');
+  if (!SUPABASE_KEY)         missing.push('SUPABASE_ANON_KEY or SUPABASE_SERVICE_ROLE_KEY');
   if (missing.length) {
     // A dry run touches neither API, so missing secrets are expected — say so
     // and carry on, instead of refusing to do the part that needs no keys.
@@ -271,7 +277,16 @@ async function main() {
     }
   }
 
-  const { feeds } = JSON.parse(await readFile('./feeds.json', 'utf8'));
+  // Say which role we authenticated as. harden-rls.sql tells you to confirm this
+  // line reads service_role BEFORE enabling RLS — get the order wrong and every
+  // insert fails 42501, which is exactly how ingestion broke on 2026-08-21.
+  console.log(`Supabase role: ${USING_SERVICE_ROLE ? 'service_role (RLS bypassed)' : 'anon (requires RLS off, or an insert policy)'}`);
+
+  // Resolved relative to THIS FILE, not the working directory — the workflow
+  // sets `working-directory: .rag`, but a human running
+  // `node .rag/ingest-live.mjs --dry-run` from the repo root got ENOENT.
+  // check-feeds.mjs already resolved it this way; this file was the odd one out.
+  const { feeds } = JSON.parse(await readFile(new URL('./feeds.json', import.meta.url), 'utf8'));
 
   // ALL feeds fetch + dedupe in parallel (each one already catches its own
   // errors, so allSettled's rejected branch should never fire — belt and braces).

@@ -35,6 +35,10 @@ jobs:
           OPENROUTER_EMBED_KEY: ${{ secrets.OPENROUTER_EMBED_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          # Optional: when set, the ingesters authenticate as service_role and
+          # RLS on `documents` can stay ON (see .rag/harden-rls.sql). Unset is
+          # fine — sources/_lib.mjs falls back to the anon key.
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           DATA_GOV_IN_KEY: ${{ secrets.DATA_GOV_IN_KEY }}
           INGEST_CONTACT: ${{ secrets.INGEST_CONTACT }}

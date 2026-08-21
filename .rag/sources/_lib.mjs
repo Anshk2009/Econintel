@@ -7,7 +7,21 @@ import process from 'node:process';
 
 export const OPENROUTER_EMBED_KEY = process.env.OPENROUTER_EMBED_KEY;
 export const SUPABASE_URL = process.env.SUPABASE_URL;
-export const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY;
+
+// Prefer the service-role key when one is available, fall back to anon.
+//
+// The ingesters run in GitHub Actions, which — unlike EdgeOne — has no objection
+// to storing a service_role key. EdgeOne's refusal is the ONLY reason this
+// project uses anon for server-side writes, and that constraint does not apply
+// out here. A service-role key bypasses RLS, which lets `documents` be locked
+// down properly: no anon writes at all, reads only through the security-definer
+// match_documents function. See .rag/harden-rls.sql.
+//
+// The fallback is deliberate. Set the secret and the ingesters keep working with
+// RLS on; leave it unset and they keep working exactly as today. Nothing breaks
+// on the way in, which is what makes the migration safe to do in two steps.
+export const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+export const USING_SERVICE_ROLE = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 // SEC requires a descriptive User-Agent with contact info on every request.
 // Set INGEST_CONTACT (e.g. "EconIntel you@domain.com"); falls back to a generic.
