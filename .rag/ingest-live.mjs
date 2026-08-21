@@ -13,6 +13,7 @@
 // so the library always reflects what's happening in the world.
 
 import { readFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
 // embedBatch() + fetchWithTimeout() are shared with the data-source ingesters.
 import { embedBatch, fetchWithTimeout, FEED_HEADERS, EMBED_MODEL, EMBED_BUDGET } from './sources/_lib.mjs';
 
@@ -30,11 +31,24 @@ const MAX_ITEMS_PER_FEED = 25;
 // crawl. 2 MB is ~10x a normal RSS feed.
 const MAX_FEED_BYTES = 2 * 1024 * 1024;
 
-// How many items to embed + insert per batch (one embeddings API call each).
-// 25 not 10: the embeddings endpoint takes an array, so batch size is purely a
-// REQUEST-COUNT lever, and requests — not tokens — are what the free tier caps.
-// Matched to MAX_ITEMS_PER_FEED so one feed's haul is normally one request.
+// Upper bound on items per embedding request. Requests, not tokens, are what the
+// free tier caps, so bigger batches are cheaper — but see MAX_BATCH_CHARS: this
+// is only the CEILING, and the character budget usually binds first.
 const BATCH_SIZE = 25;
+
+// Hard cap on the text embedded for ONE item. A few feeds syndicate entire
+// articles rather than a summary; without this, one of them sets the size of the
+// whole request. Stored `content` is NOT truncated — only the embedded text is.
+const MAX_ITEM_CHARS = 2000;
+
+// Hard cap on the text in ONE embedding request. THE MODEL'S CONTEXT WINDOW IS
+// THE REAL LIMIT AND IT IS SHARED ACROSS THE WHOLE BATCH — exceeding it returns
+// an error for every item in that request, not a truncated vector.
+// nemotron-3-embed-1b has an 8,192-token window. 12,000 characters is ~3,000
+// tokens at 4 chars/token, or ~3,430 at the 3.5 that dense academic text really
+// costs — roughly 40% of the window, leaving room for a feed that gets wordier
+// without warning. Raising this trades that safety margin for fewer requests.
+const MAX_BATCH_CHARS = 12000;
 
 // Hard ceiling on embedding requests per run. The embeddings key is a free
 // OpenRouter model with a daily REQUEST cap, and functions/chat.js draws on the
@@ -42,17 +56,11 @@ const BATCH_SIZE = 25;
 // to eat the whole day's allowance — a starved chat fails open and answers with
 // no sources at all, which is the exact failure this pipeline exists to prevent.
 //
-// SIZE THIS AGAINST THE TIER YOU ARE ACTUALLY ON. OpenRouter's free allowance is
-// ~50 requests/DAY across the whole key; buying $10 of credit raises it to
-// ~1,000/day permanently. The cron runs 8x/day, so:
-//     uncredited (~50/day):  3 per run =  24/day, leaving ~26 for live chat
-//     credited (~1,000/day): 20 per run = 160/day, leaving the rest for chat
-// The default is the SAFE one. A budget sized for credit you have not bought
-// yet does not fail politely — it exhausts the key, and then ingestion, seeding,
-// the retrieval check AND live chat retrieval all fail together.
-//
-// After buying credit, raise it without editing code:
-//     INGEST_EMBED_BUDGET: 20   (in the workflow's env: block)
+// It is a CEILING that keeps ingestion from monopolising a key live chat needs —
+// not a fix for a limit anyone has hit. Ingestion ran uncapped for months at
+// roughly twice this rate without trouble, so setting it lower "to be safe"
+// simply stops the library growing. See the note at EMBED_BUDGET in
+// sources/_lib.mjs. Override per-workflow with INGEST_EMBED_BUDGET.
 //
 // The number itself lives in sources/_lib.mjs, which enforces it inside
 // embedBatch() as a backstop for every ingester. Imported rather than re-read
@@ -179,6 +187,48 @@ async function collectFeed(feed) {
   }                                                        // on_conflict handle it
 }
 
+// The text sent to the embedding model for one item: headline + summary, capped.
+// The cap is separate from the stored `content` on purpose — an item longer than
+// this is still stored in full for the chat to read, only its VECTOR is computed
+// from the opening MAX_ITEM_CHARS. A feed that syndicates whole articles (some
+// do) must not be able to blow the context window on its own.
+export function embedTextOf(it) {
+  return `${it.title}\n${it.description}`.slice(0, MAX_ITEM_CHARS);
+}
+
+// Group items into embedding requests by TOTAL SIZE, not by a fixed count.
+//
+// A fixed count was the bug. BATCH_SIZE went 10 -> 25 in the same commit that
+// added arXiv and NBER, whose items are 1,500-2,000-character academic
+// abstracts. Measured 2026-08-21: 25 arXiv items = 32,162 chars, roughly 8,000
+// tokens at 4 chars/token against this model's 8,192-token window — and dense
+// academic text tokenizes nearer 3.5, putting it over. Batches are slices of one
+// flat array, so a batch straddling NBER and arXiv (adjacent in feeds.json) was
+// the worst case of all. Every such request was rejected, and a fixed count
+// cannot anticipate that because it never looks at how long the items are.
+//
+// Counting characters makes the batch adapt to the content: many short wire
+// headlines still ride together, a run of long abstracts splits automatically.
+export function makeBatches(items, maxChars = MAX_BATCH_CHARS, maxItems = BATCH_SIZE) {
+  const batches = [];
+  let current = [], chars = 0;
+  for (const it of items) {
+    const size = embedTextOf(it).length;
+    // Close the current batch if adding this item would breach either limit.
+    // `current.length` guards against an empty batch when one item exceeds
+    // maxChars by itself — it can't, since MAX_ITEM_CHARS < MAX_BATCH_CHARS,
+    // but the check keeps that true if either constant is ever changed.
+    if (current.length && (current.length >= maxItems || chars + size > maxChars)) {
+      batches.push(current);
+      current = []; chars = 0;
+    }
+    current.push(it);
+    chars += size;
+  }
+  if (current.length) batches.push(current);
+  return batches;
+}
+
 async function main() {
   // Fail loud if a required secret is missing. Without this, a blank key sends
   // "Bearer undefined" to OpenRouter/Supabase, every request 401s, and the run
@@ -209,8 +259,7 @@ async function main() {
   // press last, so a starved run still ingests the primary sources the product's
   // claim rests on. Reordering that file silently reprioritises the corpus.
   let added = 0, failed = 0, requests = 0, deferred = 0, quotaHit = false;
-  for (let i = 0; i < fresh.length; i += BATCH_SIZE) {
-    const batch = fresh.slice(i, i + BATCH_SIZE);
+  for (const batch of makeBatches(fresh)) {
     // Budget exhausted: stop cleanly rather than burn the chat's allowance.
     // These items are NOT lost — they were never inserted, so the next run's
     // dedupe check still sees them as new and picks them up.
@@ -219,7 +268,7 @@ async function main() {
     try {
       // The text we embed = headline + summary. Enough for the chat to find
       // and cite the real source; keep it small to stay cheap.
-      const embeddings = await embedBatch(batch.map(it => `${it.title}\n${it.description}`));
+      const embeddings = await embedBatch(batch.map(embedTextOf));
       const rows = batch.map((it, j) => ({
         content:      `${it.title}\n${it.description}`,
         source_name:  it.feed.name,
@@ -266,9 +315,10 @@ async function main() {
   // the one red run that means something. The retrieval check is what should go
   // red if the library actually stops being able to answer.
   if (quotaHit) {
-    console.error('\nEMBEDDING QUOTA EXHAUSTED for today — stopped early, nothing lost.');
-    console.error(`OpenRouter's free allowance is ~50 requests/DAY across this key, shared with live chat.`);
-    console.error(`Budget per run is ${MAX_EMBED_REQUESTS_PER_RUN} (env INGEST_EMBED_BUDGET). $10 of credit raises the cap to ~1,000/day, after which 20 is the right value.`);
+    console.error('\nEMBEDDING ALLOWANCE EXHAUSTED upstream — stopped early, nothing lost.');
+    console.error('The provider rejected a request with 402/429. This key is shared with live chat,');
+    console.error(`so continuing would spend the rest of the day's allowance on retries that cannot succeed.`);
+    console.error(`Per-run budget is ${MAX_EMBED_REQUESTS_PER_RUN} (env INGEST_EMBED_BUDGET). Deferred items are re-collected next run.`);
     return;
   }
 
@@ -278,4 +328,9 @@ async function main() {
   }
 }
 
-main().catch(err => { console.error(err); process.exit(1); });
+// Run main() only when this file is executed directly, so a test can import the
+// pure helpers above (makeBatches, embedTextOf) without kicking off a live
+// ingestion — which would exit(1) on the missing secrets before asserting a thing.
+if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
+  main().catch(err => { console.error(err); process.exit(1); });
+}

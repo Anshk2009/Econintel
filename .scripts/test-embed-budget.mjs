@@ -28,7 +28,7 @@ process.env.INGEST_EMBED_BUDGET = '2';
 const lib = await import('../.rag/sources/_lib.mjs');
 
 // 1. The budget is what the env said, and it starts unspent.
-assert.equal(lib.EMBED_BUDGET, 2);
+assert.equal(lib.EMBED_BUDGET, 2, 'env must win over the default');
 assert.equal(lib.embedBudgetLeft(), 2);
 
 // 2. Requests inside the budget go through, and each costs exactly one.

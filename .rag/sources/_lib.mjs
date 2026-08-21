@@ -71,10 +71,17 @@ export async function embed(text) {
 // indicators) is 192 requests — nearly 4x the entire free daily allowance, spent
 // before ingest-live or live chat get a look in.
 //
-// OpenRouter free tier is ~50 requests/DAY for the whole key; $10 of credit
-// raises it to ~1,000/day. Default 3 is sized for the uncredited tier with the
-// 8x/day news cron in mind. Raise via INGEST_EMBED_BUDGET once credit is bought.
-export const EMBED_BUDGET = Number(process.env.INGEST_EMBED_BUDGET || 3);
+// ON THE NUMBER: it is a ceiling, not a measured limit, and it should not be set
+// tighter than what already worked. Before any budget existed, ingest-live ran
+// uncapped — 23 feeds, batches of 10, up to ~58 requests per run — for months
+// without exhausting anything. So quota has never been the binding constraint
+// here, and a budget that stops ingestion is worse than no budget at all.
+// (An earlier revision of this file put the default at 3, on a "~50 requests
+// per day" figure carried over from the CHAT model's free pool. That number was
+// never verified for embeddings and the evidence contradicts it.)
+// 20 is therefore comfortably below observed-working behaviour, while still
+// guaranteeing ingestion cannot run away with a key that live chat depends on.
+export const EMBED_BUDGET = Number(process.env.INGEST_EMBED_BUDGET || 20);
 let embedBudget = EMBED_BUDGET;
 export const embedBudgetLeft = () => embedBudget;
 // For deliberate one-off jobs (reembed.mjs) that carry their own, larger budget.
