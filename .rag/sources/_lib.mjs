@@ -5,7 +5,11 @@
 // open-data sources, unlike the commercial-news RSS which stays background-only.
 import process from 'node:process';
 
-export const OPENROUTER_EMBED_KEY = process.env.OPENROUTER_EMBED_KEY;
+// Embeddings run on NVIDIA (build.nvidia.com), same account and same key as the
+// chat model in functions/chat.js. Was OPENROUTER_EMBED_KEY until 2026-08-21;
+// OpenRouter's embeddings endpoint was the only thing still tying this pipeline
+// to a second provider, and a second free-tier quota to run dry unnoticed.
+export const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
 export const SUPABASE_URL = process.env.SUPABASE_URL;
 
 // Prefer the service-role key when one is available, fall back to anon.
@@ -65,12 +69,16 @@ export async function fetchWithTimeout(url, options = {}, ms = TIMEOUT_MS) {
 // vectors is just noise and nothing anywhere recorded which model a row used.
 //
 // After changing it: run `node reembed.mjs` until it reports 0 remaining.
-export const EMBED_MODEL = 'nvidia/nemotron-3-embed-1b:free';
+// NOTE the missing ':free' — that suffix is OpenRouter's naming, not NVIDIA's.
+// Sending it to integrate.api.nvidia.com is a 404, and keeping it here after the
+// switch would mean reembed.mjs rewrites every row to a model string that does
+// not exist. Same string must appear in functions/chat.js (EMBED_MODEL).
+export const EMBED_MODEL = 'nvidia/nemotron-3-embed-1b';
 
 // Turn text into a 2048-dim embedding — SAME model as every other ingester and
 // the chat, so the vectors live in the same space.
-export async function embed(text) {
-  return (await embedBatch([text]))[0];
+export async function embed(text, inputType = 'passage') {
+  return (await embedBatch([text], inputType))[0];
 }
 
 // Embed MANY texts in one API call (the embeddings endpoint accepts an array).
@@ -101,17 +109,27 @@ export const embedBudgetLeft = () => embedBudget;
 // For deliberate one-off jobs (reembed.mjs) that carry their own, larger budget.
 export const setEmbedBudget = (n) => { embedBudget = n; };
 
-export async function embedBatch(texts) {
+// inputType defaults to 'passage' because almost every caller here is INDEXING.
+// The exception is check-retrieval.mjs, which embeds golden QUESTIONS and must
+// pass 'query' — otherwise the eval that certifies this pipeline is scoring a
+// path production never takes, and a green run would mean nothing.
+export async function embedBatch(texts, inputType = 'passage') {
   if (embedBudget <= 0) {
     const e = new Error(`Embedding budget for this run is exhausted (INGEST_EMBED_BUDGET=${EMBED_BUDGET}). Nothing was requested, so no allowance was spent.`);
     e.budget = true;   // distinct from err.quota: we stopped ourselves, upstream did not stop us
     throw e;
   }
   embedBudget--;
-  const r = await fetchWithTimeout('https://openrouter.ai/api/v1/embeddings', {
+  // input_type: 'passage' — the INDEXING side of this model's two modes. Live
+  // questions embed as 'query' (functions/chat.js). Getting this wrong does not
+  // error; it just quietly wrecks retrieval accuracy, which is the worst kind of
+  // bug this pipeline can have. truncate: 'END' clips at the model's 4096-token
+  // input cap instead of failing the whole batch on one long document.
+  const r = await fetchWithTimeout('https://integrate.api.nvidia.com/v1/embeddings', {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${OPENROUTER_EMBED_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: EMBED_MODEL, input: texts }),
+    headers: { 'Authorization': `Bearer ${NVIDIA_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: EMBED_MODEL, input: texts, input_type: inputType,
+                           encoding_format: 'float', truncate: 'END' }),
   });
   if (!r.ok) {
     const body = await r.text();
@@ -120,6 +138,10 @@ export async function embedBatch(texts) {
     // tell "we ran out of allowance today" (expected, wait for the reset) from
     // "something is broken" (investigate). Treating the two the same is how you
     // end up with a workflow that is red every three hours and therefore unread.
+    // 403 on NVIDIA means the KEY was rejected (expired, wrong account, trailing
+    // whitespace) — a broken config, not a spent allowance. Deliberately NOT
+    // tagged as quota: it must fail the run loudly instead of looking like a
+    // normal "come back tomorrow".
     err.quota = r.status === 402 || r.status === 429;
     throw err;
   }

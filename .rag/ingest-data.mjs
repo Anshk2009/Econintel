@@ -2,7 +2,7 @@
 // EDGAR, FRED, OGD India). Writes CITEABLE (publishable=true) documents.
 //
 // Run with:  node ingest-data.mjs
-// Required env: OPENROUTER_EMBED_KEY, SUPABASE_URL, SUPABASE_ANON_KEY
+// Required env: NVIDIA_API_KEY, SUPABASE_URL, SUPABASE_ANON_KEY
 // Optional env: FRED_API_KEY, DATA_GOV_IN_KEY, INGEST_CONTACT
 //
 // Resilient: a source that errors (e.g. missing API key) is skipped and the
@@ -16,7 +16,7 @@ import { ingestOgdIndia } from './sources/ogd-india.mjs';
 async function main() {
   // These three are needed by EVERY source (embeddings + Supabase). Fail loud if
   // missing so we don't "succeed" having written nothing.
-  requireEnv(['OPENROUTER_EMBED_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']);
+  requireEnv(['NVIDIA_API_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']);
 
   const sources = [
     ['World Bank', ingestWorldBank], // no key

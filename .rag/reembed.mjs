@@ -1,5 +1,5 @@
 // reembed.mjs — repair rows whose vectors are in a dead embedding space.
-// Run: node reembed.mjs            (needs OPENROUTER_EMBED_KEY, SUPABASE_URL,
+// Run: node reembed.mjs            (needs NVIDIA_API_KEY, SUPABASE_URL,
 //                                    and SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY)
 //      node reembed.mjs --all      (include churn categories too — normally you DELETE those)
 //      REEMBED_BUDGET=10 node reembed.mjs   (smaller bite; safe to run repeatedly)
@@ -31,7 +31,7 @@ import process from 'node:process';
 import { embedBatch, fetchWithTimeout, requireEnv, EMBED_MODEL, setEmbedBudget,
          SUPABASE_URL, SUPABASE_KEY } from './sources/_lib.mjs';
 
-requireEnv(['OPENROUTER_EMBED_KEY', 'SUPABASE_URL']);
+requireEnv(['NVIDIA_API_KEY', 'SUPABASE_URL']);
 if (!SUPABASE_KEY) throw new Error('Missing env var(s): SUPABASE_ANON_KEY or SUPABASE_SERVICE_ROLE_KEY');
 const KEY = SUPABASE_KEY;
 const AUTH = { 'Authorization': `Bearer ${KEY}`, 'apikey': KEY };
@@ -117,6 +117,16 @@ async function main() {
     } catch (e) {
       failed += batch.length;
       console.warn(`  batch of ${batch.length} failed: ${e.message}`);
+      // Upstream said 402/429. Every remaining batch would fail the same way and
+      // each attempt still costs a request, so stop. Matters far more here than
+      // in ingest-live: a full sweep is ~460 batches, and grinding through the
+      // rest on failures would waste the allowance AND bury the real cause under
+      // hundreds of identical lines. Nothing is lost — rows keep their old
+      // embedding_model, so the next run picks up exactly where this stopped.
+      if (e.quota) {
+        console.error('\nUpstream allowance reached — stopping. Re-run later to continue; progress so far is saved.');
+        break;
+      }
     }
   }
 
@@ -126,7 +136,7 @@ async function main() {
   // Every batch failing means the key or the model is wrong, not the data —
   // fail loudly rather than leave a green run that repaired nothing.
   if (fixed === 0 && failed > 0) {
-    console.error('Every batch failed and nothing was repaired. Check OPENROUTER_EMBED_KEY and its remaining daily quota.');
+    console.error('Every batch failed and nothing was repaired. Check NVIDIA_API_KEY and its remaining daily quota.');
     process.exit(1);
   }
 }

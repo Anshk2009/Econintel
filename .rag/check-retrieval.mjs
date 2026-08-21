@@ -1,5 +1,5 @@
 // check-retrieval.mjs — does the library still answer the questions it exists for?
-// Run: node check-retrieval.mjs      (needs OPENROUTER_EMBED_KEY, SUPABASE_URL, SUPABASE_ANON_KEY)
+// Run: node check-retrieval.mjs      (needs NVIDIA_API_KEY, SUPABASE_URL, SUPABASE_ANON_KEY)
 //
 // WHY THIS EXISTS
 // Four retrieval defects shipped and lived for weeks in 2026, and every one was
@@ -22,14 +22,17 @@
 import { readFile } from 'node:fs/promises';
 import { embedBatch, fetchWithTimeout, requireEnv } from './sources/_lib.mjs';
 
-requireEnv(['OPENROUTER_EMBED_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']);
+requireEnv(['NVIDIA_API_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']);
 const { SUPABASE_URL, SUPABASE_ANON_KEY: KEY } = process.env;
 
 const { k = 6, min_pass_rate = 0.7, queries } = JSON.parse(await readFile('./golden.json', 'utf8'));
 
 // One embeddings call for every query — same batching trick the ingesters use,
 // so the whole check costs a single request against the daily cap.
-const vectors = await embedBatch(queries.map(q => q.q));
+// 'query' — NOT the 'passage' default. These are questions, and this model
+// embeds the two modes differently. Scoring questions-as-documents would make
+// this eval green on a path live chat never runs.
+const vectors = await embedBatch(queries.map(q => q.q), 'query');
 
 let passed = 0;
 const failures = [];

@@ -1,0 +1,69 @@
+name: Re-embed library
+
+# Manual only. Repairs rows whose vectors were produced by a different embedding
+# model (or provider, or input_type) than the one running now — those score ~0.00
+# against every query and are effectively invisible to the chat.
+#
+# Runs HERE rather than on a laptop because the keys already live in repo
+# Secrets, a full sweep takes ~10-15 minutes, and this way it survives the lid
+# being closed. Nothing about it is scheduled: re-embedding is a response to a
+# deliberate change, not routine maintenance.
+#
+# WHEN TO RUN IT
+#   - after changing EMBED_MODEL in .rag/sources/_lib.mjs
+#   - after switching embedding PROVIDER (OpenRouter -> NVIDIA, 2026-08-21)
+#   - after changing input_type, which alters the vector even for the same model
+#   - when audit-followup.sql section 1 shows an id range sitting at ~0.00
+#
+# Safe to re-run: it only ever selects rows whose recorded embedding_model is not
+# the current one, so an interrupted run resumes exactly where it stopped.
+
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: "Which rows to repair"
+        type: choice
+        default: all
+        options:
+          - all           # every stale row, including news/india/analysis churn
+          - primary-only  # skip churn: institution, research, filing, data, case-study
+      budget:
+        description: "Max embedding requests (25 rows each). ~460 covers a 11,500-row library."
+        type: string
+        default: "600"
+
+jobs:
+  reembed:
+    runs-on: ubuntu-latest
+    # A full sweep is ~460 requests plus a PATCH per row. 60 minutes is generous;
+    # the point is to fail rather than hang if the provider starts stalling.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Re-embed stale rows
+        working-directory: .rag
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          # Used in preference to the anon key when set — a write-heavy job is
+          # exactly where RLS bites, and this one PATCHes every row it touches.
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          REEMBED_BUDGET: ${{ inputs.budget }}
+        run: node reembed.mjs ${{ inputs.scope == 'all' && '--all' || '' }}
+
+      - name: What to check next
+        if: success()
+        run: |
+          echo "Verify before trusting it:"
+          echo "  1. audit-followup.sql section 1 — every id bucket should now show a"
+          echo "     similar avg_sim/sd profile. A block still at ~0.00 means rows were"
+          echo "     missed; re-run with a higher budget."
+          echo "  2. audit-followup.sql section D — all 7 case studies off ~0.00."
+          echo "  3. The 'Check retrieval quality' workflow — the end-to-end proof."

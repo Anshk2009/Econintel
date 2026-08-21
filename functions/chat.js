@@ -40,6 +40,16 @@ export function prependNotice(body, text) {
 // for development/testing/evaluation — move tiers back to OpenRouter (or a paid
 // endpoint) before real launch.
 const NVIDIA_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
+// Embeddings live on the SAME NVIDIA account and the SAME key as chat. They used
+// to run on OpenRouter with a separate key, which meant a working NVIDIA key did
+// nothing for retrieval — the whole RAG path ignored it. One provider, one key.
+const NVIDIA_EMBED_URL = 'https://integrate.api.nvidia.com/v1/embeddings';
+// 2048 dims — matches the documents.embedding vector(2048) column, so no table
+// change. MUST stay in sync with EMBED_MODEL in .rag/sources/_lib.mjs: that
+// constant is what gets written to documents.embedding_model, and match_documents
+// compares this query's vector against those rows. Different strings on the two
+// sides = two coordinate spaces = every score is noise.
+const EMBED_MODEL = 'nvidia/nemotron-3-embed-1b';
 
 // ── MODEL BUCKETS — one per plan tier (guests count as 'free') ──────────────
 // To re-route any tier later, edit ITS line only: provider is 'nvidia' or
@@ -48,7 +58,7 @@ const NVIDIA_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
 // (strongest fast model), free/guests get Nano 30B (quick, cheap on the
 // shared 40 req/min trial limit).
 const MODEL_BUCKETS = {
-  free:       { provider: 'nvidia', model: 'nvidia/nemotron-3-nano-30b-a3b' },
+  free:       { provider: 'nvidia', model: 'nvidia/nemotron-3.5-lightning-30b-a3b' },
   pro:        { provider: 'nvidia', model: 'nvidia/nemotron-3-super-120b-a12b' },
   enterprise: { provider: 'nvidia', model: 'nvidia/nemotron-3-super-120b-a12b' },
 };
@@ -170,7 +180,14 @@ export async function onRequest(context) {
   // Optional: when set, paid tiers route to NVIDIA's trial endpoint instead of
   // OpenRouter (separate quota pool — unblocks beta testing while the OpenRouter
   // shared free-model cap is exhausted). No throw: absent = OpenRouter as before.
-  const NVIDIA_API_KEY = env.NVIDIA_API_KEY;
+  // .trim() is not cosmetic. Env values pasted into the EdgeOne dashboard pick up
+  // trailing whitespace, and the two ways that breaks are both silent-ish: a
+  // trailing SPACE is sent verbatim and NVIDIA answers 403 "Authorization
+  // failed" (indistinguishable from a dead key), while a trailing NEWLINE makes
+  // fetch() throw on header construction and the whole request 502s. Trimming
+  // also makes an all-whitespace value read as falsy, so the OpenRouter fallback
+  // below fires — degraded, but answering — instead of 403ing every request.
+  const NVIDIA_API_KEY = (env.NVIDIA_API_KEY || '').trim();
 
   // Supabase REST + KV helpers (shared factory in middleware.js). supabaseUrl /
   // supabaseKey are used directly by retrieveContext's match_documents RPC below.
@@ -183,11 +200,11 @@ export async function onRequest(context) {
   // Supabase down, empty library), it returns '' and the chat just answers
   // normally instead of breaking.
   //
-  // Embeddings use nvidia/nemotron-3-embed-1b:free via OpenRouter
-  // (2048 dims) — this MUST match the ingester (rag/ingest-live.mjs) and the
-  // vector(2048) column (rag/schema.sql). Uses a SEPARATE OpenRouter key,
-  // OPENROUTER_EMBED_KEY (set in EdgeOne env vars), so chat and embeddings have
-  // independent keys/quota. Optional — if it's missing, retrieval just skips.
+  // Embeddings use nvidia/nemotron-3-embed-1b on NVIDIA (2048 dims) — this MUST
+  // match the ingester (.rag/sources/_lib.mjs) and the vector(2048) column
+  // (.rag/schema.sql). Same NVIDIA_API_KEY as chat: NVIDIA issues one key per
+  // account, so a second variable bought nothing but a second thing to forget.
+  // Optional — if the key is missing, retrieval fails open and chat still answers.
   // ---------------------------------------------------------------------------
   // Returns { sources, failed }:
   //   sources = ONE numbered, attributed block — every retrieved chunk with its
@@ -216,13 +233,27 @@ export async function onRequest(context) {
       const embedTimer = setTimeout(() => embedCtl.abort(), 8000);
       let r;
       try {
-        r = await fetch('https://openrouter.ai/api/v1/embeddings', {
+        r = await fetch(NVIDIA_EMBED_URL, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${env.OPENROUTER_EMBED_KEY}`,
+            'Authorization': `Bearer ${NVIDIA_API_KEY}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ model: 'nvidia/nemotron-3-embed-1b:free', input: query }),
+          // input_type: 'query' — NOT optional, and NOT cosmetic. This model
+          // embeds in two modes: 'passage' when indexing a document, 'query'
+          // when searching. The ingester writes rows as 'passage'; a question
+          // embedded as 'passage' lands in the wrong half of the space and
+          // retrieval accuracy collapses silently. NVIDIA's own docs call this
+          // out. If you change one side, change the other (.rag/sources/_lib.mjs).
+          // truncate: 'END' — the model caps input at 4096 tokens and 400s
+          // otherwise; a long pasted question should be clipped, not fail.
+          body: JSON.stringify({
+            model: EMBED_MODEL,
+            input: [query],
+            input_type: 'query',
+            encoding_format: 'float',
+            truncate: 'END',
+          }),
           signal: embedCtl.signal,
         });
       } finally {

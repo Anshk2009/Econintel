@@ -263,7 +263,7 @@ async function main() {
   // "Bearer undefined" to OpenRouter/Supabase, every request 401s, and the run
   // still finishes "successfully" having added nothing — a silent green failure.
   const missing = [];
-  if (!process.env.OPENROUTER_EMBED_KEY) missing.push('OPENROUTER_EMBED_KEY');
+  if (!process.env.NVIDIA_API_KEY) missing.push('NVIDIA_API_KEY');
   if (!SUPABASE_URL)         missing.push('SUPABASE_URL');
   if (!SUPABASE_KEY)         missing.push('SUPABASE_ANON_KEY or SUPABASE_SERVICE_ROLE_KEY');
   if (missing.length) {

@@ -84,8 +84,8 @@ The text you store becomes what the AI cites as "primary sources." So:
 
 ## Cost & housekeeping
 
-- Embeddings are **free** — nvidia/nemotron-3-embed-1b:free via
-  OpenRouter, using your separate embeddings key (OPENROUTER_EMBED_KEY) — so live news costs ₹0 to embed.
+- Embeddings are **free** — nvidia/nemotron-3-embed-1b on NVIDIA
+  (integrate.api.nvidia.com), using the same NVIDIA_API_KEY as chat — so live news costs ₹0 to embed.
 - News piles up. To stay inside Supabase's free tier, delete old news
   periodically, e.g. in the SQL editor:
   ```sql

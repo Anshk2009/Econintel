@@ -13,7 +13,7 @@
 create extension if not exists vector;
 
 -- 2. The library: one row = one chunk / news item.
---    embedding is vector(2048) to match nvidia/nemotron-3-embed-1b:free.
+--    embedding is vector(2048) to match nvidia/nemotron-3-embed-1b.
 create table if not exists documents (
   id           bigint generated always as identity primary key,
   content      text,            -- the text the chat reads

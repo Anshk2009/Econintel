@@ -34,7 +34,7 @@ jobs:
       - name: Run live ingester
         working-directory: .rag    # ingest-live.mjs reads ./feeds.json from this folder
         env:
-          OPENROUTER_EMBED_KEY: ${{ secrets.OPENROUTER_EMBED_KEY }}
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           # Optional: when set, the ingesters authenticate as service_role and
