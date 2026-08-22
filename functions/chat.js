@@ -167,6 +167,35 @@ function isBlocked(text) {
 export async function onRequest(context) {
   const { request, env } = context;
 
+  // ── TIMING ────────────────────────────────────────────────────────────────
+  // Emitted as a Server-Timing header on the streamed response, so the next
+  // person asking "why is this slow" reads it off the network tab instead of
+  // instrumenting from outside the request the way this session had to.
+  const T0 = Date.now();
+  const marks = {};
+  const mark = (name) => { marks[name] = Date.now() - T0; };
+  const serverTiming = () =>
+    Object.entries(marks).map(([k, v]) => `${k};dur=${v}`).join(', ');
+
+  // Fire-and-forget a write whose RESULT NOBODY READS.
+  //
+  // Every TOKENS.put below is a counter increment, and awaiting it puts a full
+  // HTTPS round trip to Supabase (ap-northeast-1) in front of the user's answer
+  // for no information gained.
+  //
+  // The fallback is not optional. EdgeOne does not guarantee waitUntil — this
+  // file already tests for it before using it on the stream pipe — and without
+  // it an un-awaited put can die with the isolate. A counter that never
+  // increments is not a slow rate limit, it is NO rate limit, on a key shared
+  // with live chat. So: hand it to waitUntil when that exists, otherwise await.
+  const fireAndForget = (promise) => {
+    if (typeof context.waitUntil === 'function') {
+      context.waitUntil(promise.catch(() => {}));
+      return Promise.resolve();
+    }
+    return promise;
+  };
+
   // Read secrets from environment variables (fail loud if missing).
   //
   // This gate used to demand OPENROUTER_API_KEY — and it is what actually broke
@@ -369,6 +398,29 @@ ${c.content}`;
   let userId, userPlan;
 
   if (!token) {
+    // NEVER silently downgrade a signed-in user to the guest tier.
+    //
+    // Found 2026-08-22: an enterprise account sent a message and was served as a
+    // GUEST — free model, 5-per-2-hours quota, no chat history saved — with
+    // nothing to indicate it. The access_token cookie had lapsed and the browser
+    // still showed them signed in from localStorage. Because the guest path
+    // SUCCEEDS, the response was a normal 200 and the client's existing
+    // 401/403 -> silentRefresh -> retry recovery never fired. A paying user
+    // quietly got the cheap model, and only the KV buckets recorded it.
+    //
+    // chat.html sends X-CSRF-Token from localStorage whenever it believes it is
+    // signed in. That header present + no access_token cookie = a session that
+    // lapsed, not a visitor. Answer 401 so the client renews with its 30-day
+    // refresh cookie and retries once. If the refresh genuinely fails,
+    // clearUser() drops the stale CSRF, and the next message goes down the guest
+    // path normally — so this cannot lock a lapsed user out of guest chat.
+    if ((request.headers.get('X-CSRF-Token') || '').length > 0) {
+      return jsonResponse({
+        error: 'Your session expired. Renewing…',
+        code: 'SESSION_EXPIRED',
+      }, 401, ALLOWED_ORIGIN);
+    }
+
     // Unauthenticated — check IP-based guest quota.
     // SECURITY (H1): use EdgeOne's trusted EO-Connecting-IP header (the client
     // cannot spoof it). The old CF-Connecting-IP || X-Forwarded-For fallback let an
@@ -387,7 +439,7 @@ ${c.content}`;
     }
 
     // Increment counter (resets after 2 hours)
-    await TOKENS.put(guestKey, String(used + 1), { expirationTtl: 7200 });
+    await fireAndForget(TOKENS.put(guestKey, String(used + 1), { expirationTtl: 7200 }));
     userId = `guest:${ipHash.slice(0, 12)}`;
     userPlan = 'free';
   } else {
@@ -428,7 +480,7 @@ ${c.content}`;
           429, ALLOWED_ORIGIN, { 'Retry-After': '60' }
         );
       }
-      await TOKENS.put(minuteKey, String(usedThisMinute + 1), { expirationTtl: 120 });
+      await fireAndForget(TOKENS.put(minuteKey, String(usedThisMinute + 1), { expirationTtl: 120 }));
     }
 
     // SECURITY (H2): daily cap keyed on the ACCOUNT (userId), NOT the client IP.
@@ -450,7 +502,7 @@ ${c.content}`;
     }
     // Increment the daily counter. TTL 24h just garbage-collects the row; the date
     // in the key is what actually rolls the window over at midnight.
-    await TOKENS.put(dailyKey, String(usedToday + 1), { expirationTtl: 86400 });
+    await fireAndForget(TOKENS.put(dailyKey, String(usedToday + 1), { expirationTtl: 86400 }));
   }
 
   // Pick this tier's bucket (see MODEL_BUCKETS at the top — guests count as
@@ -458,6 +510,7 @@ ${c.content}`;
   const tier = (userPlan === 'pro' || userPlan === 'enterprise') ? userPlan : 'free';
   const isPaidPlan = tier !== 'free';
   const model = MODEL_BUCKETS[tier];
+  mark('gate');   // auth + every quota check done
 
   // Per-IP quota for the free tier (30 per 36h) — protects the provider's shared
   // allowance (NVIDIA's 40 rpm / 10,000 per day) from being drained by
@@ -477,7 +530,7 @@ ${c.content}`;
         429, ALLOWED_ORIGIN, { 'Retry-After': String(FREE_IP_WINDOW) }
       );
     }
-    await TOKENS.put(freeKey, String(usedFree + 1), { expirationTtl: FREE_IP_WINDOW });
+    await fireAndForget(TOKENS.put(freeKey, String(usedFree + 1), { expirationTtl: FREE_IP_WINDOW }));
   }
 
   // Step 2: Parse request body with size limit
@@ -554,6 +607,7 @@ ${c.content}`;
     let systemPrompt = SYSTEM_PROMPT;
     if (latestUserMsg) {
       const { sources, failed } = await retrieveContext(latestUserMsg.content);
+      mark('rag');   // embed + match_documents done
       retrievalFailed = failed;
       // SECURITY (M2 — indirect prompt injection): the retrieved text comes from
       // LIVE, UNTRUSTED sources (RSS feeds, scraped news). A poisoned item could
@@ -628,6 +682,7 @@ RETRIEVAL UNAVAILABLE: the source library could not be reached for this question
         }),
         signal: aiCtl.signal,
       });
+      mark('upstream');   // NVIDIA accepted the request and sent headers
     } finally {
       clearTimeout(aiTimer);
     }
@@ -665,6 +720,9 @@ RETRIEVAL UNAVAILABLE: the source library could not be reached for this question
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
+    // gate = auth + quotas, rag = embed + match_documents, upstream = NVIDIA
+    // headers. Visible in the browser network tab; nothing sensitive in it.
+    'Server-Timing': serverTiming(),
   };
 
   // A product that sells source-grounding may not answer ungrounded in silence.

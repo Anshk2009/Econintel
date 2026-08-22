@@ -918,6 +918,15 @@
     display: inline-flex; align-items: center;
     padding: 0.95rem 1.2rem;
   }
+  /* The dots alone carried the entire 8.5s wait on a product whose whole pitch
+     is source-grounding — the most differentiating seconds looked identical to
+     every other chatbot, and indistinguishable from hung. The label names the
+     work instead. Purely cosmetic: no timing promise, it reflects real phases. */
+  .think-label {
+    margin-left: 10px; font-size: 0.82rem;
+    color: rgba(255,255,255,0.45); font-family: 'DM Sans', sans-serif;
+  }
+  body.light .think-label { color: rgba(0,0,0,0.45); }
   .think-dots { display: inline-flex; gap: 6px; align-items: center; }
   .think-dots i {
     width: 8px; height: 8px; border-radius: 50%;
@@ -1989,7 +1998,10 @@ function addMessage(role, content, opts = {}) {
   const el = document.createElement('div');
   el.className = 'msg ' + role + (opts.thinking ? ' thinking' : '') + (opts.error ? ' error' : '');
   if (opts.thinking) {
-    el.innerHTML = '<span class="think-dots"><i></i><i></i><i></i></span>';
+    // aria-live so a screen reader announces the phase change too — the dots
+    // are decorative and announce nothing.
+    el.innerHTML = '<span class="think-dots"><i></i><i></i><i></i></span>' +
+                   '<span class="think-label" role="status" aria-live="polite">Searching sources…</span>';
   } else if (opts.imageDataUrl) {
     // User bubble with an image attachment + optional text
     // alt describes what the image IS to a screen reader. The filename is
@@ -2189,6 +2201,16 @@ async function sendMessage() {
       started = true;
     };
 
+    // Headers are back, which means auth, quotas and RETRIEVAL are all done and
+    // the model is now generating. Say so. Measured on production: headers land
+    // ~3.5s in, first token ~8.5s, so this is the difference between one silent
+    // 8.5s wait and two labelled ~4s ones.
+    const label = msgEl.querySelector('.think-label');
+    if (label) label.textContent = 'Drafting answer…';
+
+    // Handle for the coalesced repaint below, so a burst of tokens causes one
+    // render per frame rather than one per token.
+    let pendingPaint = 0;
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     // partial holds an incomplete SSE line that was split across two chunks
@@ -2212,8 +2234,24 @@ async function sendMessage() {
             if (delta) {
               if (!started) beginReply(); // first token: clear the dots, keep the bubble
               fullReply += delta;
-              msgEl.textContent = fullReply; // live update — user sees text as it arrives
-              scrollChatToBottom(); // follow the stream (unless user scrolled up)
+              // Render markdown DURING the stream, not only after it.
+              // Streaming raw textContent meant the reader watched literal `**`
+              // and `- ` type out for the whole ~3.4s stream and then the block
+              // reflowed when renderMarkdown ran at the end. It looked broken
+              // for longer than it took to generate.
+              //
+              // Rendering every delta is wasteful (a token is often 2-3 chars),
+              // so repaint on a rAF at most — the browser cannot show more than
+              // one frame anyway, and this keeps the reflow off the token path.
+              // ponytail: rAF coalescing, not a virtual DOM. Revisit only if a
+              // profiler says the innerHTML swap is the bottleneck.
+              if (!pendingPaint) {
+                pendingPaint = requestAnimationFrame(() => {
+                  pendingPaint = 0;
+                  msgEl.innerHTML = renderMarkdown(fullReply);
+                  scrollChatToBottom();
+                });
+              }
             }
           } catch {} // malformed SSE line — skip silently
         }
@@ -2232,6 +2270,9 @@ async function sendMessage() {
     // Stream done — switch from plain textContent to rendered HTML.
     // We stream as text so partial tokens don't break mid-tag, then
     // render once the full response is received.
+    // Cancel any frame still queued, or it would fire AFTER this final render
+    // and repaint a stale fullReply captured before the last tokens arrived.
+    if (pendingPaint) { cancelAnimationFrame(pendingPaint); pendingPaint = 0; }
     if (fullReply) msgEl.innerHTML = renderMarkdown(fullReply);
     // Final scroll so the rendered reply sits just above the prompt box
     scrollChatToBottom();
