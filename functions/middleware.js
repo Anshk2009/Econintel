@@ -300,7 +300,22 @@ export async function hashIP(ip) {
  * @param {object} env - EdgeOne environment bindings
  * @returns {string} the Supabase key to use
  */
-function resolveSupabaseKey(env) {
+export function resolveSupabaseKey(env) {
+  // PREFERRED: Supabase's new-format secret key (`sb_secret_...`).
+  //
+  // Why this exists now and did not before: EdgeOne refuses to store the LEGACY
+  // service_role key, because that key is a JWT beginning `eyJ...` and trips a
+  // content filter ("value contains unsecurity string") — which is the entire
+  // reason this project ran on the anon key server-side, and therefore the
+  // reason RLS is off on all seven public tables. `sb_secret_...` is not a JWT
+  // and is a completely different string shape, so it saves normally. That
+  // removes the constraint the whole design was bent around.
+  //
+  // No base64 wrapper needed, so no decode step that can fail silently.
+  if (env.SUPABASE_SECRET_KEY) return env.SUPABASE_SECRET_KEY.trim();
+
+  // LEGACY workaround, kept so an existing deployment does not regress: the old
+  // service_role JWT, base64-wrapped by hand to get past that same filter.
   if (env.SUPABASE_SERVICE_KEY_B64) {
     try {
       // .trim() guards against a trailing newline accidentally pasted into the
