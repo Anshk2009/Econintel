@@ -135,6 +135,17 @@ async function findStored(urls) {
 // Insert a BATCH of rows in one request. on_conflict + ignore-duplicates makes
 // it idempotent: if a row slipped past the dedupe check (or two runs race),
 // Postgres just skips it instead of erroring the whole batch.
+// Returns the number of rows ACTUALLY STORED, which is not the number sent.
+//
+// This used to return nothing and the caller did `added += rows.length`, i.e. it
+// counted rows ATTEMPTED. With `resolution=ignore-duplicates` a duplicate comes
+// back 201 and is silently dropped, so a run where every single item was already
+// in the table printed "Added 101, failed 0" — identical to a run that genuinely
+// ingested 101 new articles. `Added` is the number you read to decide whether
+// ingestion still works, and it could not distinguish "working" from "doing
+// nothing at all". `return=representation` makes PostgREST send back the rows it
+// really inserted, which costs one response body per batch and makes the number
+// honest.
 async function insertRows(rows) {
   const post = (body) => fetchWithTimeout(`${SUPABASE_URL}/rest/v1/documents?on_conflict=source_url`, {
     method: 'POST',
@@ -142,10 +153,22 @@ async function insertRows(rows) {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${SUPABASE_KEY}`,
       'apikey': SUPABASE_KEY,
-      'Prefer': 'resolution=ignore-duplicates',
+      // return=representation: respond with the inserted rows so they can be
+      // counted. Ignored duplicates are simply absent from that array.
+      'Prefer': 'resolution=ignore-duplicates,return=representation',
     },
     body: JSON.stringify(body),
   });
+
+  // Count what came back. A 201 with an unparseable/empty body means the write
+  // succeeded but we cannot tell how much of it landed — report 0 stored rather
+  // than guess upward, so the number never overstates.
+  const storedCount = async (r) => {
+    try {
+      const body = await r.json();
+      return Array.isArray(body) ? body.length : 0;
+    } catch { return 0; }
+  };
 
   let res = await post(rows);
   if (!res.ok) {
@@ -157,11 +180,12 @@ async function insertRows(rows) {
     if (/publishable|embedding_model|embedded_at|does not exist|PGRST204/i.test(errText)) {
       const stripped = rows.map(({ publishable, embedding_model, embedded_at, ...rest }) => rest);
       const res2 = await post(stripped);
-      if (res2.ok) return;
+      if (res2.ok) return await storedCount(res2);
       throw new Error(`Insert failed (retry without publishable): ${res2.status} ${await res2.text()}`);
     }
     throw new Error(`Insert failed: ${res.status} ${errText}`);
   }
+  return await storedCount(res);
 }
 
 // Fetch + parse ONE feed. Returns its new (not-yet-stored) items, each tagged
@@ -302,7 +326,7 @@ async function main() {
   // lists central banks, statistical agencies and research FIRST, commercial
   // press last, so a starved run still ingests the primary sources the product's
   // claim rests on. Reordering that file silently reprioritises the corpus.
-  let added = 0, failed = 0, requests = 0, deferred = 0, quotaHit = false;
+  let added = 0, failed = 0, requests = 0, deferred = 0, duplicates = 0, quotaHit = false;
   for (const batch of makeBatches(fresh)) {
     // Budget exhausted: stop cleanly rather than burn the chat's allowance.
     // These items are NOT lost — they were never inserted, so the next run's
@@ -350,8 +374,12 @@ async function main() {
         // makes a future space change detectable without trusting the label.
         embedded_at: new Date().toISOString(),
       }));
-      await insertRows(rows);
-      added += rows.length;
+      const stored = await insertRows(rows);
+      added += stored;
+      // Sent-but-not-stored = already in the table (unique source_url). Normal
+      // and free, but counted so an all-duplicate run is VISIBLE instead of
+      // looking like a healthy ingest.
+      duplicates += rows.length - stored;
     } catch (err) {
       // Per-BATCH catch: one failed embed/insert costs at most BATCH_SIZE items,
       // never the whole run. Count failures so a dead embeddings key/model
@@ -372,8 +400,17 @@ async function main() {
     return;
   }
 
-  console.log(`Done. Added ${added}, failed ${failed}, embed requests ${requests}/${MAX_EMBED_REQUESTS_PER_RUN}` +
+  console.log(`Done. Added ${added}` +
+              (duplicates ? `, ${duplicates} already present` : '') +
+              `, failed ${failed}, embed requests ${requests}/${MAX_EMBED_REQUESTS_PER_RUN}` +
               (deferred ? `, deferred ${deferred} to the next run (budget reached)` : '.'));
+  // Worth saying out loud: embeddings were paid for and the rows were thrown
+  // away as duplicates. Harmless once, but every run means the dedupe check
+  // upstream has stopped working and the allowance is being burned for nothing.
+  if (!added && duplicates) {
+    console.log('Nothing new — every item was already stored. If this repeats every run, ' +
+                'the pre-embed dedupe check is not filtering and each run wastes its embedding budget.');
+  }
 
   // If items failed AND nothing new was added, ingestion is genuinely broken
   // (embeddings key/model dead, Supabase unreachable, etc.) — exit non-zero so
@@ -394,8 +431,16 @@ async function main() {
     return;
   }
 
-  if (failed > 0 && added === 0) {
-    console.error('Every attempted item failed and nothing was added — failing the run so it is visible.');
+  // NOTE the `added + duplicates`. This condition means "not one row reached
+  // Supabase", and it has to be written that way now that `added` counts rows
+  // actually STORED rather than rows attempted. A batch consisting entirely of
+  // duplicates writes nothing new yet proves the connection, the credentials and
+  // the row shape are all fine — under the old counter it landed in `added` and
+  // kept the run green. Testing `added === 0` alone would now fail the run red
+  // for a healthy pipeline that simply had no news, which is how a red build
+  // stops meaning anything.
+  if (failed > 0 && added + duplicates === 0) {
+    console.error('Every attempted item failed and nothing reached the database — failing the run so it is visible.');
     process.exit(1);
   }
 }
