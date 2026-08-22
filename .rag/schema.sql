@@ -36,10 +36,22 @@ create table if not exists documents (
   -- model a row belonged to. Now the ingesters write it and re-embed anything
   -- that does not match the model they are running, so a model change repairs
   -- itself on the next cron instead of silently killing a third of the corpus.
-  embedding_model text
+  embedding_model text,
+
+  -- WHEN the vector was produced. Added 2026-08-22 (migration 0009) because
+  -- embedding_model on its own turned out to be a marker you can destroy by
+  -- accident: migration 0007 backfilled every NULL label to the current model,
+  -- and from that moment reembed.mjs — which selects on the label — could not
+  -- identify a stale row again, silently. A date survives that. "Embedded before
+  -- the space moved" is true no matter what the label says.
+  -- Compared against EMBED_SPACE_CHANGED_AT in .rag/sources/_lib.mjs.
+  -- NOTE: rows stamped 2026-08-22 are a VERIFICATION FLOOR, not a true embedding
+  -- time — see the column comment in migration 0009.
+  embedded_at timestamptz
 );
--- Existing databases: add the column without touching data.
+-- Existing databases: add the columns without touching data.
 alter table documents add column if not exists embedding_model text;
+alter table documents add column if not exists embedded_at timestamptz;
 
 -- ROW-LEVEL SECURITY: OFF for this table, deliberately.
 -- On 2026-08-21 every ingestion run failed with
@@ -67,17 +79,46 @@ alter table documents add column if not exists embedding_model text;
 alter table documents disable row level security;
 -- Finding rows left behind by a model change is the repair job's hot path.
 create index if not exists documents_embedding_model_idx on documents (embedding_model);
+-- Same hot path, timestamp side. Partial: a row with no embedding is never a
+-- re-embed candidate, so keep the index to rows that could actually be repaired.
+create index if not exists documents_embedded_at_idx on documents (embedded_at)
+  where embedding is not null;
 -- Fast "give me only the publishable rows" lookups for page generation.
 create index if not exists documents_publishable_idx on documents (publishable);
+-- THE VECTOR INDEX (migration 0007). Without this, match_documents seq-scans
+-- every row and takes ~7.4s against anon's 3s statement_timeout — retrieval
+-- returns 57014 and fails open, i.e. the library looks empty and chat answers
+-- ungrounded. It is on the CAST, not the column: pgvector caps hnsw/ivfflat at
+-- 2000 dimensions and this column is vector(2048). halfvec indexes to 4000.
+-- The cast must stay character-identical to the one in match_documents below.
+create index if not exists documents_embedding_hnsw_idx
+  on documents using hnsw ((embedding::halfvec(2048)) halfvec_cosine_ops)
+  with (m = 16, ef_construction = 64);
 
 -- 3. Stop the same article being stored twice (dedupe by its URL).
 create unique index if not exists documents_source_url_key on documents (source_url);
 
--- NOTE on indexing: pgvector's fast HNSW/IVFFlat indexes only support up to 2000
--- dimensions, and this model outputs 2048 — so we do NOT create a vector index
--- here. Search is exact (a sequential scan), which is plenty fast while the
--- library is small. To scale later, switch the column to halfvec(2048) and add:
---   create index on documents using hnsw (embedding halfvec_cosine_ops);
+-- SUPERSEDED 2026-08-22 — the index now exists, above. This note is kept
+-- because the decision it recorded is what caused a real outage, and the shape
+-- of the mistake is worth more than the note was.
+--
+-- It read: "HNSW/IVFFlat only support up to 2000 dimensions and this model
+-- outputs 2048 — so we do NOT create a vector index here. Search is exact (a
+-- sequential scan), which is plenty fast while the library is small."
+--
+-- Every clause was true when written, at 381 rows. Nothing re-examined it as the
+-- corpus grew 32x. At 12,285 rows the seq scan reached 7,376 ms against anon's
+-- 3s statement_timeout, so match_documents began returning 57014 on EVERY query.
+-- retrieveContext fails open, so chat kept answering, ungrounded, with one
+-- notice — and the cause was misread as an embedding-provider fault, which
+-- triggered a whole provider migration that fixed nothing.
+--
+-- The note even named the fix ("switch to halfvec(2048)") and filed it under
+-- "to scale later". There was no trigger attached to "later", and no alert on
+-- retrieval failing, so "later" arrived as an outage instead of a task.
+--
+-- LESSON: a performance decision justified by "while the library is small" is
+-- only complete if something measures when it stops being small.
 
 -- 3b. Full-text index so the keyword half of the search below is fast. The
 --     'english' config stems words ("banks" matches "banking").

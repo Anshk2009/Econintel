@@ -75,6 +75,20 @@ export async function fetchWithTimeout(url, options = {}, ms = TIMEOUT_MS) {
 // not exist. Same string must appear in functions/chat.js (EMBED_MODEL).
 export const EMBED_MODEL = 'nvidia/nemotron-3-embed-1b';
 
+// When the embedding SPACE last changed — bump this in the SAME commit as any
+// change to EMBED_MODEL or to the input_type sent with it.
+//
+// This exists because embedding_model turned out to be a marker you can destroy
+// by accident: on 2026-08-21 a migration backfilled every NULL label to the
+// current model, and reembed.mjs — which selects on that label — could never
+// find a stale row again. A date cannot be laundered the same way. "Embedded
+// before the space moved" stays true no matter what the label says.
+//
+// documents.embedded_at is stamped on every write below. Rows carrying
+// 2026-08-22 are a VERIFICATION FLOOR, not a true embedding time (see the
+// column comment and .migrations/0009).
+export const EMBED_SPACE_CHANGED_AT = '2026-08-21T00:00:00Z';
+
 // Turn text into a 2048-dim embedding — SAME model as every other ingester and
 // the chat, so the vectors live in the same space.
 export async function embed(text, inputType = 'passage') {
@@ -186,7 +200,7 @@ export async function upsertDoc({ content, source_name, source_url, category, pu
 
   const embedding = await embed(content);
   const row = { content, source_name, source_url, category, published_at, publishable, embedding,
-                embedding_model: EMBED_MODEL };
+                embedding_model: EMBED_MODEL, embedded_at: new Date().toISOString() };
   const post = (body) => fetchWithTimeout(`${SUPABASE_URL}/rest/v1/documents?on_conflict=source_url`, {
     method: 'POST',
     headers: {
@@ -203,8 +217,8 @@ export async function upsertDoc({ content, source_name, source_url, category, pu
     const errText = await res.text();
     // Pre-migration databases may lack `publishable` OR `embedding_model`; drop
     // both and retry so ingestion never blocks on a column that is not there yet.
-    if (/publishable|embedding_model|does not exist|PGRST204/i.test(errText)) {
-      const { publishable: _p, embedding_model: _m, ...rest } = row;
+    if (/publishable|embedding_model|embedded_at|does not exist|PGRST204/i.test(errText)) {
+      const { publishable: _p, embedding_model: _m, embedded_at: _e, ...rest } = row;
       const res2 = await post(rest);
       if (res2.ok) return;
       throw new Error(`Upsert failed (retry without publishable): ${res2.status} ${await res2.text()}`);

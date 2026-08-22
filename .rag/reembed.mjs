@@ -28,8 +28,8 @@
 // Idempotent and resumable: it only ever selects rows whose recorded model is
 // not the current one, so an interrupted run just picks up where it stopped.
 import process from 'node:process';
-import { embedBatch, fetchWithTimeout, requireEnv, EMBED_MODEL, setEmbedBudget,
-         SUPABASE_URL, SUPABASE_KEY } from './sources/_lib.mjs';
+import { embedBatch, fetchWithTimeout, requireEnv, EMBED_MODEL, EMBED_SPACE_CHANGED_AT,
+         setEmbedBudget, SUPABASE_URL, SUPABASE_KEY } from './sources/_lib.mjs';
 
 requireEnv(['NVIDIA_API_KEY', 'SUPABASE_URL']);
 if (!SUPABASE_KEY) throw new Error('Missing env var(s): SUPABASE_ANON_KEY or SUPABASE_SERVICE_ROLE_KEY');
@@ -84,12 +84,35 @@ async function fetchStale(limit) {
     }
     return out;
   };
-  // Rows predating the embedding_model column read as null — that is the whole
-  // backlog on the first run, so it is checked first.
-  const nulls = await get('embedding_model=is.null');
-  if (nulls.length >= limit) return nulls;
-  const others = await get(`embedding_model=neq.${encodeURIComponent(EMBED_MODEL)}`);
-  return [...nulls, ...others].slice(0, limit);
+  // THREE independent staleness signals, deliberately overlapping. The label
+  // alone was not enough: a migration on 2026-08-21 backfilled every NULL
+  // embedding_model to the current value, and from that moment the label could
+  // never identify a stale row again. The timestamp is the signal that survives
+  // a bad UPDATE, because "embedded before the space moved" does not depend on
+  // anyone having stamped the label correctly.
+  //
+  //   1. embedded_at older than the last space change  <- survives a bad label
+  //   2. embedded_at missing entirely                  <- never stamped
+  //   3. embedding_model is null / wrong               <- the original signal
+  //
+  // De-duplicated by id, since a genuinely stale row usually trips more than one.
+  const seen = new Set();
+  const out = [];
+  for (const filter of [
+    `embedded_at=lt.${encodeURIComponent(EMBED_SPACE_CHANGED_AT)}`,
+    'embedded_at=is.null',
+    'embedding_model=is.null',
+    `embedding_model=neq.${encodeURIComponent(EMBED_MODEL)}`,
+  ]) {
+    if (out.length >= limit) break;
+    for (const row of await get(filter)) {
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      out.push(row);
+      if (out.length >= limit) break;
+    }
+  }
+  return out;
 }
 
 // Write one row's new vector back. PATCH by primary key: no upsert, no conflict
@@ -98,7 +121,8 @@ async function writeBack(id, embedding) {
   const r = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/documents?id=eq.${id}`, {
     method: 'PATCH',
     headers: { ...AUTH, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-    body: JSON.stringify({ embedding, embedding_model: EMBED_MODEL }),
+    body: JSON.stringify({ embedding, embedding_model: EMBED_MODEL,
+                           embedded_at: new Date().toISOString() }),
   });
   if (!r.ok) throw new Error(`PATCH ${id} failed: ${r.status} ${(await r.text()).slice(0, 160)}`);
 }

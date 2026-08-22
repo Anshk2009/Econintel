@@ -154,8 +154,8 @@ async function insertRows(rows) {
     // (migration-add-publishable.sql). If that column isn't there yet, retry once
     // WITHOUT the flag so ingestion never breaks — the rows just store as
     // non-citeable until the migration + backfill run.
-    if (/publishable|embedding_model|does not exist|PGRST204/i.test(errText)) {
-      const stripped = rows.map(({ publishable, embedding_model, ...rest }) => rest);
+    if (/publishable|embedding_model|embedded_at|does not exist|PGRST204/i.test(errText)) {
+      const stripped = rows.map(({ publishable, embedding_model, embedded_at, ...rest }) => rest);
       const res2 = await post(stripped);
       if (res2.ok) return;
       throw new Error(`Insert failed (retry without publishable): ${res2.status} ${await res2.text()}`);
@@ -346,6 +346,9 @@ async function main() {
         // detectable, repairable event instead of a silent third of the library
         // going unreachable (see EMBED_MODEL in sources/_lib.mjs).
         embedding_model: EMBED_MODEL,
+        // Real embedding time. Paired with EMBED_SPACE_CHANGED_AT this is what
+        // makes a future space change detectable without trusting the label.
+        embedded_at: new Date().toISOString(),
       }));
       await insertRows(rows);
       added += rows.length;
