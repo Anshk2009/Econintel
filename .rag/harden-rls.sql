@@ -1,4 +1,13 @@
 -- ============================================================================
+-- APPLIED 2026-08-22 — this file is now a RECORD, not a to-do.
+-- RLS is ON for all SEVEN public tables (kv_store, email_tokens, users,
+-- chat_history, login_events, api_usage, documents) with NO policies, so the
+-- publishable key can do nothing to any of them. Applied only after edge_logs
+-- confirmed every caller had moved to sb_secret_ following the EdgeOne redeploy.
+-- Verified after: match_documents still returned 6 rows (the security-definer
+-- read path), and all seven ERROR-level advisor findings cleared.
+-- The live definition lives in schema.sql. Keep this for the sequencing and the
+-- rollback line at the bottom.
 -- EconIntel RAG — lock down `documents` with RLS, properly.
 -- OPTIONAL HARDENING. schema.sql leaves RLS OFF because that is the state the
 -- pipeline works in today. This file is the stricter setup, and it has a

@@ -53,30 +53,32 @@ create table if not exists documents (
 alter table documents add column if not exists embedding_model text;
 alter table documents add column if not exists embedded_at timestamptz;
 
--- ROW-LEVEL SECURITY: OFF for this table, deliberately.
--- On 2026-08-21 every ingestion run failed with
---   42501 "new row violates row-level security policy for table documents"
--- because RLS was on with no policy granting the anon role INSERT. Both writers
--- (GitHub Actions) and the reader (the edge function) authenticate as anon —
--- EdgeOne refuses to store a service_role key, which is why this project uses
--- anon server-side throughout.
+-- ROW-LEVEL SECURITY: ON since 2026-08-22, with NO policy — which means the
+-- publishable (anon) key can do nothing to this table at all.
 --
--- The quieter half of that failure matters more: match_documents runs as the
--- CALLER by default, so RLS-with-no-policy does not error on reads, it returns
--- ZERO ROWS. retrieveContext sees an empty result, treats it as "library had
--- nothing", shows no warning, and the chat answers ungrounded looking perfectly
--- normal. Writes fail loudly; reads fail silently. That is the worse one.
+-- Everything legitimate goes around it: writers (GitHub Actions, and the edge
+-- functions since the EdgeOne redeploy) authenticate with the sb_secret key,
+-- which bypasses RLS; readers go through match_documents(), which is SECURITY
+-- DEFINER. Verified after applying: retrieval still returned 6 rows.
 --
--- WHAT THIS COSTS: anyone holding the anon key can write to `documents`, and
--- because the chat reads this table, that is a prompt-injection surface. The key
--- is server-side only here (edge function env + GitHub secrets, never in client
--- code), so this is acceptable — but it is a real trade, not a free one.
--- The stricter alternative, worth doing when there is time: keep RLS ON, give
--- the ingesters a SUPABASE_SERVICE_ROLE_KEY secret (GitHub Actions has no
--- EdgeOne restriction, so it CAN hold one), and let reads through the
--- security-definer function below. User tables keep their own RLS either way —
--- this decision is about `documents` only, which holds public news summaries.
-alter table documents disable row level security;
+-- DO NOT "fix" this by disabling RLS. That line used to live here, and in a file
+-- advertised as safe to re-run it was a landmine — one paste would have silently
+-- reopened all seven tables. If ingestion starts failing 42501, the cause is a
+-- writer that lost its secret key, not this setting. See .rag/harden-rls.sql.
+alter table documents enable row level security;
+
+-- Historical note, kept because the REASON matters more than the setting:
+-- RLS was off for months, and not by choice. EdgeOne refuses to store the legacy
+-- service_role key (a JWT starting `eyJ...` trips a content filter), so every
+-- caller authenticated as anon, so a deny-all policy would have broken the site.
+-- Supabase's newer `sb_secret_...` format is not a JWT, saves in EdgeOne without
+-- complaint, and removed the constraint the whole design had been bent around.
+--
+-- The quieter half of the old failure is worth remembering: match_documents
+-- runs as the CALLER unless it is SECURITY DEFINER, so RLS-with-no-policy does
+-- not error on reads — it returns ZERO ROWS. retrieveContext reads that as
+-- "library had nothing", shows no warning, and the chat answers ungrounded
+-- looking perfectly normal. Writes fail loudly; reads fail silently.
 -- Finding rows left behind by a model change is the repair job's hot path.
 create index if not exists documents_embedding_model_idx on documents (embedding_model);
 -- Same hot path, timestamp side. Partial: a row with no embedding is never a
