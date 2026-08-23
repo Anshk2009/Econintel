@@ -15,13 +15,24 @@
      false assurance. The remaining header-only controls (HSTS, nosniff,
      X-Frame-Options) need an EdgeOne dashboard rule; see README > Security headers.
 
+     'unsafe-eval' is here for ONE reason: the Spline viewer deserialises its
+     scene with `new Function(...)`, so without it the hero 3D throws
+     EvalError and the canvas stays at its default 300x150 — a silent failure
+     that looks like the robot was deleted. Verified 2026-08-23. It replaces
+     'wasm-unsafe-eval', which 'unsafe-eval' already subsumes.
+
+     THIS PAGE ONLY. chat.html holds the authenticated session and does NOT get
+     it — check before copying this policy anywhere. The narrower fix is to move
+     the viewer into a sandboxed iframe with its own policy, so the eval
+     capability sits in a document with no session and nothing to steal.
+
      'unsafe-inline' in script-src is unavoidable while the page is one file of
      inline <script> and onclick= handlers, so this policy does NOT block injected
      inline script. It DOES block the other half of a typical payload: loading
      code from an attacker's host, posting a form off-site, an injected <base>
      re-rooting every relative URL, and plugin objects. Strictly more than the
      object-src-only policy it replaces. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com 'wasm-unsafe-eval' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://pub-940ccf6255b54fa799a9b01050e6c227.r2.dev https://prod.spline.design; connect-src 'self' https://www.google-analytics.com https://prod.spline.design https://unpkg.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://pub-940ccf6255b54fa799a9b01050e6c227.r2.dev https://prod.spline.design; connect-src 'self' https://www.google-analytics.com https://prod.spline.design https://unpkg.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'" />
 <meta name="referrer" content="strict-origin-when-cross-origin" />
 <script>
   // CLICKJACKING FALLBACK. The real control is `frame-ancestors 'none'` or
