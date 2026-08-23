@@ -611,7 +611,8 @@ async function handleLogoutAll(request, env, jwtSecret, allowedOrigin) {
  * row takes every saved message with it in a single round trip — no per-table
  * cleanup to forget, and no way for a future table to be missed as long as it
  * declares the same cascade. (The legacy api_usage / email_tokens /
- * login_events tables cascade too, and are empty; see .migrations/0012.)
+ * login_events tables were dropped on 2026-08-23 — see .migrations/0012 — so
+ * chat_history is now the only child table there is.)
  *
  * SESSIONS DIE WITH THE ROW, FOR FREE. verifyJWT's dbCheck reads
  * users.token_version and compares it to the token's `tv`; with the row gone it
