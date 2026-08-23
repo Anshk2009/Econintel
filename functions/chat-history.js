@@ -77,6 +77,9 @@ export async function onRequest(context) {
     } else if (action === 'conversations' && request.method === 'GET') {
       // Grouped thread list for the sidebar (one entry per conversation_id)
       return await handleListConversations(request, env, JWT_SECRET, ALLOWED_ORIGIN);
+    } else if (action === 'export' && request.method === 'GET') {
+      // Everything we hold about this account, as one downloadable JSON file.
+      return await handleExport(request, env, JWT_SECRET, ALLOWED_ORIGIN);
     } else if (action === 'delete' && request.method === 'DELETE') {
       return await handleDeleteHistory(request, env, JWT_SECRET, ALLOWED_ORIGIN);
     } else {
@@ -192,6 +195,80 @@ async function handleListConversations(request, env, jwtSecret, allowedOrigin) {
   } catch (err) {
     console.error('[chat-history] Failed to list conversations:', err);
     return jsonResponse({ error: 'Failed to list conversations' }, 500, allowedOrigin);
+  }
+}
+
+// ============================================================================
+// EXPORT MY DATA (right of access / portability)
+// ============================================================================
+
+/**
+ * GET /chat-history?action=export
+ *
+ * WHY THIS EXISTS: the Privacy Policy tells the reader they can "request a copy
+ * of your data" by email, and nothing existed to produce one. Under the DPDP Act
+ * 2023 access is a statutory right, so the promise needed a mechanism rather
+ * than a better sentence.
+ *
+ * WHY NO CSRF CHECK: this is a read, and the response is served as a file
+ * download. A cross-site page cannot read the body (no CORS grant to it), and
+ * the access_token cookie is SameSite=Strict so a request originating from
+ * another site never carries a session at all — it would export nothing.
+ * Requiring a header here would also break the plain <a href> that triggers it.
+ *
+ * Content-Disposition makes the browser save it instead of rendering it, which
+ * is what lets the client be one link instead of a blob-and-revoke dance.
+ *
+ * Returns: 200 application/json, attachment, { exported_at, account, messages }
+ */
+async function handleExport(request, env, jwtSecret, allowedOrigin) {
+  const auth = await requireUser(request, jwtSecret, allowedOrigin);
+  if (auth.res) return auth.res;
+  const userId = auth.userId;
+
+  try {
+    // The account row, minus password_hash and token_version. Neither is the
+    // user's data in any useful sense: one is a credential we deliberately
+    // cannot reverse, the other is an internal session counter. Handing out a
+    // password hash on request would be a gift to anyone who phishes the file.
+    const { data: users, error: userError } = await supabaseRest(
+      'users', 'GET',
+      `id=eq.${encodeURIComponent(userId)}&select=id,email,username,plan,created_at,email_verified_at,last_login_at`
+    );
+    if (userError) throw new Error(userError);
+
+    // Every message, oldest first — reading order, not query order. The 10,000
+    // cap is a runaway guard, not a policy: PostgREST returns everything without
+    // it, and the edge function has a response-size ceiling of its own. Anyone
+    // who somehow passes it should be emailed a dump instead.
+    const { data: messages, error: msgError } = await supabaseRest(
+      'chat_history', 'GET',
+      `user_id=eq.${encodeURIComponent(userId)}`
+      + `&select=role,content,model,conversation_id,created_at`
+      + `&deleted_at=is.null`
+      + `&order=created_at.asc`
+      + `&limit=10000`
+    );
+    if (msgError) throw new Error(msgError);
+
+    const payload = {
+      exported_at: new Date().toISOString(),
+      service: 'EconIntel',
+      note: 'Everything EconIntel stores against this account. Password hashes and internal session counters are deliberately excluded. Rate-limit counters are short-lived and expire on their own.',
+      account: users?.[0] || null,
+      messages: messages || [],
+      message_count: (messages || []).length,
+    };
+
+    const filename = `econintel-data-${new Date().toISOString().slice(0, 10)}.json`;
+    return jsonResponse(payload, 200, allowedOrigin, {
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      // This is the user's own personal data — no cache, anywhere, ever.
+      'Cache-Control': 'no-store',
+    });
+  } catch (err) {
+    console.error('[chat-history] Failed to export data:', err);
+    return jsonResponse({ error: 'Failed to export data' }, 500, allowedOrigin);
   }
 }
 

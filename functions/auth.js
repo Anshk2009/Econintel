@@ -14,7 +14,6 @@ import {
   generateJWT,
   verifyJWT,
   generateId,
-  hashIP,
   jsonResponse,
   corsPreflightResponse,
   makeSupabase,
@@ -101,6 +100,12 @@ export async function onRequest(context) {
       return await handleLogout(request, env, JWT_SECRET, ALLOWED_ORIGIN);
     } else if (action === 'logout-all' && request.method === 'POST') {
       return await handleLogoutAll(request, env, JWT_SECRET, ALLOWED_ORIGIN);
+    } else if (action === 'delete-account' && request.method === 'POST') {
+      // POST, not DELETE: EdgeOne routes on the exact path and we dispatch on
+      // ?action=, so the verb carries no routing meaning here — and POST is the
+      // one method every client and proxy handles identically with a body-less
+      // CSRF-protected request.
+      return await handleDeleteAccount(request, env, JWT_SECRET, ALLOWED_ORIGIN);
     } else if (action === 'reset-password' && request.method === 'POST') {
       return await handleResetPasswordRequest(request, env, ALLOWED_ORIGIN);
     } else if (action === 'verify-reset' && request.method === 'POST') {
@@ -589,6 +594,91 @@ async function handleLogoutAll(request, env, jwtSecret, allowedOrigin) {
 }
 
 // ============================================================================
+// DELETE ACCOUNT (right to erasure)
+// ============================================================================
+
+/**
+ * POST /auth?action=delete-account
+ *
+ * WHY THIS EXISTS: the Privacy Policy and the Terms both promise the reader they
+ * can delete their account, and until now nothing behind that promise existed —
+ * the only real control was "delete chat history". Under the DPDP Act 2023
+ * erasure is a statutory right, not a courtesy, so a published promise with no
+ * mechanism is the gap, not the wording.
+ *
+ * ONE STATEMENT DOES ALL OF IT. chat_history declares
+ * `user_id ... REFERENCES users(id) ON DELETE CASCADE`, so deleting the users
+ * row takes every saved message with it in a single round trip — no per-table
+ * cleanup to forget, and no way for a future table to be missed as long as it
+ * declares the same cascade. (The legacy api_usage / email_tokens /
+ * login_events tables cascade too, and are empty; see .migrations/0012.)
+ *
+ * SESSIONS DIE WITH THE ROW, FOR FREE. verifyJWT's dbCheck reads
+ * users.token_version and compares it to the token's `tv`; with the row gone it
+ * reads undefined, the comparison fails, and every outstanding access token is
+ * rejected on its next use. handleRefreshToken looks the user up too and answers
+ * 401 "User not found". So there is deliberately no token_version bump here —
+ * it would be a write to a row we are about to delete.
+ *
+ * Headers: X-CSRF-Token (must match the cookie AND have been issued to this user)
+ * Returns: 200 { message } with all three auth cookies cleared.
+ */
+async function handleDeleteAccount(request, env, jwtSecret, allowedOrigin) {
+  // Authenticate FIRST so we know who is calling — needed to bind the CSRF check
+  // to this user (M3), exactly like handleLogoutAll.
+  const token = getToken(request);
+  if (!token) {
+    return jsonResponse({ error: 'Missing token' }, 401, allowedOrigin);
+  }
+  const payload = await verifyJWT(token, jwtSecret, { TOKENS, dbCheck });
+  if (!payload) {
+    return jsonResponse({ error: 'Invalid or expired token' }, 401, allowedOrigin);
+  }
+
+  // Deleting an account is the most destructive thing this API can do, so it
+  // gets the strictest CSRF check available: double-submit, server-issuance, and
+  // bound to THIS user.
+  if (!await validateCSRFToken(request, TOKENS, payload.userId)) {
+    return jsonResponse({ error: 'Invalid or missing CSRF token' }, 403, allowedOrigin);
+  }
+
+  const userId = payload.userId;
+
+  try {
+    // Revoke this browser's refresh token before the row goes. Refresh tokens
+    // live in kv_store under a random key with no foreign key to users, so the
+    // cascade cannot reach them; handleRefreshToken would reject it anyway once
+    // the user is gone, but leaving a live-looking token in the store for 30
+    // days after an erasure request is not what erasure should look like.
+    const refreshToken = parseCookies(request).refresh_token;
+    if (refreshToken) {
+      try {
+        await TOKENS.delete(`refresh:${refreshToken}`);
+      } catch (err) {
+        console.warn('[auth] Failed to revoke refresh token on account delete:', err);
+      }
+    }
+
+    const { error: deleteError } = await supabaseRest('users', 'DELETE', `id=eq.${encodeURIComponent(userId)}`);
+    if (deleteError) throw new Error(deleteError);
+  } catch (err) {
+    console.error('[auth] Delete account error:', err);
+    return jsonResponse({ error: 'Failed to delete account' }, 500, allowedOrigin);
+  }
+
+  // Clear all three cookies — the session they belong to no longer has an owner.
+  const headers = new Headers({
+    'Content-Type': 'application/json; charset=utf-8',
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Credentials': 'true',
+  });
+  headers.append('Set-Cookie', 'access_token=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');
+  headers.append('Set-Cookie', 'refresh_token=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');
+  headers.append('Set-Cookie', 'csrf_token=; Path=/; Secure; SameSite=Strict; Max-Age=0');
+  return new Response(JSON.stringify({ message: 'Account deleted' }), { status: 200, headers });
+}
+
+// ============================================================================
 // PASSWORD RESET REQUEST
 // ============================================================================
 
@@ -599,8 +689,6 @@ async function handleLogoutAll(request, env, jwtSecret, allowedOrigin) {
  * Returns: { message: string }
  */
 async function handleResetPasswordRequest(request, env, allowedOrigin) {
-  const clientIP = getClientIP(request);
-
   let body;
   try {
     body = await request.json();
@@ -635,7 +723,6 @@ async function handleResetPasswordRequest(request, env, allowedOrigin) {
 
     // Generate reset token
     const resetToken = generateId();
-    const ipHash = await hashIP(clientIP);
 
     // Store token in KV (expires in 1 hour = 3600 seconds)
     // No IP binding — user may open the reset link on a different device/network
