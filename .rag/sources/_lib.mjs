@@ -31,17 +31,30 @@ export const USING_SERVICE_ROLE = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
 // Set INGEST_CONTACT (e.g. "EconIntel you@domain.com"); falls back to a generic.
 export const CONTACT = process.env.INGEST_CONTACT || 'EconIntel econintelai@gmail.com';
 
+// Just the address, for the RSS User-Agent below — that string needs the email
+// on its own, not the "EconIntel <email>" form SEC asks for. Pulled out of
+// CONTACT so there is still one place to change the address.
+const CONTACT_EMAIL = CONTACT.split(/\s+/).pop();
+
 // Headers for fetching public RSS/Atom feeds.
-// Node's fetch defaults to `User-Agent: node`, which many outlets' CDNs answer
-// with 403 or an HTML interstitial. A UA that DECLARES itself a bot is blocked
-// just as hard — pib.gov.in, moneycontrol.com and business-standard.com all
-// return 403 to "…EconIntelBot/1.0…" and 200 to this string (verified
-// 2026-07-19). So we send a normal browser UA, which is what ordinary RSS
-// readers effectively do. Keep it here so the ingester and the health check
-// can never drift apart and report different results.
+//
+// THE BOT SAYS IT IS A BOT. This used to send a full Chrome User-Agent, and the
+// comment here recorded exactly why: pib.gov.in, moneycontrol.com and
+// business-standard.com return 403 to "…EconIntelBot/1.0…" and 200 to Chrome
+// (measured 2026-07-19). That is not a quirk to work around — it is those sites
+// declining automated access, and answering it with a disguise is circumvention.
+// A public repo carrying a written record of "we saw the 403 and dressed up to
+// get past it" is the worst possible artefact to own for a product that intends
+// to charge money, and India has no text-and-data-mining exception to fall back
+// on. The three sites that refuse bots have been removed from feeds.json instead.
+//
+// IF ANOTHER FEED STARTS RETURNING 403: delete it from feeds.json. Do not make
+// this string vaguer. The contact address is here so a publisher who wants a
+// different arrangement can ask for one rather than block us.
 export const FEED_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'User-Agent': `EconIntelBot/1.0 (+https://econintel.edgeone.app; ${CONTACT_EMAIL})`,
   'Accept': 'application/rss+xml, application/atom+xml, application/xml;q=0.9, */*;q=0.8',
+  'From': CONTACT_EMAIL,
 };
 
 // Hard per-request timeout so one slow/hung API can't freeze the whole run.
