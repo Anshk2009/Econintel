@@ -7,7 +7,35 @@
      'self', form-action 'self'. MUST-FIX before launch (EdgeOne response headers — a
      <meta> can't do these): X-Frame-Options: DENY / frame-ancestors 'none' + HSTS on
      this page. chat.html holds an authenticated session, so it must not be framable. -->
-<meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'; form-action 'self'" />
+<!-- SECURITY — Content Security Policy, delivered as a <meta> because it has to be.
+     MEASURED 2026-08-22: `curl -D-` against the live site returns NO security
+     headers on any HTML response. functions/_middleware.js was written to add
+     them and never ran — EdgeOne serves static HTML from CDN cache without
+     invoking Pages middleware, so the file was deleted rather than left as
+     false assurance. The remaining header-only controls (HSTS, nosniff,
+     X-Frame-Options) need an EdgeOne dashboard rule; see README > Security headers.
+
+     'unsafe-inline' in script-src is unavoidable while the page is one file of
+     inline <script> and onclick= handlers, so this policy does NOT block injected
+     inline script. It DOES block the other half of a typical payload: loading
+     code from an attacker's host, posting a form off-site, an injected <base>
+     re-rooting every relative URL, and plugin objects. Strictly more than the
+     object-src-only policy it replaces. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.cdnfonts.com; font-src 'self' https://fonts.gstatic.com https://fonts.cdnfonts.com; img-src 'self' data: blob:; connect-src 'self' https://www.google-analytics.com; object-src 'none'; base-uri 'self'; form-action 'self'" />
+<meta name="referrer" content="strict-origin-when-cross-origin" />
+<script>
+  // CLICKJACKING FALLBACK. The real control is `frame-ancestors 'none'` or
+  // X-Frame-Options, and BOTH are response-header-only — a <meta> CSP cannot set
+  // either, and no header currently reaches this page (see the CSP note above).
+  // Until the EdgeOne dashboard rule exists, this is what stops the page being
+  // framed under an attacker's overlay. It is weaker than a header — an iframe
+  // sandboxed without allow-top-navigation can block the escape — so the catch
+  // blanks the page rather than letting it render inside a frame regardless.
+  if (self !== top) {
+    try { top.location = self.location; }
+    catch (e) { document.documentElement.style.display = 'none'; }
+  }
+</script>
 <title>EconIntel — Chat</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
@@ -1554,7 +1582,6 @@
         <!-- Attachment chip (visible when a file is staged) -->
         <div class="attach-chip-area" id="attach-chip-area"></div>
         <!-- Hidden file pickers -->
-        <input type="file" id="img-file-input" accept="image/*" style="display:none" onchange="handleImgInput(this)">
         <input type="file" id="doc-file-input" accept=".txt,.md,.csv,.js,.ts,.py,.json,.html,.css,.xml" style="display:none" onchange="handleDocInput(this)">
         <div class="prompt-box">
           <div class="attach-wrap">
@@ -1564,10 +1591,6 @@
               </svg>
             </button>
             <div class="attach-menu" id="attach-menu">
-              <button class="attach-menu-item" onclick="triggerImageAttach()">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                Image
-              </button>
               <button class="attach-menu-item" onclick="triggerDocAttach()">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                 Document
@@ -1941,48 +1964,66 @@ function handleKey(e) {
 // - Local: calls localhost:3000/functions/chat
 // - Production: calls /functions/chat (EdgeOne)
 const CHAT_ENDPOINT = CONFIG.chat;
-const MODEL = 'openrouter/auto';
-const history = [
-  // NOTE: the AI's personality is enforced SERVER-SIDE in functions/chat.js — it
-  // strips any client-supplied system message and prepends its own authoritative
-  // SYSTEM_PROMPT. This mirror is kept in sync so the two never contradict, but
-  // editing it alone does NOT change behaviour; the real copy lives in chat.js.
-  { role: 'system', content: `You are EconIntel — a Bloomberg-trained analyst with a Wharton degree and a dry sense of humour. You've seen every market cycle, read every central-bank statement, and have zero patience for vague answers or bad takes.
+// The AI's personality, length rules and sources policy are enforced
+// SERVER-SIDE in functions/chat.js, which strips any client-supplied system
+// message and prepends its own authoritative SYSTEM_PROMPT.
+//
+// A ~40-line mirror of that prompt used to sit here "kept in sync". It wasn't:
+// its SOURCES POLICY had drifted to the opposite of the live one, it was sent
+// on every request only to be discarded, and it occupied one of the 30 message
+// slots the server allows. Editing it changed nothing while looking like it
+// changed everything, which is the worst property a piece of code can have.
+// The prompt has exactly one home now: functions/chat.js.
+//
+// Likewise the old `MODEL = 'openrouter/auto'` constant: the server picks the
+// model from the account's plan (MODEL_BUCKETS) and ignores whatever the client
+// sends, so the field was a name for a decision made somewhere else.
+const history = [];
 
-PERSONA DEPTH: You think in frameworks, not opinions. You connect current events to historical precedent instinctively. You are confident but not reckless — you distinguish between what the data shows, what history suggests, and what is genuinely uncertain. You never bluff.
+// The server (functions/chat.js) rejects any request carrying more than 30
+// messages, to bound token inflation. Nothing on this side ever trimmed, so a
+// thread simply DIED at the 15th exchange: a raw 400 mid-conversation, on the
+// longest and most invested chats, with no way to continue except starting over.
+//
+// 24, not 30, on purpose. The gap is headroom — the server's limit is the hard
+// edge and a client that sits exactly on it turns any future change (one extra
+// message, a re-sent turn on retry) straight back into the same 400. Twelve
+// exchanges is also well past where a model still benefits from the earliest
+// turn, so the cap costs the reader nothing they would notice.
+const MAX_SENT_MESSAGES = 24;
 
-SCOPE: Economics, geopolitics, central banking, markets, trade, currencies, fiscal/monetary policy, sanctions, and anything closely connected. If someone asks something genuinely off-topic, one dry witty line maximum — then find the economics angle if one exists. If none exists, invite them back. Never be cold.
+// The article-context message is a `user` turn planted at the head of the
+// history by applyArticleHandoff(). It has to survive trimming: the chip on
+// screen tells the reader "Reading context: <title>", and dropping the message
+// while leaving the chip up makes the UI claim the terminal is holding an
+// article it has stopped sending — the same lie newChat() goes out of its way
+// to avoid.
+const isArticleContext = (m) =>
+  typeof m.content === 'string' && m.content.startsWith('[ARTICLE CONTEXT');
 
-GREETINGS & SMALL TALK: Always welcome. Reply warmly in one or two lines and invite them to ask about the economy or markets. The scope rule never applies to greetings. Never decline or redirect a casual hello.
+/**
+ * Keep the outgoing payload under the server's message cap, oldest turns first.
+ * Called just before send, so it covers every path that fills `history` —
+ * live chat, reopening a thread from the sidebar, and the flat-history loader.
+ */
+function trimHistory() {
+  if (history.length <= MAX_SENT_MESSAGES) return;
 
-DEPTH CALIBRATION:
-- Simple question → tight, punchy answer. 4 to 5 bullets max.
-- Complex / multi-part question → go deeper, but never exceed 5 bullets. No padding.
-- Follow-up question → assume context from prior exchange. Don't re-explain what was already established.
+  const ctx = history.find(isArticleContext);
+  let kept = history.slice(-MAX_SENT_MESSAGES);
 
-TONE: Sharp, witty, confident. Less academic paper, more senior analyst who also reads history books and has strong opinions about central bankers. A well-placed quip is welcome. Condescension is not. Never open with "Great question", "Certainly", "Of course" or any filler phrase.
+  // Re-seat the article context at the front if the slice cut past it, giving up
+  // the oldest kept turn so the total still respects the cap.
+  if (ctx && !kept.includes(ctx)) kept = [ctx, ...kept.slice(1)];
 
-FORMAT: Bullets only. No headers, no labels, no walls of text. Each bullet maximum 2 lines — claim, evidence, implication in one clean flow.
+  // Never open with an assistant turn. Slicing mid-exchange can leave a reply
+  // whose question is gone, which reads to the model as it answering something
+  // nobody asked.
+  if (kept.length && kept[0].role === 'assistant') kept.shift();
 
-STRUCTURE (invisible — never label these):
-- One sharp bullet with the core take
-- 2–3 bullets of evidence, mechanism, or second-order effects
-- One bullet with a historical parallel (only where genuinely relevant — skip if forced)
-- 1–2 bullets on what to watch next or what would change the thesis
-
-UNCERTAINTY HANDLING: When something is genuinely uncertain or contested, say so in one clean bullet — "The honest answer is X is unclear because Y." Never speculate beyond what a senior analyst would confidently state on record. Never fabricate a number, statistic, or precedent.
-
-CURRENT DATA: If the user asks about a specific recent event, price, index level, or data point and no CITEABLE SOURCES or BACKGROUND CONTEXT block appears in this prompt, respond with exactly: "I don't have current data on this — will get it updated." Do not fill the gap with invented figures or plausible-sounding analysis.
-
-SOURCES POLICY: Say nothing about sources unprompted — no citations, no links, no disclaimers. Only when the user explicitly asks ("source?", "where's that from?", "any link?") do you address sources. If provided sources back the claim, cite as [Source Name](url). If not, say plainly you don't have a specific source for it — once, briefly, only in direct reply. Never invent a source.
-
-HARD RULES:
-- Bullets only. Always.
-- Never fabricate sources, statistics, or historical events.
-- Never tack disclaimers onto answers unless directly asked.
-- Never repeat the user's question back to them.
-- Never end with "Let me know if you have questions" or similar.` }
-];
+  history.length = 0;
+  history.push(...kept);
+}
 
 // ── CONVERSATION THREADS ──
 // Each chat thread has its own id. The client generates it and sends it with
@@ -2011,11 +2052,6 @@ function addMessage(role, content, opts = {}) {
     // are decorative and announce nothing.
     el.innerHTML = '<span class="think-dots"><i></i><i></i><i></i></span>' +
                    '<span class="think-label" role="status" aria-live="polite">Searching sources…</span>';
-  } else if (opts.imageDataUrl) {
-    // User bubble with an image attachment + optional text
-    // alt describes what the image IS to a screen reader. The filename is
-    // user-supplied, so it must be escaped like any other untrusted value.
-    el.innerHTML = `<img src="${opts.imageDataUrl}" alt="${escapeHTML(opts.imageName || 'Image you attached')}" style="max-width:220px;max-height:160px;border-radius:8px;display:block${content ? ';margin-bottom:0.5rem' : ''}">${content ? escapeHTML(content) : ''}`;
   } else {
     el.textContent = content;
   }
@@ -2070,26 +2106,21 @@ async function sendMessage() {
   clearAttachment(); // remove the chip immediately
 
   // Display the user bubble
-  if (att?.type === 'image') {
-    addMessage('user', text, { imageDataUrl: att.dataUrl, imageName: att.name });
-  } else if (att?.type === 'text') {
+  if (att) {
     addMessage('user', `[${att.name}]\n${text || '(no additional text)'}`.trim());
   } else {
     addMessage('user', text);
   }
 
-  // Build the API content (multimodal array for images, prefixed string for docs)
+  // Build the API content — an attached file is inlined ahead of the question.
   let userContent;
-  if (att?.type === 'image') {
-    const parts = [{ type: 'image_url', image_url: { url: att.dataUrl } }];
-    if (text) parts.push({ type: 'text', text });
-    userContent = parts;
-  } else if (att?.type === 'text') {
+  if (att) {
     userContent = `[Attached file: ${att.name}]\n\n${att.textContent}\n\n${text || ''}`.trim();
   } else {
     userContent = text;
   }
   history.push({ role: 'user', content: userContent });
+  trimHistory();
 
   const thinkingEl = addMessage('assistant', 'Thinking…', { thinking: true });
 
@@ -2117,7 +2148,7 @@ async function sendMessage() {
       },
       credentials: 'include', // cookies (access_token) sent automatically
       signal: streamCtl.signal, // watchdog can abort a hung request/stream
-      body: JSON.stringify({ model: MODEL, messages: history, conversation_id: currentConversationId })
+      body: JSON.stringify({ messages: history, conversation_id: currentConversationId })
     });
 
     let res = await fireRequest();
@@ -2288,8 +2319,8 @@ async function sendMessage() {
     history.push({ role: 'assistant', content: fullReply });
     // First exchange in this thread just saved to DB — refresh Recents so the
     // new chat appears immediately without needing a page reload.
-    // history.length === 3 = system(1) + user(2) + assistant(3) = first reply.
-    if (history.length === 3 && getUser()) loadRecentChats();
+    // history.length === 2 = user(1) + assistant(2) = the first reply in this thread.
+    if (history.length === 2 && getUser()) loadRecentChats();
   } catch (err) {
     thinkingEl.remove();
     // AbortError here = the watchdog fired BEFORE any response headers arrived
@@ -2305,43 +2336,40 @@ async function sendMessage() {
 }
 
 // ── ATTACH MENU ──
-let pendingAttachment = null; // { type:'image'|'text', name, dataUrl|textContent }
+let pendingAttachment = null; // { name, textContent } — text files only, see handleDocInput
 
 function toggleAttachMenu(e) {
   e.stopPropagation();
   document.getElementById('attach-menu').classList.toggle('open');
-}
-function triggerImageAttach() {
-  document.getElementById('attach-menu').classList.remove('open');
-  document.getElementById('img-file-input').click();
 }
 function triggerDocAttach() {
   document.getElementById('attach-menu').classList.remove('open');
   document.getElementById('doc-file-input').click();
 }
 
-function handleImgInput(input) {
-  const file = input.files[0];
-  if (!file) return;
-  input.value = '';
-  if (file.size > 5 * 1024 * 1024) { showToast('Image must be under 5 MB'); return; }
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    pendingAttachment = { type: 'image', name: file.name, dataUrl: ev.target.result };
-    renderChip();
-    document.getElementById('prompt-input').focus();
-  };
-  reader.readAsDataURL(file);
-}
+// 12 KB, sized against the SERVER's cap rather than picked to look generous.
+// functions/chat.js rejects a request body over 16 KB on the free plan (64 KB
+// pro, 256 KB enterprise), and the WHOLE conversation rides in that same body —
+// so the old 200 KB limit could only ever produce a 413 that the reader
+// experienced as "nothing happened". Refusing the file here, in a sentence, is
+// the honest version of the same limit.
+//
+// Image attachment used to live next to this and was DELETED rather than fixed:
+// a 5 MB image base64-encodes to ~6.7 MB against that same 16 KB cap, and the
+// Nemotron chat models are text-only, so no size limit would have made it work.
+const MAX_DOC_BYTES = 12 * 1024;
 
 function handleDocInput(input) {
   const file = input.files[0];
   if (!file) return;
   input.value = '';
-  if (file.size > 200 * 1024) { showToast('Document must be under 200 KB'); return; }
+  if (file.size > MAX_DOC_BYTES) {
+    showToast('File must be under 12 KB — paste the part you want asked about instead');
+    return;
+  }
   const reader = new FileReader();
   reader.onload = (ev) => {
-    pendingAttachment = { type: 'text', name: file.name, textContent: ev.target.result };
+    pendingAttachment = { name: file.name, textContent: ev.target.result };
     renderChip();
     document.getElementById('prompt-input').focus();
   };
@@ -2351,10 +2379,7 @@ function handleDocInput(input) {
 function renderChip() {
   const area = document.getElementById('attach-chip-area');
   if (!pendingAttachment) { area.innerHTML = ''; area.classList.remove('has-chip'); return; }
-  const isImg = pendingAttachment.type === 'image';
-  const preview = isImg
-    ? `<img src="${pendingAttachment.dataUrl}" alt="Preview of ${escapeHTML(pendingAttachment.name || 'the image you attached')}">`
-    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+  const preview = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
   area.innerHTML = `<div class="attach-chip">${preview}<span class="attach-chip-name">${escapeHTML(pendingAttachment.name)}</span><button class="attach-chip-remove" onclick="clearAttachment()" title="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>`;
   area.classList.add('has-chip');
 }
@@ -2420,11 +2445,11 @@ function newChat() {
   document.querySelector('.chat-content').classList.remove('has-messages');
   document.getElementById('chat-greeting').style.display = '';
   document.getElementById('chat-greeting-sub').style.display = '';
-  history.length = 1; // keep system prompt
+  history.length = 0;
   currentConversationId = genConversationId(); // start a brand-new thread
 
   // ARTICLE CONTEXT DIES WITH THE CHAT IT BELONGS TO.
-  // history.length = 1 already drops it from the outgoing payload, but two
+  // history.length = 0 already drops it from the outgoing payload, but two
   // things used to survive and both lie: the chip stayed on screen claiming the
   // terminal was still holding an article it no longer sends, and the
   // sessionStorage key meant the NEXT page load pushed that article back into a
@@ -2600,7 +2625,7 @@ function renderProjWelcome() {
 }
 
 function renderProjDetail(proj) {
-  const hasActiveChat = history.length > 1;
+  const hasActiveChat = history.length > 0;
   const alreadyAdded = proj.chats.some(c => c.id === currentConversationId);
   const detail = document.getElementById('proj-detail-pane');
   detail.innerHTML = `
@@ -2648,8 +2673,8 @@ function renderProjDetail(proj) {
 }
 
 function addCurrentChat(projId) {
-  if (history.length <= 1) return;
-  const preview = (typeof history[1]?.content === 'string' ? history[1].content : 'Chat').substring(0, 60);
+  if (!history.length) return;
+  const preview = (typeof history[0]?.content === 'string' ? history[0].content : 'Chat').substring(0, 60);
   const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const projects = loadProjects();
   const proj = projects.find(p => p.id === projId);
@@ -2850,6 +2875,50 @@ async function clearChatHistory() {
   }
 }
 
+/**
+ * Permanently delete the account and everything attached to it.
+ *
+ * TWO CONFIRMATIONS ON PURPOSE. The first is the ordinary "are you sure"; the
+ * second makes the reader type the word, because this is the one action on the
+ * site with no undo and no support queue to reverse it. A single confirm() next
+ * to a red button is exactly the shape of a misclick.
+ *
+ * The server clears the auth cookies in its own response, so all this has to do
+ * afterwards is drop the localStorage copy and leave.
+ */
+async function deleteAccount() {
+  if (!getUser()) return;
+
+  if (!confirm('Delete your account? This erases your profile and every saved chat. It cannot be undone.')) return;
+  const typed = prompt('This is permanent. Type DELETE to confirm.');
+  if (typed !== 'DELETE') return;
+
+  try {
+    const res = await fetch(CONFIG.auth.deleteAccount, {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': localStorage.getItem('econintel:csrf') || '' },
+      credentials: 'include',
+    });
+
+    if (!res.ok) {
+      // 401 here means the 15-minute access token lapsed while the modal was
+      // open. Say so plainly rather than "failed" — the fix is a page reload,
+      // which silentRefresh() runs on load.
+      alert(res.status === 401
+        ? 'Your session expired. Reload the page and try again.'
+        : 'Could not delete the account. Nothing was changed — please try again.');
+      return;
+    }
+
+    clearUser();                       // drop the localStorage copy of the session
+    alert('Your account and all its data have been deleted.');
+    window.location.href = '/index.html';
+  } catch (err) {
+    console.warn('[account] Delete failed:', err);
+    alert('Network error — nothing was deleted. Please try again.');
+  }
+}
+
 // Phase 6: Load recent chats for sidebar
 async function loadRecentChats() {
   const user = getUser();
@@ -2946,9 +3015,9 @@ async function openConversation(id) {
   const msgs = (data.messages || []).slice().reverse();
   if (!msgs.length) { alert('This chat is empty.'); return; }
 
-  // Reset the view + in-memory history (keep the system prompt at index 0).
+  // Reset the view + in-memory history.
   document.getElementById('messages').innerHTML = '';
-  history.length = 1;
+  history.length = 0;
 
   for (const m of msgs) {
     if (m.role !== 'user' && m.role !== 'assistant') continue;
@@ -3234,6 +3303,15 @@ function openAccountModal(which) {
         <span class="acct-row-label">Chat history</span>
         ${clearHistoryBtn}
       </div>
+      ${u ? `
+      <div class="acct-row">
+        <span class="acct-row-label">Your data</span>
+        <a class="acct-btn" style="margin:0;text-decoration:none;display:inline-block" href="${CONFIG.chatHistory.export}">Download</a>
+      </div>
+      <div class="acct-row">
+        <span class="acct-row-label">Delete account</span>
+        <button class="acct-btn" style="margin:0;background:#dc2626" onclick="deleteAccount()">Delete</button>
+      </div>` : ''}
       <div class="acct-row" style="align-items:flex-start">
         <span class="acct-row-label">Sources &amp; data</span>
         <span class="acct-row-value" style="font-weight:400;font-size:.76rem;line-height:1.5;color:var(--text2);text-align:right;max-width:240px">
@@ -3482,7 +3560,7 @@ function showArticleChip(title, url) {
     `<button type="button" aria-label="Remove article context">✕</button>`;
   chip.querySelector('button').addEventListener('click', () => {
     // Drop it from the outgoing payload as well as from the screen.
-    const i = history.findIndex(m => typeof m.content === 'string' && m.content.startsWith('[ARTICLE CONTEXT'));
+    const i = history.findIndex(isArticleContext);
     if (i > -1) history.splice(i, 1);
     try { sessionStorage.removeItem('econintel:articleContext'); } catch (e) {}
     chip.remove();
