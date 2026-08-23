@@ -163,7 +163,15 @@ const checks = [
       body: JSON.stringify({ email: 'smoke-test-nobody@example.com', password: 'definitely-wrong-password' }),
     });
     if (r.status >= 500) return `auth function is erroring: ${r.status}`;
-    return r.status === 401 ? null : `expected 401 for bad credentials, got ${r.status}`;
+    // 429 is a PASS. This check sends a failed login every run, and the
+    // heartbeat runs every 30 minutes from a shared GitHub runner IP against a
+    // 20-per-hour per-IP cap — so a burst of runs, or a noisy neighbour on the
+    // same egress address, trips the limiter. Being told "too many attempts" is
+    // the limiter doing its job and still proves the auth function is alive and
+    // not 500ing, which is what this check exists to establish. Treating it as
+    // failure would mean the heartbeat goes red for a working security control.
+    if (r.status === 429) return null;
+    return r.status === 401 ? null : `expected 401 or 429 for bad credentials, got ${r.status}`;
   }],
 
   // THE ONE THAT MATTERS: a stranger with no account must get an answer.
