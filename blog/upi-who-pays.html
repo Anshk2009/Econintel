@@ -3,7 +3,22 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'; form-action 'self'" />
+<!-- SECURITY — Content Security Policy, delivered as a <meta> because it has to be.
+     MEASURED 2026-08-22: `curl -D-` against the live site returns NO security
+     headers on any HTML response. functions/_middleware.js was written to add
+     them and never ran — EdgeOne serves static HTML from CDN cache without
+     invoking Pages middleware, so the file was deleted rather than left as
+     false assurance. The remaining header-only controls (HSTS, nosniff,
+     X-Frame-Options) need an EdgeOne dashboard rule; see README > Security headers.
+
+     'unsafe-inline' in script-src is unavoidable while the page is one file of
+     inline <script> and onclick= handlers, so this policy does NOT block injected
+     inline script. It DOES block the other half of a typical payload: loading
+     code from an attacker's host, posting a form off-site, an injected <base>
+     re-rooting every relative URL, and plugin objects. Strictly more than the
+     object-src-only policy it replaces. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://pub-940ccf6255b54fa799a9b01050e6c227.r2.dev; connect-src 'self' https://www.google-analytics.com; object-src 'none'; base-uri 'self'; form-action 'self'" />
+<meta name="referrer" content="strict-origin-when-cross-origin" />
 
 <title>UPI Won. Now Someone Has to Pay for It — EconIntel</title>
 <meta name="description" content="UPI moves 23.66 billion payments a month and India still hasn't decided who funds the rails. The average ticket is shrinking — and that is the problem." />
