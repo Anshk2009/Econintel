@@ -17,9 +17,10 @@ import zlib, struct, os
 
 SS = 4  # supersample factor — 4x then average gives clean anti-aliased edges
 
-# Brand gradient, matching favicon.svg (#5b8def -> #7a5bff on the diagonal).
-C0 = (0x5b, 0x8d, 0xef)
-C1 = (0x7a, 0x5b, 0xff)
+# Brand gradient, matching favicon.svg (#6366F1 -> #0EA5E9 on the diagonal).
+# Keep these two in step with the <stop> values in favicon.svg — nothing checks.
+C0 = (0x63, 0x66, 0xF1)
+C1 = (0x0E, 0xA5, 0xE9)
 WHITE = (255, 255, 255)
 
 # The four "chart grid" blocks, in the 32-unit coordinate system of favicon.svg:
