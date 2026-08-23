@@ -68,7 +68,14 @@
   header{position:sticky;top:0;z-index:10;background:rgba(5,5,8,.88);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
   .bar{max-width:1080px;margin:0 auto;padding:.9rem 1.5rem;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
   .logo{display:inline-flex;align-items:center;gap:.5rem;font-family:'Old Standard TT', Georgia, 'Times New Roman', serif;font-weight:700;font-size:1.15rem;letter-spacing:.005em;background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;text-decoration:none}
-  .logo-dot{width:11px;height:11px;border-radius:4px;background:var(--accent);animation:pulse 2.4s ease-in-out infinite}
+  /* OPTICAL ALIGNMENT. Old Standard TT has a lopsided vertical box — hhea
+     ascent 762 against descent 238 — so its glyphs sit ~0.1em ABOVE the centre
+     of their own line box. `align-items: center` centres the BOX, not the ink,
+     which left the mark floating above the wordmark after the Syne swap.
+     Measured in-browser at 0.1003em; nudging the icon rather than the text
+     keeps the wordmark's baseline consistent with the nav links beside it.
+     In em, so it holds at every breakpoint. */
+    .logo-dot{width:11px;height:11px;border-radius:4px;background:var(--accent);animation:pulse 2.4s ease-in-out infinitetransform:translateY(-0.1em);}
   .bar nav{margin-left:auto;display:flex;gap:1.1rem;flex-wrap:wrap;font-size:.83rem}
   .bar nav a{color:var(--muted);text-decoration:none;transition:color .2s}
   .bar nav a:hover,.bar nav a[aria-current]{color:var(--accent)}

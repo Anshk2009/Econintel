@@ -163,6 +163,14 @@
     flex: 1; min-width: 0;
   }
   .sidebar-logo-icon {
+    /* OPTICAL ALIGNMENT. Old Standard TT has a lopsided vertical box — hhea
+       ascent 762 against descent 238 — so its glyphs sit ~0.1em ABOVE the centre
+       of their own line box. `align-items: center` centres the BOX, not the ink,
+       which left the mark floating above the wordmark after the Syne swap.
+       Measured in-browser at 0.1003em; nudging the icon rather than the text
+       keeps the wordmark's baseline consistent with the nav links beside it.
+       In em, so it holds at every breakpoint. */
+  transform: translateY(-0.1em);
     width: 30px; height: 30px; border-radius: 8px;
     background: var(--accent);
     display: flex; align-items: center; justify-content: center;

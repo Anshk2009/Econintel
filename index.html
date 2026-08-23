@@ -244,6 +244,14 @@
 
   /* Chart icon with theme-aware colors */
   .nav-logo-chart {
+    /* OPTICAL ALIGNMENT. Old Standard TT has a lopsided vertical box — hhea
+       ascent 762 against descent 238 — so its glyphs sit ~0.1em ABOVE the centre
+       of their own line box. `align-items: center` centres the BOX, not the ink,
+       which left the mark floating above the wordmark after the Syne swap.
+       Measured in-browser at 0.1003em; nudging the icon rather than the text
+       keeps the wordmark's baseline consistent with the nav links beside it.
+       In em, so it holds at every breakpoint. */
+  transform: translateY(-0.1em);
     width: 18px; height: 18px;
     flex-shrink: 0;
     display: flex;
@@ -1649,6 +1657,8 @@
     width: 28px; height: 28px; border-radius: 8px;
     background: var(--accent);
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    /* Same optical correction as .nav-logo-chart — see the note there. */
+    transform: translateY(-0.1em);
   }
   .modal-logo-icon svg { width: 14px; height: 14px; color: #000; }
   .modal-logo-name {

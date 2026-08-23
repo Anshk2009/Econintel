@@ -57,7 +57,14 @@
     font-family: 'Old Standard TT', Georgia, 'Times New Roman', serif; font-weight: 700; font-size: 1.37rem; letter-spacing: .005em;
     background: linear-gradient(90deg,#6366F1 0%,#3B82F6 50%,#0EA5E9 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
   }
-  .logo-dot { width: 12px; height: 12px; border-radius: 4px; background: #0ea5e9; animation: pulse 2.4s ease-in-out infinite; }
+  /* OPTICAL ALIGNMENT. Old Standard TT has a lopsided vertical box — hhea
+     ascent 762 against descent 238 — so its glyphs sit ~0.1em ABOVE the centre
+     of their own line box. `align-items: center` centres the BOX, not the ink,
+     which left the mark floating above the wordmark after the Syne swap.
+     Measured in-browser at 0.1003em; nudging the icon rather than the text
+     keeps the wordmark's baseline consistent with the nav links beside it.
+     In em, so it holds at every breakpoint. */
+    .logo-dot { width: 12px; height: 12px; border-radius: 4px; background: #0ea5e9; animation: pulse 2.4s ease-in-out infinite; transform:translateY(-0.1em);}
   .eyebrow { font-size: .72rem; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: #0ea5e9; margin-bottom: 1rem; }
   h1 {
     font-family: 'Syne', sans-serif; font-weight: 800; line-height: 1.02;
