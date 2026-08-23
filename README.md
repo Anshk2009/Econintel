@@ -85,7 +85,18 @@ What the repo now does on its own:
 - a framebuster on `index.html` and `chat.html`, because `frame-ancestors` and
   `X-Frame-Options` are header-only and those two pages carry credentials
 
-What still needs the dashboard — EdgeOne Pages → your project → **Rules /
+### What about a config file?
+
+EdgeOne Pages *does* support a routes config with a `headers` field — a
+`version: 3` schema (`{"src": "^/.*$", "headers": {…}}`, `handle: "filesystem"`),
+which is the Vercel build-output spec. Checked 2026-08-23, and it does not help
+here: it is a **build-output** format, written into `.edgeone/` by a framework's
+builder. This project has no build step, and the docs do not say where the file
+goes for a plain static deploy. A malformed routes config can 404 the whole site,
+so it is not worth guessing at on a live site for a header you can set with three
+clicks. Revisit if EdgeOne documents a static-site path.
+
+What needs the dashboard — EdgeOne Pages → your project → **Rules /
 Response headers**, applied to `/*`:
 
 ```
