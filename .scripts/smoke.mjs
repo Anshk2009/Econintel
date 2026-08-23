@@ -26,6 +26,13 @@ const BASE = (process.env.BASE_URL || 'https://econintel.edgeone.app').replace(/
 // endpoint that answers without touching the model.
 const CHEAP = process.argv.includes('--cheap');
 
+// Skipped by --cheap. Either they cost money and quota, or they depend on a
+// third party whose blip should not redden a check that runs every 30 minutes.
+const EXPENSIVE = new Set([
+  'guest can chat without an account',   // one LLM call + a guest-bucket slot
+  'hero 3D dependencies still exist',    // unpkg + prod.spline.design
+]);
+
 // EdgeOne deploys asynchronously after a push, so a check that runs immediately
 // can race the rollout. Retry the whole suite instead of reporting a false red.
 // NOT in --cheap mode: four attempts with a 30s backoff means a genuine outage
@@ -53,6 +60,66 @@ const checks = [
     if (r.status !== 200) return `expected 200, got ${r.status}`;
     const html = await r.text();
     if (!/hero-cta/.test(html)) return 'hero CTA missing — page served but content looks wrong';
+    return null;
+  }],
+
+  // THE CHECK THAT WOULD HAVE CAUGHT a8be596. Tightening index.html's CSP took
+  // away 'unsafe-eval'; the Spline viewer deserialises its scene with
+  // `new Function(...)`, so the hero threw EvalError and the canvas sat at its
+  // default 300x150 — the page still 200'd, the element still registered, the
+  // scene still fetched, and nothing anywhere went red. It was found by a human
+  // noticing the robot was missing.
+  //
+  // A real canvas check needs a browser, and this file is deliberately
+  // fetch-only with no dependencies. It does not need one: the failure is a
+  // DISAGREEMENT BETWEEN TWO PARTS OF THE SAME FILE — the page loads a script
+  // that requires eval while its own CSP forbids it. That is fully decidable
+  // from the HTML, and naming the missing directive beats reporting a small
+  // canvas.
+  ['hero 3D is not blocked by its own CSP', async () => {
+    const html = await (await req('/')).text();
+    if (!/spline-viewer/.test(html)) return null;            // hero removed — nothing to check
+
+    const csp = (html.match(/http-equiv="Content-Security-Policy"[^>]*content="([^"]*)"/) || [])[1];
+    if (!csp) return 'index.html loads Spline but has no CSP meta — expected one';
+
+    const dir = (name) => (csp.match(new RegExp(name + "([^;]*)")) || [, ''])[1];
+    const scriptSrc = dir('script-src');
+    const problems = [];
+
+    // 'wasm-unsafe-eval' is NOT a substitute: it permits WebAssembly
+    // compilation, not string-to-code. This is the exact mistake that broke it.
+    if (!/'unsafe-eval'/.test(scriptSrc)) {
+      problems.push("script-src is missing 'unsafe-eval' — Spline calls new Function() and will "
+                  + "throw EvalError, leaving the hero canvas at 300x150"
+                  + (/'wasm-unsafe-eval'/.test(scriptSrc) ? " ('wasm-unsafe-eval' does not cover this)" : ''));
+    }
+    const script = (html.match(/src\s*=\s*['"](https:\/\/unpkg\.com[^'"]+)/) || [])[1];
+    if (script && !scriptSrc.includes(new URL(script).origin)) {
+      problems.push(`script-src does not allow ${new URL(script).origin}`);
+    }
+    const scene = (html.match(/url="(https:\/\/prod\.spline\.design[^"]+)"/) || [])[1];
+    if (scene && !dir('connect-src').includes(new URL(scene).origin)) {
+      problems.push(`connect-src does not allow ${new URL(scene).origin} — the scene cannot load`);
+    }
+    return problems.length ? problems.join('; ') : null;
+  }],
+
+  // Third parties, so this is daily-only (see EXPENSIVE): a transient unpkg blip
+  // must not turn the half-hourly heartbeat red for something no commit can fix.
+  // Worth checking daily though — the viewer is pinned to one exact build, and
+  // if unpkg ever drops it the hero dies permanently and silently.
+  ['hero 3D dependencies still exist', async () => {
+    const html = await (await req('/')).text();
+    if (!/spline-viewer/.test(html)) return null;
+    const urls = [
+      (html.match(/src\s*=\s*['"](https:\/\/unpkg\.com[^'"]+)/) || [])[1],
+      (html.match(/url="(https:\/\/prod\.spline\.design[^"]+)"/) || [])[1],
+    ].filter(Boolean);
+    for (const u of urls) {
+      const r = await fetch(u, { redirect: 'follow' }).catch(e => ({ status: `fetch failed: ${e.message}` }));
+      if (r.status !== 200) return `${u} returned ${r.status}`;
+    }
     return null;
   }],
 
@@ -152,7 +219,7 @@ const advisories = [
 
 async function runSuite() {
   const failures = [];
-  const suite = CHEAP ? checks.filter(([name]) => name !== 'guest can chat without an account') : checks;
+  const suite = CHEAP ? checks.filter(([name]) => !EXPENSIVE.has(name)) : checks;
   for (const [name, fn] of suite) {
     let problem;
     try {
