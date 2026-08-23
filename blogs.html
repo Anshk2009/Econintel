@@ -33,12 +33,12 @@
 <meta property="og:url" content="https://econintel.edgeone.app/blogs.html" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Old+Standard+TT:wght@700&family=Syne:wght@600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet" />
 <style>
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
   :root{
     --bg:#050508; --ink:#eef1f8; --muted:rgba(235,240,255,.6); --muted2:rgba(235,240,255,.45);
-    --line:rgba(255,255,255,.1); --accent:#6f9bff; --grad:linear-gradient(135deg,#5b8def,#7a5bff);
+    --line:rgba(255,255,255,.1); --accent:#0ea5e9; --grad:linear-gradient(90deg,#6366F1 0%,#3B82F6 50%,#0EA5E9 100%);
   }
   @keyframes pulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.15)}}
   body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--ink);line-height:1.65;min-height:100vh}
@@ -58,8 +58,8 @@
 
   header{position:sticky;top:0;z-index:10;background:rgba(5,5,8,.88);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
   .bar{max-width:1080px;margin:0 auto;padding:.9rem 1.5rem;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
-  .logo{display:inline-flex;align-items:center;gap:.5rem;font-family:'Syne',sans-serif;font-weight:800;font-size:1.05rem;color:var(--ink);text-decoration:none}
-  .logo-dot{width:11px;height:11px;border-radius:4px;background:var(--grad);animation:pulse 2.4s ease-in-out infinite}
+  .logo{display:inline-flex;align-items:center;gap:.5rem;font-family:'Old Standard TT', Georgia, 'Times New Roman', serif;font-weight:700;font-size:1.15rem;letter-spacing:.005em;color:var(--ink);text-decoration:none}
+  .logo-dot{width:11px;height:11px;border-radius:4px;background:var(--accent);animation:pulse 2.4s ease-in-out infinite}
   .bar nav{margin-left:auto;display:flex;gap:1.1rem;flex-wrap:wrap;font-size:.83rem}
   .bar nav a{color:var(--muted);text-decoration:none;transition:color .2s}
   .bar nav a:hover,.bar nav a[aria-current]{color:var(--accent)}

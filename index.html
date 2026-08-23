@@ -67,7 +67,7 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&family=Carter+One&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Old+Standard+TT:wght@700&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&family=Carter+One&display=swap" rel="stylesheet" />
 <!-- Spline 3D viewer. SECURITY (M4): Subresource Integrity — the browser refuses to
      run this file unless its SHA-384 hash matches, so a compromised unpkg CDN can't
      inject code into the page. crossorigin=anonymous is required for SRI on a
@@ -220,11 +220,10 @@
   }
 
   .nav-logo {
-    font-family: 'Syne', sans-serif;
-    font-weight: 800; font-size: 1rem;
-    letter-spacing: -0.02em;
-    background: linear-gradient(135deg, #fff 30%, var(--accent));
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    font-family: 'Old Standard TT', Georgia, 'Times New Roman', serif;
+    font-weight: 700; font-size: 1.1rem;
+    letter-spacing: 0.005em;
+    color: var(--text);
     display: flex; align-items: center; gap: 0.5rem;
     text-decoration: none;
   }
@@ -334,7 +333,7 @@
      stretching edge-to-edge, and a small gap holds logo + actions apart */
   @media (max-width: 640px) {
     nav { padding: 0.45rem 0.9rem; width: auto; gap: 1.25rem; }
-    .nav-logo { font-size: 0.85rem; }
+    .nav-logo { font-size: 0.93rem; }
     .nav-logo-chart { width: 16px; height: 16px; }
     .theme-toggle { width: 30px; height: 30px; }
   }
@@ -1483,7 +1482,7 @@
     box-shadow: 0 8px 32px rgba(0,0,0,0.07);
   }
   body.light .nav-logo {
-    background: linear-gradient(135deg,#111 30%,var(--accent));
+    color: #111;
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   }
   body.light .nav-logo-chart svg {
@@ -1637,8 +1636,8 @@
   }
   .modal-logo-icon svg { width: 14px; height: 14px; color: #000; }
   .modal-logo-name {
-    font-family: 'Syne', sans-serif;
-    font-weight: 800; font-size: 0.95rem; color: #fff; letter-spacing: -0.02em;
+    font-family: 'Old Standard TT', Georgia, 'Times New Roman', serif;
+    font-weight: 700; font-size: 1.05rem; color: #fff; letter-spacing: 0.005em;
   }
 
   .modal-heading {
