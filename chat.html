@@ -912,7 +912,7 @@
   .msg.assistant p:last-child { margin-bottom: 0; }
   .msg.assistant ul, .msg.assistant ol { padding-left: 1.4rem; margin: 0.5rem 0 0.85rem; }
   .msg.assistant li { margin-bottom: 0.45rem; }
-  .msg.assistant li::marker { color: #6f9bff; }        /* branded bullet/number */
+  .msg.assistant li::marker { color: var(--accent); }   /* branded bullet/number */
   .msg.assistant strong { font-weight: 700; color: #f4f7fc; }  /* key terms pop a touch brighter */
   .msg.assistant em { font-style: italic; }
   .msg.assistant code {
@@ -947,7 +947,7 @@
        surface keeps the reading contrast dead-steady. */
     background: linear-gradient(180deg, #141f39 0%, #111a30 100%);
     border: 1px solid rgba(255,255,255,0.06);
-    border-left: 3px solid #4d82e6;      /* refined brand accent rail */
+    border-left: 3px solid var(--accent); /* refined brand accent rail */
     color: #dfe6f2;                       /* soft off-white — high contrast without pure-white glare */
     max-width: 100%;
     border-radius: 16px;
@@ -972,7 +972,7 @@
   .think-dots { display: inline-flex; gap: 6px; align-items: center; }
   .think-dots i {
     width: 8px; height: 8px; border-radius: 50%;
-    background: #6f9bff;
+    background: var(--accent);
     animation: thinkBounce 1.15s ease-in-out infinite;
   }
   .think-dots i:nth-child(2) { animation-delay: 0.16s; }
@@ -1462,11 +1462,11 @@
     display:flex;align-items:center;gap:.6rem;
     margin:0 auto 1rem;max-width:760px;
     padding:.55rem .8rem;border-radius:10px;font-size:.78rem;
-    background:rgba(111,155,255,.1);border:1px solid rgba(111,155,255,.26);
+    background:rgba(14,165,233,.1);border:1px solid rgba(14,165,233,.26);
     color:rgba(235,240,255,.8);
   }
-  .article-ctx-dot{width:7px;height:7px;border-radius:50%;background:#6f9bff;flex-shrink:0}
-  .article-ctx-chip a{color:#9ec0ff}
+  .article-ctx-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);flex-shrink:0}
+  .article-ctx-chip a{color:#7dd3fc}
   .article-ctx-chip span:nth-of-type(2){flex:1;min-width:0}
   .article-ctx-chip button{
     background:none;border:0;color:rgba(235,240,255,.55);cursor:pointer;
