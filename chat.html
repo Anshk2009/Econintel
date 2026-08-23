@@ -54,6 +54,7 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
+    --mark: linear-gradient(90deg,#6366F1 0%,#3B82F6 50%,#0EA5E9 100%);
     --bg-sidebar: #171717;
     --bg-main: #0d0d0d;
     --bg-input: #2a2a2a;
@@ -138,7 +139,10 @@
     font-family: 'Old Standard TT', Georgia, 'Times New Roman', serif;
     font-weight: 700; font-size: 1.05rem;
     letter-spacing: 0.005em;
-    color: #fff; text-decoration: none;
+    background: var(--mark);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-decoration: none;
     white-space: nowrap; overflow: hidden;
     flex: 1; min-width: 0;
   }
@@ -450,6 +454,7 @@
   .account-menu-item.danger:hover svg { color: #f87171; transform: translateX(2px) scale(1.08); }
 
   /* Light theme */
+  body.light { --mark: linear-gradient(90deg,#0EA5E9 0%,#3B82F6 50%,#404BA0 100%); }
   body.light .account-menu {
     background:
       radial-gradient(circle at 0% 0%, rgba(14,165,233,0.10), transparent 55%),

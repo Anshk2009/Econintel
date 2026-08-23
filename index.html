@@ -92,6 +92,7 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
+    --mark: linear-gradient(90deg,#6366F1 0%,#3B82F6 50%,#0EA5E9 100%);
     --bg: #050508;
     --bg2: #0a0a10;
     --bg3: #0d0d14;
@@ -223,7 +224,9 @@
     font-family: 'Old Standard TT', Georgia, 'Times New Roman', serif;
     font-weight: 700; font-size: 1.1rem;
     letter-spacing: 0.005em;
-    color: var(--text);
+    background: var(--mark);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
     display: flex; align-items: center; gap: 0.5rem;
     text-decoration: none;
   }
@@ -1421,6 +1424,7 @@
   body.light #pricing,
   body.light #globe-coverage,
   body.light #contact,
+  body.light { --mark: linear-gradient(90deg,#0EA5E9 0%,#3B82F6 50%,#404BA0 100%); }
   body.light .site-footer { background: transparent; }
   /* Accent gradient on hero word now spans peach → coral → sky for warmth */
   body.light .hero-heading em {
@@ -1482,8 +1486,9 @@
     box-shadow: 0 8px 32px rgba(0,0,0,0.07);
   }
   body.light .nav-logo {
-    color: #111;
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background: var(--mark);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
   }
   body.light .nav-logo-chart svg {
     color: var(--peach-deep);
@@ -1637,7 +1642,10 @@
   .modal-logo-icon svg { width: 14px; height: 14px; color: #000; }
   .modal-logo-name {
     font-family: 'Old Standard TT', Georgia, 'Times New Roman', serif;
-    font-weight: 700; font-size: 1.05rem; color: #fff; letter-spacing: 0.005em;
+    font-weight: 700; font-size: 1.05rem; letter-spacing: 0.005em;
+    background: var(--mark);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
   }
 
   .modal-heading {
