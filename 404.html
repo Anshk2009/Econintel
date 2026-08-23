@@ -49,7 +49,13 @@
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   @keyframes gradientShift { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
-  @keyframes pulse { 0%,100%{opacity:.5;transform:scale(1)} 50%{opacity:1;transform:scale(1.15)} }
+  /* The optical nudge lives INSIDE the keyframes, not on .logo-dot. A
+  `transform` on the element is replaced outright by an animation that also
+  animates transform — the standalone declaration silently did nothing.
+  Old Standard TT's glyphs sit ~0.1em above their line-box centre (hhea
+  ascent 762 vs descent 238), and `align-items: center` centres the box.
+  Both steps must carry the translate or the dot bounces. */
+  @keyframes pulse { 0%,100%{opacity:.5;transform:translateY(-0.1em) scale(1)} 50%{opacity:1;transform:translateY(-0.1em) scale(1.15)} }
   html, body { height: 100%; }
   body {
     font-family: 'DM Sans', sans-serif; color: #eef1f8; background: #05060c;
@@ -69,14 +75,7 @@
     background: linear-gradient(90deg,#6366F1 0%,#3B82F6 50%,#0EA5E9 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
     color: #eef1f8; text-decoration: none;
   }
-  /* OPTICAL ALIGNMENT. Old Standard TT has a lopsided vertical box — hhea
-     ascent 762 against descent 238 — so its glyphs sit ~0.1em ABOVE the centre
-     of their own line box. `align-items: center` centres the BOX, not the ink,
-     which left the mark floating above the wordmark after the Syne swap.
-     Measured in-browser at 0.1003em; nudging the icon rather than the text
-     keeps the wordmark's baseline consistent with the nav links beside it.
-     In em, so it holds at every breakpoint. */
-    .logo-dot { width: 12px; height: 12px; border-radius: 4px; background: #0ea5e9; animation: pulse 2.4s ease-in-out infinite; transform:translateY(-0.1em);}
+    .logo-dot { width: 12px; height: 12px; border-radius: 4px; background: #0ea5e9; animation: pulse 2.4s ease-in-out infinite; }
   .eyebrow { font-size: .72rem; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: #0ea5e9; margin-bottom: .8rem; }
   h1 {
     font-family: 'Syne', sans-serif; font-weight: 800; line-height: .95;

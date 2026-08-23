@@ -71,7 +71,13 @@
     --muted2:rgba(235,240,255,.4); --line:rgba(255,255,255,.1); --accent:#0ea5e9;
     --grad:linear-gradient(90deg,#6366F1 0%,#3B82F6 50%,#0EA5E9 100%);
   }
-  @keyframes pulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.15)}}
+  /* The optical nudge lives INSIDE the keyframes, not on .logo-dot. A
+  `transform` on the element is replaced outright by an animation that also
+  animates transform — the standalone declaration silently did nothing.
+  Old Standard TT's glyphs sit ~0.1em above their line-box centre (hhea
+  ascent 762 vs descent 238), and `align-items: center` centres the box.
+  Both steps must carry the translate or the dot bounces. */
+  @keyframes pulse{0%,100%{opacity:.5;transform:translateY(-0.1em) scale(1)}50%{opacity:1;transform:translateY(-0.1em) scale(1.15)}}
   html{scroll-behavior:smooth}
   body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--body);line-height:1.75}
   /* Background matched to the landing page: flat --bg with the same subtle dot
@@ -94,14 +100,7 @@
   header{position:sticky;top:0;z-index:10;background:rgba(5,5,8,.9);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
   .bar{max-width:640px;margin:0 auto;padding:.85rem 1.5rem;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
   .logo{display:inline-flex;align-items:center;gap:.5rem;font-family:'Old Standard TT', Georgia, 'Times New Roman', serif;font-weight:700;font-size:1.1rem;letter-spacing:.005em;background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;text-decoration:none}
-  /* OPTICAL ALIGNMENT. Old Standard TT has a lopsided vertical box — hhea
-     ascent 762 against descent 238 — so its glyphs sit ~0.1em ABOVE the centre
-     of their own line box. `align-items: center` centres the BOX, not the ink,
-     which left the mark floating above the wordmark after the Syne swap.
-     Measured in-browser at 0.1003em; nudging the icon rather than the text
-     keeps the wordmark's baseline consistent with the nav links beside it.
-     In em, so it holds at every breakpoint. */
-    .logo-dot{width:10px;height:10px;border-radius:4px;background:var(--accent);animation:pulse 2.4s ease-in-out infinitetransform:translateY(-0.1em);}
+    .logo-dot{width:10px;height:10px;border-radius:4px;background:var(--accent);animation:pulse 2.4s ease-in-out infinite}
   .bar nav{margin-left:auto;display:flex;gap:1rem;font-size:.82rem}
   .bar nav a{color:var(--muted);text-decoration:none}
   .bar nav a:hover{color:var(--accent)}
