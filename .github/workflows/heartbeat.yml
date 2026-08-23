@@ -1,0 +1,54 @@
+name: Heartbeat
+
+# THE GAP THIS CLOSES: the daily smoke test proves the product works, but it
+# proves it once a day. An outage starting at 06:00 was invisible until the next
+# 05:19 run — up to 23 hours of a dead site with nothing saying so.
+#
+# This runs the same script in --cheap mode every half hour. Cheap mode drops the
+# one check that sends a real chat message, so a run costs no LLM credits and
+# consumes none of the 5-per-IP-per-2h guest bucket. What is left still catches
+# every outage shape that matters: pages not serving, edge functions not
+# deployed, auth erroring, the 404 page gone soft.
+#
+# HOW YOU ACTUALLY GET TOLD: GitHub emails the repo owner when a scheduled
+# workflow fails. That is the alerting. It is not a pager and it is not
+# instantaneous — if you want a phone notification, point UptimeRobot's free
+# tier at https://econintel.edgeone.app/ as well (README > Monitoring). This
+# workflow is the part that lives in the repo and needs no third-party account.
+#
+# TWO LIMITS, BOTH DELIBERATE AND BOTH WORTH KNOWING:
+#   1. GitHub treats cron as best-effort and can delay or drop a run under load,
+#      so treat this as "checked recently", never as a second-by-second SLA.
+#   2. GitHub DISABLES scheduled workflows in a repo with no activity for 60
+#      days, silently. If EconIntel goes quiet over exam season, the heartbeat
+#      stops with it and nothing announces that either. Check the Actions tab
+#      when you come back.
+
+on:
+  schedule:
+    # Twice an hour, off the hour — GitHub delays or drops runs queued at :00,
+    # which is its busiest slot. Same reasoning as every other cron in this repo.
+    - cron: "7,37 * * * *"
+  workflow_dispatch: {}
+
+# A slow run must never stack on top of the previous one: half-hourly checks that
+# queue behind each other stop being a measure of "right now".
+concurrency:
+  group: heartbeat
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"   # built-in fetch(), no npm install
+
+      - name: Is the site alive?
+        run: node .scripts/smoke.mjs --cheap

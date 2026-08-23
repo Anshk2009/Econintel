@@ -18,9 +18,20 @@ import process from 'node:process';
 
 const BASE = (process.env.BASE_URL || 'https://econintel.edgeone.app').replace(/\/$/, '');
 
+// --cheap: run only the checks that cost NOTHING, so this file can double as a
+// half-hourly heartbeat (.github/workflows/heartbeat.yml) instead of needing a
+// second script. The one expensive check — actually sending a guest message —
+// draws on the 5-per-IP-per-2h guest bucket and on LLM credits, so it stays in
+// the daily run. Everything else is a plain HTTP request against a page or an
+// endpoint that answers without touching the model.
+const CHEAP = process.argv.includes('--cheap');
+
 // EdgeOne deploys asynchronously after a push, so a check that runs immediately
 // can race the rollout. Retry the whole suite instead of reporting a false red.
-const ATTEMPTS  = Number(process.env.SMOKE_ATTEMPTS || 4);
+// NOT in --cheap mode: four attempts with a 30s backoff means a genuine outage
+// is reported two minutes after it is already known, and a heartbeat that hides
+// the first two minutes of downtime is not a heartbeat.
+const ATTEMPTS   = CHEAP ? 1 : Number(process.env.SMOKE_ATTEMPTS || 4);
 const BACKOFF_MS = 30000;
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -91,6 +102,7 @@ const checks = [
   // THE ONE THAT MATTERS: a stranger with no account must get an answer.
   // The landing page promises "5 questions free — no signup, no card"; this
   // check is what makes that promise falsifiable.
+  // COSTS MONEY AND QUOTA — skipped by --cheap, see the note at the top.
   ['guest can chat without an account', async () => {
     const r = await req('/chat', {
       method: 'POST',
@@ -121,9 +133,27 @@ const checks = [
   }],
 ];
 
+// Advisories are things that ARE wrong but that this script cannot make anyone
+// fix, because the fix lives in the EdgeOne dashboard rather than in the repo.
+// They print, and they deliberately do NOT affect the exit code: a build that is
+// red every single day for a known, already-filed reason teaches you to ignore
+// red, which costs more than the thing it was warning about.
+const advisories = [
+  ['security headers on HTML', async () => {
+    const r = await req('/chat.html');
+    const missing = ['x-frame-options', 'strict-transport-security', 'x-content-type-options']
+      .filter(h => !r.headers.get(h));
+    return missing.length
+      ? `${missing.join(', ')} absent — add an EdgeOne response-header rule (README > Security headers). `
+        + `The <meta> CSP and the framebuster cover part of this from the repo; these three are header-only.`
+      : null;
+  }],
+];
+
 async function runSuite() {
   const failures = [];
-  for (const [name, fn] of checks) {
+  const suite = CHEAP ? checks.filter(([name]) => name !== 'guest can chat without an account') : checks;
+  for (const [name, fn] of suite) {
     let problem;
     try {
       problem = await fn();
@@ -136,7 +166,7 @@ async function runSuite() {
   return failures;
 }
 
-console.log(`Smoke testing ${BASE}\n`);
+console.log(`Smoke testing ${BASE}${CHEAP ? ' (cheap mode — no LLM call)' : ''}\n`);
 let failures = [];
 for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
   if (attempt > 1) {
@@ -145,6 +175,13 @@ for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
   }
   failures = await runSuite();
   if (failures.length === 0) break;
+}
+
+// Advisories run once, after the suite, and never change the exit code.
+for (const [name, fn] of advisories) {
+  let note;
+  try { note = await fn(); } catch (err) { note = `could not check: ${err.message}`; }
+  if (note) console.log(`note  ${name} — ${note}`);
 }
 
 if (failures.length) {

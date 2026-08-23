@@ -55,9 +55,72 @@ order.
 
 ## Deploy (EdgeOne Pages)
 
-No build step. Upload the files to the EdgeOne Pages dashboard (or connect this
-repo). EdgeOne serves `index.html` at `/` and `chat.html` at `/chat.html`, and
-runs everything in `functions/` as Edge Functions.
+No build step. EdgeOne is linked to this repo (`main`) and auto-deploys on push.
+It serves `index.html` at `/` and `chat.html` at `/chat.html`, and runs
+everything in `functions/` as Edge Functions.
+
+**This repo is the only deploy source.** There used to be a second local copy at
+`EconIntel/deployment-econintel/` that had to be hand-synced. It never was the
+deploy source — proven on 2026-08-23: it carries a root `auth.js` and a
+`node_modules/` tree, and EdgeOne serves every non-dot root file, yet both 404
+live. It is now marked `ARCHIVED.md` and can be deleted. Do not mirror into it.
+
+## Security headers — the one thing the repo cannot fix
+
+**Status: OPEN. This needs three clicks in the EdgeOne dashboard.**
+
+Measured with `curl -D-` on 2026-08-22: the live site returns **no** security
+headers on any HTML response. `functions/_middleware.js` existed to add them and
+never ran — EdgeOne serves static HTML straight from CDN cache without invoking
+Pages middleware (`EO-Cache-Status: Cache Hit`), so the file was deleted rather
+than left standing as assurance it wasn't providing. Function responses do carry
+their headers, because `jsonResponse()` in `functions/middleware.js` sets them
+per-response; that is what made this look solved.
+
+What the repo now does on its own:
+
+- a real `Content-Security-Policy` `<meta>` on every page — `default-src 'self'`
+  plus a per-page host allowlist, replacing the old `object-src`-only baseline
+- `<meta name="referrer" content="strict-origin-when-cross-origin">`
+- a framebuster on `index.html` and `chat.html`, because `frame-ancestors` and
+  `X-Frame-Options` are header-only and those two pages carry credentials
+
+What still needs the dashboard — EdgeOne Pages → your project → **Rules /
+Response headers**, applied to `/*`:
+
+```
+Strict-Transport-Security: max-age=63072000; includeSubDomains
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+Content-Security-Policy: frame-ancestors 'none'
+```
+
+Verify it landed — the daily smoke test prints a `note` line until it does:
+
+```bash
+curl -sS -D - -o /dev/null https://econintel.edgeone.app/chat.html | grep -i 'frame\|strict-transport\|nosniff'
+```
+
+## Monitoring
+
+- **Heartbeat** (`.github/workflows/heartbeat.yml`) — runs `node
+  .scripts/smoke.mjs --cheap` every 30 minutes. Costs nothing: cheap mode drops
+  the one check that sends a real chat message. GitHub emails you when it fails.
+- **Daily smoke** (`.github/workflows/smoke.yml`) — the full suite, including a
+  real guest chat message, once a day plus on function/page changes.
+- **Retrieval quality** (`.github/workflows/check-retrieval.yml`) — weekly golden
+  queries against the live library, 70% bar.
+
+Two things GitHub Actions cannot do for you, both free, both a few minutes:
+
+1. **UptimeRobot** (or similar) pointed at `https://econintel.edgeone.app/`.
+   GitHub's cron is best-effort and it silently **disables scheduled workflows
+   after 60 days of repo inactivity** — so over a quiet exam season the heartbeat
+   stops and nothing announces that. An external monitor doesn't have that
+   failure mode, and it can text you.
+2. **Supabase backups.** Nothing in this repo backs up `users` or
+   `chat_history`. Check what your Supabase plan retains and, if it retains
+   nothing, take a manual dump before any migration that touches those tables.
 
 ## Backend
 
