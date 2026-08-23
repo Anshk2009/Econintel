@@ -251,8 +251,16 @@
        Measured in-browser at 0.1003em; nudging the icon rather than the text
        keeps the wordmark's baseline consistent with the nav links beside it.
        In em, so it holds at every breakpoint. */
-  transform: translateY(-0.1em);
-    width: 18px; height: 18px;
+    transform: translateY(-0.1em);
+
+    /* SIZED TO THE CAP BAND, NOT PICKED. At 18px the mark's ink was 15px against
+       a 12.5px cap height, so even perfectly centred it hung 1.72px BELOW the
+       baseline — and in a wordmark lockup the eye reads the baseline, so a mark
+       sagging under it looks misaligned however well centred it is.
+       Drawn ink is 0.8333 of this box (viewBox content spans 3..21 of 24, plus
+       half the 2-unit stroke outside each edge), so 0.85em puts the ink at
+       0.708em against Old Standard TT's 0.712em cap — within 0.06px. */
+    width: 0.85em; height: 0.85em;
     flex-shrink: 0;
     display: flex;
     align-items: center;
@@ -356,7 +364,8 @@
   @media (max-width: 640px) {
     nav { padding: 0.45rem 0.9rem; width: auto; gap: 1.25rem; }
     .nav-logo { font-size: 0.93rem; }
-    .nav-logo-chart { width: 16px; height: 16px; }
+    /* .nav-logo-chart is em-sized now, so it follows the font-size above
+       on its own — no second value needed here. */
     .theme-toggle { width: 30px; height: 30px; }
   }
 
