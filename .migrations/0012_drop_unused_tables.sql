@@ -16,14 +16,20 @@
 -- caught it. api_usage held two rows, both written on 2026-06-09 by the
 -- Next.js-era build that commit 6178a73 replaced:
 --
---   id                                           user_id                                       endpoint tokens created_at
---   UR90gfabGvcZW0puYFu4ZrLs3oOhO-AFZT-Lwb7yBDE  yseJbXrU9ya9piKr-NWnb3yL4TK4a-osO4GBEzC1yXI   chat     335    2026-06-09 06:18:57+00
---   Gpo4SD8RaI0dhqTn30T_7Uu1up8Tq0l3m-6O3j6AVmk  yseJbXrU9ya9piKr-NWnb3yL4TK4a-osO4GBEzC1yXI   chat     385    2026-06-09 17:21:38+00
+--   row 1 — endpoint "chat",   335 tokens,  2026-06-09 06:18:57+00
+--   row 2 — endpoint "chat",   385 tokens,  2026-06-09 17:21:38+00
+--   both rows: same single user_id, both ids redacted (see note below)
 --
 -- They are recorded here so the drop loses nothing but the table. Two token
--- counts for one user from a deleted architecture are not data anyone will want
--- back, but "we checked and wrote down what was there" is cheap and "we assumed
--- it was empty" is how the RLS landmine survived for months.
+-- counts from a deleted architecture are not data anyone will want back, but
+-- "we checked and wrote down what was there" is cheap and "we assumed it was
+-- empty" is how the RLS landmine survived for months.
+--
+-- REDACTED for open source. The first draft of this note pasted the real row
+-- ids and the real user_id verbatim. Those identify a live account, and this
+-- repo is public — an internal id is not a credential, but publishing one is a
+-- disclosure with no upside. The shape of what was there is the part worth
+-- keeping; the identifiers are not.
 --
 -- OPTIONAL AND UNHURRIED. Dropping a table is the one action here that cannot be
 -- undone by re-running a file. Run it when you want the schema to match the
