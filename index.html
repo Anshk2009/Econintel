@@ -708,34 +708,11 @@
   }
   .terminal-cta svg { width: 15px; height: 15px; }
 
-  /* ── STICKY MOBILE CTA ──
-     Phones only. The hero CTA scrolls away after ~600px, and the pricing/contact
-     sections are far down — this keeps the primary action reachable at all times
-     without stealing space on desktop, where the nav is always visible anyway.
-     Hidden until the hero CTA is off-screen (JS toggles .show) so it never covers
-     the hero it duplicates. */
-  .sticky-cta {
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
-    display: none; align-items: center; gap: .75rem;
-    padding: .7rem 1rem calc(.7rem + env(safe-area-inset-bottom));
-    background: rgba(5,5,8,.92); backdrop-filter: blur(14px);
-    border-top: 1px solid rgba(255,255,255,0.1);
-    transform: translateY(110%); transition: transform .28s ease;
-  }
-  .sticky-cta.show { transform: translateY(0); }
-  .sticky-cta-text { flex: 1; min-width: 0; font-size: .72rem; line-height: 1.35; color: var(--text2); }
-  .sticky-cta-text b { display: block; color: var(--text); font-size: .82rem; font-weight: 600; }
   /* min-height 44px: WCAG 2.5.5 target size. At .65rem padding this button
      measured 39px tall, which is a genuinely fiddly tap on a phone. */
-  .sticky-cta .terminal-cta { padding: .65rem 1.1rem; font-size: .72rem; white-space: nowrap; min-height: 44px; }
-  @media (max-width: 768px) { .sticky-cta { display: flex; } }
-  /* Room so the fixed bar never covers the last of the page content. */
-  @media (max-width: 768px) { body.has-sticky-cta { padding-bottom: 4.5rem; } }
-  @media (prefers-reduced-motion: reduce) { .sticky-cta { transition: none; } }
 
   /* ── SCROLL TO TOP ──
-     Appears after a screenful of scrolling. Sits above the sticky CTA on mobile
-     so the two never overlap. */
+     Appears after a screenful of scrolling. */
   .to-top {
     position: fixed; right: 1rem; z-index: 55;
     bottom: 1.25rem;
@@ -750,7 +727,6 @@
   .to-top.show { opacity: 1; visibility: visible; transform: translateY(0); }
   .to-top:hover { background: rgba(255,255,255,0.16); }
   .to-top svg { width: 18px; height: 18px; }
-  @media (max-width: 768px) { .to-top { bottom: 5.25rem; } }
   @media (prefers-reduced-motion: reduce) { .to-top { transition: none; } }
 
   /* Responsive */
@@ -1234,7 +1210,13 @@
     font-weight: 300; padding: 0;
   }
   .faq-item.open .faq-a {
-    max-height: 200px;
+    /* NO max-height HERE ON PURPOSE. It used to be 200px, which fitted the
+       longest answer at desktop line lengths and cut it off mid-sentence on a
+       phone, where the same text wraps to roughly twice the height. Every
+       answer was clipped and there was no scrollbar to hint at it.
+       toggleFaq() now sets max-height from the element's own scrollHeight, so
+       it is correct at any width and for any length of answer. This rule keeps
+       only the padding; the height is set inline. */
     padding-bottom: 1.25rem;
   }
 
@@ -2706,14 +2688,37 @@ applyGeoPricing();
 function toggleFaq(el) {
   const item = el.parentElement;
   const isOpen = item.classList.contains('open');
-  document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
-  if (!isOpen) item.classList.add('open');
+  // Collapse every row first, clearing the inline height so the CSS 0 applies.
+  document.querySelectorAll('.faq-item').forEach(i => {
+    i.classList.remove('open');
+    const a = i.querySelector('.faq-a');
+    if (a) a.style.maxHeight = '';
+  });
+  if (!isOpen) {
+    item.classList.add('open');
+    // MEASURE, DON'T GUESS. scrollHeight is the answer's real rendered height at
+    // this viewport width, so a long answer on a narrow phone opens fully
+    // instead of being cut off at a number that only ever suited the desktop.
+    const a = item.querySelector('.faq-a');
+    if (a) a.style.maxHeight = a.scrollHeight + 'px';
+  }
   // Keep aria-expanded truthful on every row, so a screen reader announces the
   // open/closed state instead of just "button". Only one row is open at a time.
   document.querySelectorAll('.faq-q').forEach(q => {
     q.setAttribute('aria-expanded', String(q.parentElement.classList.contains('open')));
   });
 }
+
+// A height measured at open time is wrong after a rotate or a resize, so
+// re-measure whichever row is open. Debounced: resize fires continuously.
+let faqResizeTimer;
+addEventListener('resize', () => {
+  clearTimeout(faqResizeTimer);
+  faqResizeTimer = setTimeout(() => {
+    const open = document.querySelector('.faq-item.open .faq-a');
+    if (open) { open.style.maxHeight = 'none'; open.style.maxHeight = open.scrollHeight + 'px'; }
+  }, 150);
+});
 
 // ── SCROLL REVEAL ──
 const observer = new IntersectionObserver(entries => {
@@ -3318,15 +3323,6 @@ if (!currentCSRFToken) {
 })();
 </script>
 
-<!-- ── STICKY MOBILE CTA (phones only, shown once the hero CTA scrolls away) ── -->
-<div class="sticky-cta" id="sticky-cta">
-  <div class="sticky-cta-text">
-    <b>Structured Reasoning, Not News</b>
-    Economic analysis powered by AI.
-  </div>
-  <a href="chat.html" class="terminal-cta" data-cta="sticky-mobile">Enter Terminal</a>
-</div>
-
 <!-- ── SCROLL TO TOP ── -->
 <button class="to-top" id="to-top" type="button" aria-label="Scroll back to top">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -3336,25 +3332,8 @@ if (!currentCSRFToken) {
 
 <script>
 (function () {
-  var stickyCta = document.getElementById('sticky-cta');
-  var toTop     = document.getElementById('to-top');
-  var heroCta   = document.querySelector('.hero-cta');
+  var toTop = document.getElementById('to-top');
 
-  // Reserve space for the sticky bar so it can't cover the footer's last line.
-  document.body.classList.add('has-sticky-cta');
-
-  // Show the sticky CTA only once the hero's own CTA has scrolled out of view —
-  // duplicating a button that's already on screen just wastes space.
-  var heroCtaGone = false;
-  if (heroCta && 'IntersectionObserver' in window) {
-    new IntersectionObserver(function (entries) {
-      heroCtaGone = !entries[0].isIntersecting;
-      stickyCta.classList.toggle('show', heroCtaGone);
-    }, { rootMargin: '-10px 0px 0px 0px' }).observe(heroCta);
-  } else if (heroCta) {
-    heroCtaGone = true;   // no IO support: just show it
-    stickyCta.classList.add('show');
-  }
 
   // Scroll-to-top appears after one screen of scrolling.
   var ticking = false;
