@@ -2277,9 +2277,38 @@ async function sendMessage() {
     const label = msgEl.querySelector('.think-label');
     if (label) label.textContent = 'Drafting answer…';
 
-    // Handle for the coalesced repaint below, so a burst of tokens causes one
-    // render per frame rather than one per token.
-    let pendingPaint = 0;
+    // ── SMOOTH REVEAL ───────────────────────────────────────────────────────
+    // Tokens do not arrive evenly. The network delivers them in bursts, so
+    // painting whatever has arrived on each frame reproduces that burstiness
+    // exactly: the reply lurches forward in clumps and stalls between them,
+    // even though a frame was rendered every 16ms.
+    //
+    // So the DISPLAY is decoupled from the ARRIVAL. `fullReply` collects
+    // everything received; `shownLen` is how much of it the reader can see, and
+    // it advances on its own clock.
+    //
+    // The step is proportional to the backlog rather than fixed, which is what
+    // keeps it from ever falling behind: a big burst drains fast (an eighth of
+    // it per frame), a trickle reveals a character at a time, and the reveal
+    // finishes just after the stream does instead of queueing up an artificial
+    // delay. A fixed chars-per-frame rate would either lag a fast model or
+    // stutter on a slow one.
+    let shownLen = 0;
+    let drainRAF = 0;
+
+    const paint = () => {
+      msgEl.innerHTML = renderMarkdown(fullReply.slice(0, shownLen));
+      scrollChatToBottom();
+    };
+
+    const drain = () => {
+      if (shownLen >= fullReply.length) { drainRAF = 0; return; }
+      shownLen += Math.max(1, Math.ceil((fullReply.length - shownLen) / 8));
+      if (shownLen > fullReply.length) shownLen = fullReply.length;
+      paint();
+      drainRAF = requestAnimationFrame(drain);
+    };
+    const startDrain = () => { if (!drainRAF) drainRAF = requestAnimationFrame(drain); };
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     // partial holds an incomplete SSE line that was split across two chunks
@@ -2312,21 +2341,18 @@ async function sendMessage() {
               // Rendering every delta is wasteful (a token is often 2-3 chars),
               // so repaint on a rAF at most — the browser cannot show more than
               // one frame anyway, and this keeps the reflow off the token path.
-              // ponytail: rAF coalescing, not a virtual DOM. Revisit only if a
-              // profiler says the innerHTML swap is the bottleneck.
-              if (!pendingPaint) {
-                pendingPaint = requestAnimationFrame(() => {
-                  pendingPaint = 0;
-                  msgEl.innerHTML = renderMarkdown(fullReply);
-                  scrollChatToBottom();
-                });
-              }
+              // ponytail: a self-scheduling rAF drain, not a virtual DOM.
+              // Revisit only if a profiler says the innerHTML swap is the
+              // bottleneck — at 900 max_tokens it is not.
+              startDrain();
             }
           } catch {} // malformed SSE line — skip silently
         }
       }
     } catch (err) {
       // Network dropped OR watchdog aborted a stalled stream — keep whatever arrived
+      if (drainRAF) { cancelAnimationFrame(drainRAF); drainRAF = 0; }
+      shownLen = fullReply.length;
       if (!started) beginReply();
       if (!fullReply) {
         msgEl.textContent = err.name === 'AbortError'
@@ -2339,9 +2365,12 @@ async function sendMessage() {
     // Stream done — switch from plain textContent to rendered HTML.
     // We stream as text so partial tokens don't break mid-tag, then
     // render once the full response is received.
-    // Cancel any frame still queued, or it would fire AFTER this final render
-    // and repaint a stale fullReply captured before the last tokens arrived.
-    if (pendingPaint) { cancelAnimationFrame(pendingPaint); pendingPaint = 0; }
+    // Stop the drain and show everything at once. Without this the reveal would
+    // keep trickling after the stream is complete, which is the exact artificial
+    // delay the proportional step exists to avoid — and a queued frame would
+    // repaint a stale slice over the finished reply.
+    if (drainRAF) { cancelAnimationFrame(drainRAF); drainRAF = 0; }
+    shownLen = fullReply.length;
     if (fullReply) msgEl.innerHTML = renderMarkdown(fullReply);
     // Final scroll so the rendered reply sits just above the prompt box
     scrollChatToBottom();
