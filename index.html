@@ -507,9 +507,11 @@
   }
   .btn-secondary:hover { background: rgba(255,255,255,0.09); transform: translateY(-2px); }
 
+  /* Travel scales with the globe for the same reason the shadows do — a fixed
+     400px sweep spins a 292px phone globe noticeably faster than a 420px one. */
   @keyframes earthRotate {
     0%   { background-position: 0 0; }
-    100% { background-position: 400px 0; }
+    100% { background-position: calc(var(--globe, 420px) * 0.952) 0; }
   }
 
   /* Grid dots behind hero */
@@ -1277,23 +1279,50 @@
     justify-content: center;
   }
   .ruixen-globe-sm {
-    /* min() caps the globe at 78% of the viewport width on narrow phones,
-       so the circle shrinks instead of getting clipped at the screen edges */
-    width: min(420px, 78vw); height: min(420px, 78vw);
+    /* ONE SOURCE OF TRUTH FOR THE SIZE. min() caps the globe at 78% of the
+       viewport on narrow phones so the circle shrinks instead of being clipped.
+       Every shadow below is a fraction of this, which is the whole point —
+       see the box-shadow note. */
+    --globe: min(420px, 78vw);
+    width: var(--globe); height: var(--globe);
     border-radius: 50%;
     overflow: hidden;
+
+    /* Ocean-blue fallback. The image is the only remote image on the entire
+       site; if it is slow, blocked, or fails, the circle still reads as a globe
+       rather than as a hole punched in the page. */
+    background-color: #0a1d3a;
     background-image: url('https://pub-940ccf6255b54fa799a9b01050e6c227.r2.dev/globe.jpeg');
     background-size: cover;
     background-position: left;
     animation: earthRotate 30s linear infinite;
-    will-change: background-position;
+
+    /* `will-change: background-position` was here and is deliberately gone.
+       background-position is NOT a compositable property — it repaints on the
+       main thread no matter what — so will-change bought no smoothness and only
+       forced this element onto its own composited layer. On iOS Safari a
+       promoted layer carrying a large backing store plus six shadows is exactly
+       the combination that gets its backing store dropped under memory
+       pressure, and the element then paints as nothing. Pure cost, no benefit. */
+
+    /* SHADOWS SCALE WITH THE GLOBE. These were absolute px tuned against the
+       420px desktop size: the day/night terminator sat at 145px and 230px in,
+       leaving a lit crescent. They never scaled, so on a 375px phone the globe
+       is 292px and those same shadows eat it — 65% of the circle is lit on
+       desktop against 48% on a small Android, which reads as "the image did not
+       load". Expressed as fractions of --globe, the crescent is now identical
+       at every size. Ratios are the original px over 420. */
     box-shadow:
-      0 0 24px rgba(255,255,255,0.2),
-      -5px 0 10px #c3f4ff inset,
-      18px 2px 30px #000 inset,
-      -28px -2px 40px rgba(195,244,255,0.6) inset,
-      230px 0 50px rgba(0,0,0,0.4) inset,
-      145px 0 42px rgba(0,0,0,0.67) inset;
+      0 0 calc(var(--globe) * 0.0571) rgba(255,255,255,0.2),
+      calc(var(--globe) * -0.0119) 0 calc(var(--globe) * 0.0238) #c3f4ff inset,
+      calc(var(--globe) * 0.0429) calc(var(--globe) * 0.0048) calc(var(--globe) * 0.0714) #000 inset,
+      calc(var(--globe) * -0.0667) calc(var(--globe) * -0.0048) calc(var(--globe) * 0.0952) rgba(195,244,255,0.6) inset,
+      calc(var(--globe) * 0.5476) 0 calc(var(--globe) * 0.1190) rgba(0,0,0,0.4) inset,
+      calc(var(--globe) * 0.3452) 0 calc(var(--globe) * 0.1000) rgba(0,0,0,0.67) inset;
+  }
+  /* A 30s infinite rotation is exactly what a reduced-motion preference is for. */
+  @media (prefers-reduced-motion: reduce) {
+    .ruixen-globe-sm { animation: none; }
   }
   @media (max-width: 900px) {
     .globe-coverage-inner { grid-template-columns: 1fr; gap: 3rem; }
