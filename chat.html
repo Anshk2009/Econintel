@@ -1510,7 +1510,16 @@
     font-size:.85rem;line-height:1;padding:.25rem;min-width:28px;min-height:28px;
   }
   .article-ctx-chip button:hover{color:#fff}
-</style>
+
+  /* iOS Safari (iPhone AND iPad) zooms the page when a focused field's font is under 16px,
+     and does not zoom back out. This used to be set only inside `max-width: 640px`, which
+     misses iPads and iPhones held sideways — so the chat composer (15.2px) and the sign-in
+     fields (14.4px) zoomed there. `pointer: coarse` means "a finger", at any width.
+     !important because the fields are sized by class and ID rules that out-rank `input`. */
+  @media (pointer: coarse) {
+    input, textarea, select { font-size: 16px !important; }
+  }
+  </style>
 <link rel="stylesheet" href="consent.css" />
 </head>
 <body>
