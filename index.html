@@ -1235,7 +1235,9 @@
   }
 
   @media (max-width: 800px) {
-    .contact-grid { grid-template-columns: 1fr; gap: 2.5rem; }
+    /* minmax(0,1fr), not 1fr: a bare 1fr is minmax(AUTO,1fr), so the track refused to shrink
+       below its widest content and the FAQ and contact boxes ran 14px past the screen at 320px. */
+    .contact-grid { grid-template-columns: minmax(0, 1fr); gap: 2.5rem; }
   }
 
   @media (max-width: 900px) {

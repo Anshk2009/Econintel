@@ -88,7 +88,7 @@
   /* ── POST LIST ──
      To add a post: copy one <article class="card"> block, change the href,
      title, dek, date, read time and tag. No build step, nothing to compile. */
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:1.1rem}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,310px),1fr));gap:1.1rem}
   .card{
     background:rgba(255,255,255,.035);border:1px solid var(--line);border-radius:14px;
     padding:1.4rem 1.5rem;display:flex;flex-direction:column;
