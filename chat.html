@@ -125,7 +125,14 @@
 
   .app {
     display: flex;
+    /* 100vh is the TALL viewport (URL bar retracted) on iOS Safari and Android
+       Chrome. With the bar showing, the bottom of the app — the composer — sits
+       under the toolbar, and overflow:hidden below means it cannot be scrolled to.
+       100dvh tracks the visible viewport. The 100vh line stays as the fallback for
+       browsers that predate dvh; declarations they do not understand are dropped,
+       so the second line only ever applies where it is supported. */
     height: 100vh;
+    height: 100dvh;
     overflow: hidden;
   }
 
