@@ -700,7 +700,12 @@
   .messages { display: none; }
 
   /* ── RESPONSIVE ── */
-  @media (max-width: 640px) {
+  /* MOBILE = narrow, OR a phone on its side. There were no orientation queries, so a phone
+     turned landscape (812x375) got the tablet layout in 375px of height: a 946px hero whose
+     CTA sat below the fold, a 440px robot, and a fixed 260px chat sidebar. A short landscape
+     screen is a phone whatever its width. (max-height:500px) cannot match a portrait screen
+     wider than 640px, so this is exactly "width<=640 OR height<=500". */
+  @media (max-width: 640px), (max-height: 500px) and (orientation: landscape) {
     /* Sidebar + header cleanup */
     .sidebar { display: none; }
     .upgrade-btn span { display: none; }
@@ -891,7 +896,7 @@
   body.light .hamburger { border-color: rgba(0,0,0,0.12); }
 
   /* mobile: sidebar becomes a slide-in drawer */
-  @media (max-width: 640px) {
+  @media (max-width: 640px), (max-height: 500px) and (orientation: landscape) {
     .hamburger { display: flex; }
     .sidebar {
       display: flex !important;
@@ -912,7 +917,7 @@
     .sidebar-backdrop.show { opacity: 1; pointer-events: all; }
   }
   .sidebar-backdrop { display: none; }
-  @media (max-width: 640px) { .sidebar-backdrop { display: block; } }
+  @media (max-width: 640px), (max-height: 500px) and (orientation: landscape) { .sidebar-backdrop { display: block; } }
 
   /* ── MESSAGE BUBBLES ── */
   .messages {

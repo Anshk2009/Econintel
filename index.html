@@ -90,7 +90,9 @@
   // downloaded the whole 3D viewer (plus the remote scene) to render nothing —
   // the worst possible trade on the mobile connections most visitors are on.
   // Same URL, same pinned SRI hash, same crossorigin as before.
-  if (window.matchMedia('(min-width: 641px)').matches) {
+  // Must stay the exact complement of the mobile query in the CSS below (width<=640 OR a short
+  // landscape screen): the robot is shown only when width>640 AND height>500.
+  if (window.matchMedia('(min-width: 641px) and (min-height: 501px)').matches) {
     var splineEl = document.createElement('script');
     splineEl.type = 'module';
     splineEl.src = 'https://unpkg.com/@splinetool/viewer@1.9.82/build/spline-viewer.js';
@@ -731,7 +733,12 @@
   @media (prefers-reduced-motion: reduce) { .to-top { transition: none; } }
 
   /* Responsive */
-  @media (max-width: 640px) {
+  /* MOBILE = narrow, OR a phone on its side. There were no orientation queries, so a phone
+     turned landscape (812x375) got the tablet layout in 375px of height: a 946px hero whose
+     CTA sat below the fold, a 440px robot, and a fixed 260px chat sidebar. A short landscape
+     screen is a phone whatever its width. (max-height:500px) cannot match a portrait screen
+     wider than 640px, so this is exactly "width<=640 OR height<=500". */
+  @media (max-width: 640px), (max-height: 500px) and (orientation: landscape) {
     #hero { padding: 100px 1.5rem 1rem; min-height: auto; }
     .hero-cta { margin-top: 1.6rem; }
     .hero-left { padding-top: 0; transform: none; }
@@ -739,6 +746,12 @@
     .hero-sub { max-width: 100%; font-size: 0.95rem; margin-bottom: 1.5rem; }
     .hero-robot-wrap { display: none; }
     .hero-grid { grid-template-columns: 1fr; gap: 0; }
+  }
+  /* The 100px above is sized for a portrait phone. On a phone turned sideways the floating nav
+     ends ~76px down, and every pixel of the 375px height matters: trimmed so the CTA lands
+     above the fold (it missed by 7px at 812x375). Placed after the block above, same specificity. */
+  @media (max-height: 500px) and (orientation: landscape) {
+    #hero { padding-top: 84px; }
   }
 
   @media (max-width: 900px) {
@@ -1878,7 +1891,7 @@
     overflow-y: auto;
   }
 
-  @media (max-width: 640px) {
+  @media (max-width: 640px), (max-height: 500px) and (orientation: landscape) {
     /* Desktop sections use 7rem (112px) of padding — too much on phones */
     #cards, #sources, #pricing, #contact { padding: 4.5rem 1.25rem; }
     /* case-studies is directly below hero — smaller top so there's no dead gap */
@@ -2568,7 +2581,8 @@
 // CSS hides the robot on phones, but display:none does NOT stop the Spline
 // component from downloading its multi-MB scene in the background. Removing
 // the element before the component initialises saves that bandwidth.
-if (window.matchMedia('(max-width: 640px)').matches) {
+// Complement of the gate in <head>: wherever the robot is not shown, remove it.
+if (!window.matchMedia('(min-width: 641px) and (min-height: 501px)').matches) {
   const robotWrap = document.querySelector('.hero-robot-wrap');
   if (robotWrap) robotWrap.remove();
 }
