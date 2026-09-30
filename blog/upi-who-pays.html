@@ -104,6 +104,10 @@
   .bar nav{margin-left:auto;display:flex;gap:1rem;font-size:.82rem}
   .bar nav a{color:var(--muted);text-decoration:none}
   .bar nav a:hover{color:var(--accent)}
+  /* TOUCH ONLY: grow hit areas to ~44px without moving anything. Padding enlarges the tappable box and an
+     equal negative margin hands the space back, so the layout is pixel-identical. The gaps between these
+     links are wider than the padding added, so neighbouring hit areas never overlap. */
+  @media (pointer:coarse){.bar nav a,.logo{padding:.7rem .4rem;margin:-.7rem -.4rem}.back{display:inline-block;padding:.75rem .5rem;margin:-.75rem -.5rem}}
 
   article{max-width:640px;margin:0 auto;padding:3.5rem 1.5rem 4rem}
   .eyebrow{font-size:.7rem;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin-bottom:.9rem}

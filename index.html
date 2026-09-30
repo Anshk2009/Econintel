@@ -1412,6 +1412,12 @@
     transition: color 0.2s;
   }
   .footer-links a:hover { color: #fff; }
+  /* TOUCH ONLY. The footer links were 16-18px tall, stacked 11px apart. Collapsing the gap into padding
+     makes each one ~45px with no overlap between neighbours (a negative-margin trick would overlap here). */
+  @media (pointer: coarse) {
+    .footer-links { gap: 0; }
+    .footer-links a { display: block; padding-block: .75rem; }   /* block: padding on an INLINE link adds no layout height, so neighbours' hit areas would overlap */
+  }
   .footer-bottom {
     border-top: 1px solid rgba(255,255,255,0.07);
     max-width: 1280px; margin: 0 auto;
@@ -1428,6 +1434,7 @@
     text-decoration: none; transition: color 0.2s;
   }
   .footer-legal a:hover { color: #fff; }
+  @media (pointer: coarse) { .footer-legal a { padding: .75rem .4rem; margin: -.75rem -.4rem; } }
   @media (max-width: 860px) {
     .footer-main { grid-template-columns: 1fr 1fr; }
     .footer-brand { grid-column: 1 / -1; }
