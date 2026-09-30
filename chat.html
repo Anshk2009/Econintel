@@ -711,18 +711,11 @@
     /* Shrink subtitle */
     .chat-greeting-sub { font-size: 0.85rem; margin-top: -0.8rem; margin-bottom: 1.5rem; }
 
-    /* Reduce message bubble padding */
-    .msg { padding: 0.75rem 0.9rem; font-size: 0.9rem; }
-
     /* Reduce prompt input font to 16px (iOS won't zoom on focus) */
     .prompt-input { font-size: 16px; }
 
     /* Tighter prompt wrap padding */
     .chat-content.has-messages .prompt-wrap { padding: 0.35rem 0 0.75rem; }
-
-    /* Shift theme toggle up to avoid covering prompt on small screens */
-    .theme-toggle { bottom: 6.5rem; right: 0.75rem; width: 38px; height: 38px; }
-    .theme-toggle svg { width: 15px; height: 15px; }
 
     /* Account menu breaks off-screen on mobile: reposition to left-align */
     .account-menu {
@@ -928,6 +921,19 @@
        reasoning answers don't feel dense. */
     font-size: 1rem; line-height: 1.72;
     word-wrap: break-word;
+  }
+  /* THEME TOGGLE vs SEND BUTTON. The toggle is fixed bottom-right; once a chat has
+     messages the composer moves to the bottom, and on narrow screens its Send button
+     lands under the toggle (z-index 300) — a tap on Send flipped the theme instead.
+     A mobile override used to exist at ~L724, but it sat BEFORE the base rule above
+     and equal specificity means the later rule wins, so it never applied. It lives
+     here now, after the base, and covers every width where the two can collide:
+     the composer is max 720px centred in the space right of the sidebar, so its right
+     edge reaches the toggle below ~1110px (measured at 768, 812, 1024 as well as phones). */
+  @media (max-width: 1120px) { .theme-toggle { bottom: 6.5rem; } }
+  @media (max-width: 640px) {
+    .theme-toggle { right: 0.75rem; width: 38px; height: 38px; }
+    .theme-toggle svg { width: 15px; height: 15px; }
   }
   /* User messages are plain text — keep literal whitespace */
   .msg.user { white-space: pre-wrap; }
