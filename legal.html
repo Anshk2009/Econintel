@@ -88,7 +88,10 @@
   section:first-of-type { border-top:0; margin-top:0; }
   h2 { font-family:'Syne',sans-serif; font-weight:700; font-size:1.5rem; letter-spacing:-.01em; margin-bottom:.4rem; }
   h3 { font-family:'Syne',sans-serif; font-weight:600; font-size:1.02rem; margin:1.6rem 0 .4rem; color:var(--ink); }
-  p, li { color:var(--muted); font-size:.95rem; }
+  /* The 820px column held ~98 characters a line at desktop widths; past ~90 the eye loses its place.
+     42em is ~84 characters of running DM Sans. Deliberately em and NOT ch: a ch (the width of "0") is a wide
+     0.68em in this face, so 72ch came to ~749px — still ~98 characters — and the cap appeared to do nothing. */
+  p, li { color:var(--muted); font-size:.95rem; max-width:42em; }
   p { margin-bottom:.8rem; }
   ul, ol { margin:0 0 .9rem 1.2rem; }
   li { margin-bottom:.35rem; }

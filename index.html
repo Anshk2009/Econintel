@@ -824,7 +824,7 @@
   }
   .case-tags { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1.1rem; }
   .case-tag {
-    font-size: 0.64rem; font-weight: 600; letter-spacing: 0.06em;
+    font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em;   /* was 0.64rem (10.2px); 12px is the floor */
     text-transform: uppercase; color: var(--text2);
     border: 1px solid rgba(255,255,255,0.12); border-radius: 999px; padding: 0.22rem 0.6rem;
   }
@@ -855,7 +855,7 @@
   }
   .source-name { font-size: 0.92rem; font-weight: 600; color: var(--text); }
   .source-type {
-    font-size: 0.66rem; font-weight: 600; letter-spacing: 0.05em;
+    font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em;
     text-transform: uppercase; color: var(--text2); text-align: right;
   }
   .source-arrow { color: var(--accent); font-size: 0.95rem; }
@@ -1078,7 +1078,7 @@
   .pricing-popular-badge {
     position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
     background: var(--accent); color: #000;
-    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em;
+    font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em;
     text-transform: uppercase; padding: 0.3rem 0.9rem; border-radius: 9999px;
     white-space: nowrap;
   }
@@ -1988,7 +1988,7 @@
     }
 
     /* Scale interior text + spacing to fit compact card height */
-    #pricing .pricing-tier { font-size: 0.65rem; margin-bottom: 0.35rem; }
+    #pricing .pricing-tier { font-size: 0.75rem; margin-bottom: 0.35rem; }
     #pricing .pricing-desc { font-size: 0.72rem; margin-bottom: 1.2rem; }
     #pricing .pricing-amount { font-size: 2.4rem; }
     #pricing .pricing-currency { font-size: 1rem; }
@@ -1998,7 +1998,7 @@
     #pricing .pricing-feature { font-size: 0.75rem; gap: 0.5rem; }
     #pricing .pricing-feature .check { width: 14px; height: 14px; font-size: 0.55rem; }
     #pricing .pricing-btn { margin-top: 1.2rem; padding: 0.65rem; font-size: 0.8rem; }
-    #pricing .pricing-popular-badge { font-size: 0.6rem; padding: 0.25rem 0.75rem; }
+    #pricing .pricing-popular-badge { font-size: 0.75rem; padding: 0.25rem 0.75rem; }
 
     /* ── GLOWY BACKDROP behind the slider ──
        A soft radial glow centred behind the cards so the focused plan looks
@@ -2455,7 +2455,7 @@
     }
     .footer-sources-label {
       display: inline-block; font-weight: 700; letter-spacing: 0.05em;
-      text-transform: uppercase; font-size: 0.66rem;
+      text-transform: uppercase; font-size: 0.75rem;
       color: rgba(235,240,255,0.62); margin-right: 0.5rem;
     }
     .footer-sources a { color: rgba(155,190,255,0.78); text-decoration: none; }
