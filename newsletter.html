@@ -73,6 +73,10 @@
   h1 {
     font-family: 'Syne', sans-serif; font-weight: 800; line-height: 1.02;
     font-size: clamp(2.6rem, 9vw, 5rem); letter-spacing: -.03em; margin-bottom: 1.1rem;
+    /* was `Coming&nbsp;Soon`: the non-breaking space made the heading one unbreakable 11-character
+       word that overflowed every phone up to 414px (9/28/36/56px at 414/375/360/320px) and was
+       cut off, since body hid the overflow. It now wraps, and balance keeps the two lines even. */
+    text-wrap: balance;
     background: linear-gradient(135deg,#ffffff 0%, #9ec0ff 60%, #b69bff 100%);
     -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
   }
@@ -89,7 +93,7 @@
 <body>
   <div class="logo"><span class="logo-dot"></span>EconIntel</div>
   <div class="eyebrow">Newsletter</div>
-  <h1>Coming&nbsp;Soon</h1>
+  <h1>Coming Soon</h1>
   <p>Weekly structured economic signals and crisis analogues, straight to your inbox. Sign-ups open soon.</p>
   <a class="back" href="index.html">← Back to home</a>
   <!-- Sources & data attribution (CC-BY / open-data licence credit + trust). -->
