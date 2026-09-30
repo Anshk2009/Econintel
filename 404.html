@@ -56,11 +56,14 @@
   ascent 762 vs descent 238), and `align-items: center` centres the box.
   Both steps must carry the translate or the dot bounces. */
   @keyframes pulse { 0%,100%{opacity:.5;transform:translateY(-0.1em) scale(1)} 50%{opacity:1;transform:translateY(-0.1em) scale(1.15)} }
-  html, body { height: 100%; }
+  /* html only: a fixed-height body can't grow, so padding-bottom would shrink its
+     content box instead of extending the page, and the cookie banner would sit on top
+     of the links whenever the window is short (phones on their side). */
+  html { height: 100%; }
   body {
     font-family: 'DM Sans', sans-serif; color: #eef1f8; background: #05060c;
     min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    text-align: center; padding: 2rem 2rem 5rem; position: relative; overflow-x: hidden;
+    text-align: center; padding: 2rem 2rem calc(5rem + var(--consent-h, 0px)); position: relative; overflow-x: hidden;
   }
   /* Same animated gradient field as blogs/newsletter so a 404 still feels like
      part of the product, not a server default. */
@@ -106,7 +109,7 @@
   .links a:hover { color: #9ec0ff; }
 
   .src-footer {
-    position: fixed; left: 0; right: 0; bottom: 0;
+    position: fixed; left: 0; right: 0; bottom: var(--consent-h, 0px);
     padding: .6rem 1rem; font-size: .62rem; line-height: 1.5;
     color: rgba(235,240,255,.4); text-align: center;
     background: linear-gradient(to top, rgba(5,6,12,.9), transparent);

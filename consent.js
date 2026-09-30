@@ -76,11 +76,31 @@
     reopen: function () { try { localStorage.removeItem(STORAGE_KEY); } catch (e) {} show(); }
   };
 
-  var el = null, lastFocus = null;
+  var el = null, lastFocus = null, sizeWatch = null;
+
+  // The banner is position:fixed and non-blocking, so on its own it sits ON TOP of
+  // whatever is at the bottom of the page — on chat.html that was the composer, so a
+  // first-time visitor could not reach Send after their first message. Publishing its
+  // height as --consent-h lets every layout reserve that much room instead. The
+  // variable is removed when the banner goes, so nothing is ever left reserved.
+  // ResizeObserver, not a one-off measure: the banner re-wraps on rotate / resize.
+  function reserveSpace(on) {
+    var root = document.documentElement;
+    if (!on) {
+      root.style.removeProperty('--consent-h');
+      if (sizeWatch) { sizeWatch.disconnect(); sizeWatch = null; }
+      return;
+    }
+    var publish = function () { if (el) root.style.setProperty('--consent-h', el.offsetHeight + 'px'); };
+    publish();
+    if ('ResizeObserver' in window) { sizeWatch = new ResizeObserver(publish); sizeWatch.observe(el); }
+    else addEventListener('resize', publish);   // ponytail: ancient-browser fallback, guarded by `if (el)` so it is inert once hidden
+  }
 
   function hide() {
     if (!el) return;
     el.remove(); el = null;
+    reserveSpace(false);
     if (lastFocus && lastFocus.focus) lastFocus.focus();
   }
 
@@ -118,6 +138,7 @@
     });
 
     document.body.appendChild(el);
+    reserveSpace(true);
     var first = el.querySelector('.ei-btn');
     if (first) first.focus();
   }

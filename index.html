@@ -155,7 +155,7 @@
      Toasts are injected into #toast-container (created on first use by
      showToast()) and slide in from the bottom-right. */
   .toast-container {
-    position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999;
+    position: fixed; bottom: calc(1.5rem + var(--consent-h, 0px)); right: 1.5rem; z-index: 9999;
     display: flex; flex-direction: column; gap: 0.6rem;
     pointer-events: none; /* let clicks pass through the empty container */
   }
@@ -716,7 +716,7 @@
      Appears after a screenful of scrolling. */
   .to-top {
     position: fixed; right: 1rem; z-index: 55;
-    bottom: 1.25rem;
+    bottom: calc(1.25rem + var(--consent-h, 0px));
     width: 40px; height: 40px; border-radius: 50%;
     display: grid; place-items: center; cursor: pointer;
     background: rgba(255,255,255,0.08); color: var(--text);

@@ -47,11 +47,16 @@
   ascent 762 vs descent 238), and `align-items: center` centres the box.
   Both steps must carry the translate or the dot bounces. */
   @keyframes pulse { 0%,100%{opacity:.5;transform:translateY(-0.1em) scale(1)} 50%{opacity:1;transform:translateY(-0.1em) scale(1.15)} }
-  html, body { height: 100%; }
+  /* html only — see 404.html: lets the body grow so the cookie banner's reserved
+     space actually extends the page. */
+  html { height: 100%; }
   body {
     font-family: 'DM Sans', sans-serif; color: #eef1f8; background: #05060c;
     min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    text-align: center; padding: 2rem; position: relative; overflow: hidden;
+    text-align: center; padding: 2rem 2rem calc(2rem + var(--consent-h, 0px)); position: relative;
+    /* was `overflow: hidden`, which also switched off vertical scrolling: on a short
+       window the page could not be scrolled to reach the Back link at all. */
+    overflow-x: hidden;
   }
   body::before {
     content: ''; position: fixed; inset: 0; z-index: -1;
@@ -94,7 +99,7 @@
   </footer>
   <style>
     .src-footer {
-      position: fixed; left: 0; right: 0; bottom: 0;
+      position: fixed; left: 0; right: 0; bottom: var(--consent-h, 0px);
       padding: .6rem 1rem; font-size: .62rem; line-height: 1.5;
       color: rgba(235,240,255,.4); text-align: center;
       background: linear-gradient(to top, rgba(5,6,12,.9), transparent);

@@ -4,7 +4,7 @@
 .ei-consent {
   position: fixed;
   left: 0; right: 0; bottom: 0;
-  z-index: 90;                 /* above the sticky mobile CTA (60) */
+  z-index: 90;
   background: rgba(8, 9, 16, 0.97);
   backdrop-filter: blur(14px);
   border-top: 1px solid rgba(255, 255, 255, 0.14);
@@ -12,6 +12,18 @@
   font-family: 'DM Sans', system-ui, sans-serif;
   animation: ei-consent-in 0.3s ease;
 }
+/* consent.js publishes the banner's height here (0 / unset when it is hidden).
+   Reserving it as bottom padding lets every page scroll its last content clear of
+   the banner instead of having it sit underneath. Fixed-position elements anchored
+   to the bottom add the same variable to their own offset (see each page).
+
+   :where() gives this ZERO specificity, on purpose. This file loads after each
+   page's own <style>, and a plain `body {}` here would beat a page's
+   `body { padding: … }` at equal specificity and silently delete its bottom
+   padding (404 reserves 5rem for its fixed footer). With :where(), any page that
+   sets its own body padding keeps it — and adds var(--consent-h) itself. */
+:where(body) { padding-bottom: var(--consent-h, 0px); }
+
 @keyframes ei-consent-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .ei-consent { animation: none; } }
 
