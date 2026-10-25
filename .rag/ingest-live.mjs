@@ -48,7 +48,9 @@ const BATCH_SIZE = 25;
 
 // Hard cap on the text embedded for ONE item. A few feeds syndicate entire
 // articles rather than a summary; without this, one of them sets the size of the
-// whole request. Stored `content` is NOT truncated — only the embedded text is.
+// whole request. Since RAG-04 a longer item is split into chunks of at most this
+// size by chunkItems(), so every stored row is also fully embedded — nothing
+// sits in `content` that its vector cannot see.
 const MAX_ITEM_CHARS = 2000;
 
 // Hard cap on the text in ONE embedding request. THE MODEL'S CONTEXT WINDOW IS
@@ -232,6 +234,46 @@ export function dedupeByTitle(items) {
   });
 }
 
+// Split items too long to embed whole into headline-prefixed chunks (RAG-04).
+//
+// A few feeds syndicate whole articles. Each used to be ONE row whose vector came
+// from its first MAX_ITEM_CHARS only, while the full text was stored and pasted
+// into the prompt — so the end of an article was unfindable, and the whole thing
+// crowded the answer's context when the start matched. Each chunk now fits the
+// embed cap exactly (headline + newline + piece <= MAX_ITEM_CHARS), with
+// CHUNK_OVERLAP characters repeated so a sentence cut at a boundary survives.
+//
+// Chunk 1 keeps the plain url and chunks 2..n get #2, #3… — findStored() checks
+// the plain url next run, so a chunked article is still recognised as stored
+// instead of being re-embedded every three hours.
+const CHUNK_OVERLAP = 200;
+export function chunkItems(items) {
+  return items.flatMap(it => {
+    const title = String(it.title || '');
+    const text = String(it.description || '');
+    if (`${title}\n${text}`.length <= MAX_ITEM_CHARS) return [it];
+    const budget = MAX_ITEM_CHARS - title.length - 1;
+    const words = text.split(/\s+/).filter(Boolean);
+    const pieces = [];
+    let start = 0;
+    while (start < words.length) {
+      let end = start, len = 0;
+      while (end < words.length && len + words[end].length + (end > start ? 1 : 0) <= budget) {
+        len += words[end].length + (end > start ? 1 : 0);
+        end++;
+      }
+      if (end === start) end = start + 1;              // one word longer than the budget
+      pieces.push(words.slice(start, end).join(' ').slice(0, budget));
+      if (end >= words.length) break;
+      // Step back far enough to repeat ~CHUNK_OVERLAP characters.
+      let back = end, kept = 0;
+      while (back > start + 1 && kept < CHUNK_OVERLAP) { back--; kept += words[back].length + 1; }
+      start = back;
+    }
+    return pieces.map((piece, i) => ({ ...it, description: piece, url: i === 0 ? it.url : `${it.url}#${i + 1}` }));
+  });
+}
+
 // Read a response body, giving up as soon as it passes maxBytes. The size check
 // used to come AFTER res.text(), i.e. after the whole body was already in memory,
 // so it could not stop the thing it existed to stop.
@@ -389,7 +431,9 @@ async function main() {
   const settled = await Promise.allSettled(feeds.map(collectFeed));
   // dedupeByTitle (RAG-09): one copy of a headline per run, from the
   // highest-priority feed that carried it.
-  const fresh = dedupeByTitle(settled.flatMap(s => (s.status === 'fulfilled' ? s.value : [])));
+  // chunkItems (RAG-04): full-article items become headline-prefixed chunks
+  // that each fit the embed cap, so every part of them is searchable.
+  const fresh = chunkItems(dedupeByTitle(settled.flatMap(s => (s.status === 'fulfilled' ? s.value : []))));
   console.log(`\n${fresh.length} new items to embed across ${feeds.length} feeds.`);
 
   // Embed + insert in batches: one embeddings call + one insert per BATCH_SIZE
