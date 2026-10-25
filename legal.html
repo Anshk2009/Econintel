@@ -123,7 +123,7 @@
 
 <main>
   <h1>Legal</h1>
-  <p class="updated">Last updated: 19 July 2026</p>
+  <p class="updated">Last updated: 26 October 2026</p>
 
   <div class="callout">
     <strong>EconIntel is not financial advice.</strong> Everything the service produces is
@@ -203,8 +203,7 @@
       <tr><td>Password</td><td>Stored only as an Argon2id hash. We never store or see your actual password.</td></tr>
       <tr><td>Conversation history</td><td>So you can reopen and continue past chats. Deletable by you.</td></tr>
       <tr><td>Plan and usage counters</td><td>To apply the limits of your plan and prevent abuse.</td></tr>
-      <tr><td>Hashed IP address</td><td>Rate limiting and abuse prevention. We store a one-way SHA-256 hash, not your raw IP.</td></tr>
-      <tr><td>Sign-in events</td><td>Security — spotting suspicious access. Stored against a hashed IP.</td></tr>
+      <tr><td>Hashed IP address</td><td>Rate limiting and abuse prevention. We store a SHA-256 hash of your IP address (for IPv6, of your network's /64 prefix), not the address itself. Rate-limit records about sign-in and password resets hold a hash of your email in the same way.</td></tr>
     </table>
     <p>If you sign in with Google or Discord, we receive your email address and basic profile from that provider. We do not receive your password with them.</p>
     <p>We do not currently run advertising trackers or third-party analytics on the site.</p>
@@ -214,21 +213,22 @@
       <tr><th>Provider</th><th>Role</th></tr>
       <tr><td>Tencent EdgeOne</td><td>Website hosting and CDN delivery.</td></tr>
       <tr><td>Supabase</td><td>Database — stores your account and conversation history.</td></tr>
-      <tr><td>OpenRouter / NVIDIA</td><td>AI model inference. <strong>The text of your questions is sent to these providers to generate a response.</strong></td></tr>
+      <tr><td>NVIDIA</td><td>AI model inference. <strong>The text of your questions is sent to NVIDIA to generate a response.</strong></td></tr>
       <tr><td>Google Fonts, unpkg, Cloudflare R2</td><td>Serve fonts, the 3D hero component, and images. These see your IP address as any web request does.</td></tr>
-      <tr><td>Have I Been Pwned</td><td>Checks new passwords against known breaches. Only the first five characters of a hash are sent — never your password.</td></tr>
+      <tr><td>Have I Been Pwned</td><td>Checks new and reset passwords against known breaches. Only the first five characters of a hash are sent — never your password.</td></tr>
     </table>
-    <p><strong>Do not put confidential, personal, or sensitive information into a chat message.</strong> Conversation content is sent to third-party AI providers and stored in our database.</p>
+    <p><strong>Do not put confidential, personal, or sensitive information into a chat message.</strong> Conversation content is sent to a third-party AI provider and stored in our database.</p>
 
     <h3>Cookies and local storage</h3>
     <p>See the <a href="#cookies">Cookie Policy</a> below.</p>
 
     <h3>How long we keep it</h3>
-    <p>Account data is kept while your account exists. Conversation history is kept until you delete it or close your account. Short-lived security records — session tokens, rate-limit counters — expire automatically, typically within 24 hours to 30 days.</p>
+    <p>Account data is kept while your account exists. Conversation history is kept until you delete it or close your account. Short-lived security records — session tokens, rate-limit counters — expire automatically, typically within 24 hours to 30 days, and an expired record is never used again. Deleting your account also deletes the security records that refer to you.</p>
 
     <h3>Your choices</h3>
     <ul>
       <li>Delete your conversation history from inside the product at any time.</li>
+      <li>Download a copy of your data, or delete your account and everything stored against it, from Settings in the chat.</li>
       <li>Request a copy of your data, a correction, or full account deletion by emailing <a href="mailto:econintelai@gmail.com">econintelai@gmail.com</a>. We aim to respond within 30 days.</li>
     </ul>
 
