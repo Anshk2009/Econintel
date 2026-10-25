@@ -7,9 +7,11 @@
 // for everyone. The per-minute guard is an anti-script measure — no human types
 // 30 questions a minute — so a finite cap costs a real customer nothing.
 import assert from 'node:assert/strict';
-import { makeFakeBackend, TEST_ENV, req, nvidiaStub, signIn } from './_fake-backend.mjs';
+import { makeFakeBackend, TEST_ENV, req, nvidiaStub, signIn, awaitFreshMinute } from './_fake-backend.mjs';
 
 const { onRequest } = await import('../functions/chat.js');
+// The cap is per clock-minute; don't let the burst straddle two windows.
+await awaitFreshMinute();
 
 const nv = nvidiaStub();
 const fb = makeFakeBackend({ external: nv.handler, rpc: { match_documents: () => [] } });
