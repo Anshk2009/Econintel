@@ -173,10 +173,10 @@ export async function onRequest(context) {
       // GET because this is a browser navigation (redirect flow), not a fetch.
       // Same URL handles both legs: no ?code= → send user to Discord;
       // with ?code= → Discord sent them back, finish the login.
-      return await handleOAuthDiscord(request, env, JWT_SECRET, ALLOWED_ORIGIN);
+      return await handleOAuth('discord', request, env, JWT_SECRET, ALLOWED_ORIGIN);
     } else if (action === 'oauth-google' && request.method === 'GET') {
       // Same two-leg redirect flow as Discord, but against Google's endpoints
-      return await handleOAuthGoogle(request, env, JWT_SECRET, ALLOWED_ORIGIN);
+      return await handleOAuth('google', request, env, JWT_SECRET, ALLOWED_ORIGIN);
     } else {
       return jsonResponse({ error: 'Endpoint not found' }, 404, ALLOWED_ORIGIN);
     }
@@ -1115,41 +1115,74 @@ async function claimOrTouchExistingUser(user) {
 }
 
 // ============================================================================
-// DISCORD OAUTH — "Continue with Discord" button
+// OAUTH — "Continue with Google" / "Continue with Discord"
 // ============================================================================
 
+// What differs between the two providers. Everything else — state handling,
+// token exchange, find-or-create, the claim of unverified rows, the session —
+// is one code path below (audit QA-02: these were two ~140-line copies).
+const OAUTH_PROVIDERS = {
+  discord: {
+    label: 'Discord',
+    clientId: (env) => env.DISCORD_CLIENT_ID,
+    clientSecret: (env) => env.DISCORD_CLIENT_SECRET,
+    authorizeUrl: 'https://discord.com/oauth2/authorize',
+    // identify = username; email = verified email
+    authorizeParams: '&scope=identify%20email',
+    tokenUrl: 'https://discord.com/api/oauth2/token',
+    userinfoUrl: 'https://discord.com/api/users/@me',
+    // We key accounts on email, so the provider must vouch for it.
+    emailVerified: (u) => u.verified === true,
+    usernameHint: (u) => u.username || 'user',
+  },
+  google: {
+    label: 'Google',
+    clientId: (env) => env.GOOGLE_CLIENT_ID,
+    clientSecret: (env) => env.GOOGLE_CLIENT_SECRET,
+    authorizeUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    // prompt=select_account: always show the account picker
+    authorizeParams: '&scope=openid%20email%20profile&prompt=select_account',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    // Google returns { email, email_verified, name, given_name, ... }
+    userinfoUrl: 'https://openidconnect.googleapis.com/v1/userinfo',
+    emailVerified: (u) => u.email_verified === true,
+    usernameHint: (u, email) => u.given_name || u.name || email.split('@')[0],
+  },
+};
+
 /**
- * GET /auth?action=oauth-discord
+ * GET /auth?action=oauth-<provider>
  *
  * One handler, two legs of the OAuth dance:
  *
- * Leg 1 (no ?code= param) — user clicked the Discord button:
+ * Leg 1 (no ?code= param) — the user clicked the button:
  *   Generate a random `state` (anti-CSRF), stash it in KV for 10 minutes,
- *   and redirect the browser to Discord's consent screen.
+ *   and redirect the browser to the provider's consent screen.
  *
- * Leg 2 (?code= and ?state= present) — Discord sent the user back:
+ * Leg 2 (?code= and ?state= present) — the provider sent the user back:
  *   Verify the state matches what WE issued (rejects forged callbacks),
  *   exchange the one-time code for an access token (server-side, secret
- *   never touches the browser), fetch the user's email from Discord,
- *   find-or-create the account, and set the same JWT cookies as a normal
- *   login. Then redirect to chat.html.
+ *   never touches the browser), fetch the user's email, find-or-create the
+ *   account, and set the same cookies as a normal login. Then go to chat.html.
  *
  * Errors redirect to /index.html?oauth_error=<code> instead of returning
  * JSON — this is a browser navigation, so the user needs a page, not data.
  */
-async function handleOAuthDiscord(request, env, jwtSecret, allowedOrigin) {
+async function handleOAuth(name, request, env, jwtSecret, allowedOrigin) {
+  const p = OAUTH_PROVIDERS[name];
   // ALLOWED_ORIGIN can be comma-separated; the first entry is the canonical
   // site URL — used to build the redirect_uri and post-login destination
   const base = allowedOrigin.split(',')[0].trim();
-  // Must match the redirect URI registered in the Discord developer portal
-  // character-for-character, or Discord rejects with "invalid redirect_uri"
-  const redirectUri = `${base}/auth?action=oauth-discord`;
+  // Must match the redirect URI registered with the provider
+  // character-for-character, or it rejects with "invalid redirect_uri"
+  const redirectUri = `${base}/auth?action=oauth-${name}`;
   // Helper: send the user somewhere with a 302 (browser navigation)
   const redirect = (to) => new Response(null, { status: 302, headers: { 'Location': to } });
+  const fail = (code) => redirect(`${base}/index.html?oauth_error=${code}`);
 
-  if (!env.DISCORD_CLIENT_ID || !env.DISCORD_CLIENT_SECRET) {
-    console.error('[auth] Discord OAuth env vars not configured');
-    return redirect(`${base}/index.html?oauth_error=not_configured`);
+  if (!p.clientId(env) || !p.clientSecret(env)) {
+    console.error(`[auth] ${p.label} OAuth env vars not configured`);
+    return fail('not_configured');
   }
 
   const url = new URL(request.url);
@@ -1158,22 +1191,21 @@ async function handleOAuthDiscord(request, env, jwtSecret, allowedOrigin) {
 
   // ── LEG 1: kick off the flow ──
   if (!code) {
-    // Discord can send back ?error=access_denied (user hit cancel) or
-    // ?error=redirect_uri_mismatch (Cloud Console misconfiguration).
-    // Without this check we'd loop back to Leg 1 forever and EdgeOne kills the function.
+    // The provider can send back ?error=access_denied (user hit cancel) or
+    // ?error=redirect_uri_mismatch (console misconfiguration). Without this
+    // check we'd loop back to Leg 1 forever and EdgeOne kills the function.
     const providerError = url.searchParams.get('error');
-    if (providerError) {
-      return redirect(`${base}/index.html?oauth_error=${providerError === 'access_denied' ? 'denied' : 'exchange_failed'}`);
-    }
+    if (providerError) return fail(providerError === 'access_denied' ? 'denied' : 'exchange_failed');
+
     const newState = generateId();
     // 10-minute window to complete the consent screen
-    await TOKENS.put(`oauth:state:${newState}`, 'discord', { expirationTtl: 600 });
+    await TOKENS.put(`oauth:state:${newState}`, name, { expirationTtl: 600 });
     const authorizeUrl =
-      'https://discord.com/oauth2/authorize' +
-      `?client_id=${env.DISCORD_CLIENT_ID}` +
+      p.authorizeUrl +
+      `?client_id=${p.clientId(env)}` +
       `&redirect_uri=${encodeURIComponent(redirectUri)}` +
       '&response_type=code' +
-      '&scope=identify%20email' +   // identify = username; email = verified email
+      p.authorizeParams +
       `&state=${newState}`;
     // SECURITY (M6): also pin the state to THIS browser via a short-lived cookie.
     // On callback we require this cookie to equal the ?state= param, so an attacker
@@ -1186,7 +1218,7 @@ async function handleOAuthDiscord(request, env, jwtSecret, allowedOrigin) {
     return new Response(null, { status: 302, headers: leg1Headers });
   }
 
-  // ── LEG 2: Discord called back ──
+  // ── LEG 2: the provider called back ──
   try {
     // State check: the value must (a) exist in KV — proving WE started the flow —
     // AND (b) match the oauth_state cookie set on leg 1 — proving it's the SAME
@@ -1194,19 +1226,17 @@ async function handleOAuthDiscord(request, env, jwtSecret, allowedOrigin) {
     // the callback was forged, replayed in another browser, or expired.
     const cookieState = parseCookies(request).oauth_state;
     const stateValid = state && cookieState && state === cookieState && await TOKENS.get(`oauth:state:${state}`);
-    if (!stateValid) {
-      return redirect(`${base}/index.html?oauth_error=bad_state`);
-    }
+    if (!stateValid) return fail('bad_state');
     await TOKENS.delete(`oauth:state:${state}`); // single-use
 
     // Exchange the one-time code for an access token.
     // This happens server-to-server — the client secret never leaves here.
-    const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
+    const tokenRes = await fetch(p.tokenUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        client_id: env.DISCORD_CLIENT_ID,
-        client_secret: env.DISCORD_CLIENT_SECRET,
+        client_id: p.clientId(env),
+        client_secret: p.clientSecret(env),
         grant_type: 'authorization_code',
         code,
         redirect_uri: redirectUri,
@@ -1215,30 +1245,28 @@ async function handleOAuthDiscord(request, env, jwtSecret, allowedOrigin) {
     const tokenData = await tokenRes.json();
     if (!tokenData.access_token) {
       // SECURITY (L1): log only the error string, never the full token payload.
-      console.error('[auth] Discord token exchange failed:', tokenData?.error || 'unknown error');
-      return redirect(`${base}/index.html?oauth_error=exchange_failed`);
+      console.error(`[auth] ${p.label} token exchange failed:`, tokenData?.error || 'unknown error');
+      return fail('exchange_failed');
     }
 
-    // Ask Discord who this user is
-    const userRes = await fetch('https://discord.com/api/users/@me', {
+    // Ask the provider who this user is
+    const userRes = await fetch(p.userinfoUrl, {
       headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
     });
-    const discordUser = await userRes.json();
+    const profile = await userRes.json();
 
     // We key accounts on email, so an unverified/missing email is a no-go —
     // otherwise someone could claim an email they don't own
-    if (!discordUser.email || discordUser.verified !== true) {
-      return redirect(`${base}/index.html?oauth_error=no_verified_email`);
-    }
-    const email = discordUser.email.toLowerCase().trim();
+    if (!profile.email || !p.emailVerified(profile)) return fail('no_verified_email');
+    const email = profile.email.toLowerCase().trim();
 
     // Find existing account by email, or create a new one
     const { data: existingUsers } = await supabaseRest('users', 'GET', `email=eq.${encodeURIComponent(email)}`);
     let user = existingUsers?.[0] || null;
 
     if (!user) {
-      // Build a username from the Discord handle: keep only allowed chars
-      let username = (discordUser.username || 'user')
+      // Username from the provider's name/handle: keep only allowed chars
+      let username = String(p.usernameHint(profile, email))
         .replace(/[^a-zA-Z0-9_]/g, '')
         .slice(0, 20) || 'user';
       // If that username is taken, append part of a random id to make it unique
@@ -1257,12 +1285,12 @@ async function handleOAuthDiscord(request, env, jwtSecret, allowedOrigin) {
         plan: 'free',
         token_version: 1,
         created_at: now,
-        email_verified_at: now, // Discord already verified this email
+        email_verified_at: now, // the provider already verified this email
       };
       const { error: insertError } = await supabaseRest('users', 'POST', '', user);
       if (insertError) {
-        console.error('[auth] Discord OAuth user insert failed:', insertError);
-        return redirect(`${base}/index.html?oauth_error=signup_failed`);
+        console.error(`[auth] ${p.label} OAuth user insert failed:`, insertError);
+        return fail('signup_failed');
       }
     } else {
       // Existing account — claim it if its email was never verified (SEC-01),
@@ -1280,152 +1308,8 @@ async function handleOAuthDiscord(request, env, jwtSecret, allowedOrigin) {
     oauthHeaders.append('Set-Cookie', `oauth_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
     return new Response(null, { status: 302, headers: oauthHeaders });
   } catch (err) {
-    console.error('[auth] Discord OAuth error:', err);
-    return redirect(`${base}/index.html?oauth_error=server_error`);
-  }
-}
-
-// ============================================================================
-// GOOGLE OAUTH — "Continue with Google" button
-// ============================================================================
-
-/**
- * GET /auth?action=oauth-google
- *
- * Identical structure to handleOAuthDiscord — see the comments there for the
- * full explanation of the two-leg flow. Only the endpoints and the shape of
- * the user-info response differ:
- *   consent screen:  accounts.google.com/o/oauth2/v2/auth
- *   token exchange:  oauth2.googleapis.com/token
- *   user info:       openidconnect.googleapis.com/v1/userinfo
- */
-async function handleOAuthGoogle(request, env, jwtSecret, allowedOrigin) {
-  const base = allowedOrigin.split(',')[0].trim();
-  // Must match the "Authorized redirect URI" in Google Cloud Console exactly
-  const redirectUri = `${base}/auth?action=oauth-google`;
-  const redirect = (to) => new Response(null, { status: 302, headers: { 'Location': to } });
-
-  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
-    console.error('[auth] Google OAuth env vars not configured');
-    return redirect(`${base}/index.html?oauth_error=not_configured`);
-  }
-
-  const url = new URL(request.url);
-  const code = url.searchParams.get('code');
-  const state = url.searchParams.get('state');
-
-  // ── LEG 1: send the user to Google's consent screen ──
-  if (!code) {
-    // Google sends ?error=access_denied or ?error=redirect_uri_mismatch on failure.
-    // Without this check we loop straight back to Leg 1 infinitely.
-    const providerError = url.searchParams.get('error');
-    if (providerError) {
-      return redirect(`${base}/index.html?oauth_error=${providerError === 'access_denied' ? 'denied' : 'exchange_failed'}`);
-    }
-    const newState = generateId();
-    await TOKENS.put(`oauth:state:${newState}`, 'google', { expirationTtl: 600 });
-    const authorizeUrl =
-      'https://accounts.google.com/o/oauth2/v2/auth' +
-      `?client_id=${env.GOOGLE_CLIENT_ID}` +
-      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-      '&response_type=code' +
-      '&scope=openid%20email%20profile' +
-      '&prompt=select_account' +    // always show the account picker
-      `&state=${newState}`;
-    // SECURITY (M6): pin the state to this browser with a short-lived cookie (see
-    // the Discord handler for the full rationale — prevents OAuth login-CSRF).
-    const leg1Headers = new Headers({ 'Location': authorizeUrl });
-    leg1Headers.append('Set-Cookie', `oauth_state=${newState}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`);
-    return new Response(null, { status: 302, headers: leg1Headers });
-  }
-
-  // ── LEG 2: Google called back ──
-  try {
-    // Require the KV state AND a matching oauth_state cookie from this browser
-    // (M6, anti login-CSRF — see the Discord handler).
-    const cookieState = parseCookies(request).oauth_state;
-    const stateValid = state && cookieState && state === cookieState && await TOKENS.get(`oauth:state:${state}`);
-    if (!stateValid) {
-      return redirect(`${base}/index.html?oauth_error=bad_state`);
-    }
-    await TOKENS.delete(`oauth:state:${state}`); // single-use
-
-    // Exchange the one-time code for an access token (server-to-server)
-    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: env.GOOGLE_CLIENT_ID,
-        client_secret: env.GOOGLE_CLIENT_SECRET,
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: redirectUri,
-      }).toString(),
-    });
-    const tokenData = await tokenRes.json();
-    if (!tokenData.access_token) {
-      // SECURITY (L1): log only the error string, never the full token payload.
-      console.error('[auth] Google token exchange failed:', tokenData?.error || 'unknown error');
-      return redirect(`${base}/index.html?oauth_error=exchange_failed`);
-    }
-
-    // Who is this? Google returns { email, email_verified, name, given_name, ... }
-    const userRes = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
-      headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
-    });
-    const googleUser = await userRes.json();
-
-    if (!googleUser.email || googleUser.email_verified !== true) {
-      return redirect(`${base}/index.html?oauth_error=no_verified_email`);
-    }
-    const email = googleUser.email.toLowerCase().trim();
-
-    // Find existing account by email, or create a new one
-    const { data: existingUsers } = await supabaseRest('users', 'GET', `email=eq.${encodeURIComponent(email)}`);
-    let user = existingUsers?.[0] || null;
-
-    if (!user) {
-      // Username from their Google name, falling back to the email local part
-      let username = (googleUser.given_name || googleUser.name || email.split('@')[0])
-        .replace(/[^a-zA-Z0-9_]/g, '')
-        .slice(0, 20) || 'user';
-      const { data: clash } = await supabaseRest('users', 'GET', `username=eq.${encodeURIComponent(username)}&select=id`);
-      if (clash?.length) username = `${username}_${generateId().slice(0, 4)}`;
-
-      const now = new Date().toISOString();
-      user = {
-        id: generateId(),
-        email,
-        username,
-        // No password for OAuth accounts — random unusable hash (see Discord handler)
-        password_hash: await hashPassword(generateId() + generateId()),
-        plan: 'free',
-        token_version: 1,
-        created_at: now,
-        email_verified_at: now, // Google already verified this email
-      };
-      const { error: insertError } = await supabaseRest('users', 'POST', '', user);
-      if (insertError) {
-        console.error('[auth] Google OAuth user insert failed:', insertError);
-        return redirect(`${base}/index.html?oauth_error=signup_failed`);
-      }
-    } else {
-      // Existing account — claim it if never verified (SEC-01, see the helper).
-      await claimOrTouchExistingUser(user);
-    }
-
-    // Issue the exact same session as a password login, then 302 to chat.
-    // ?oauth=1 tells chat.html to call the refresh endpoint on load, which
-    // returns the user data it needs for localStorage (the cookies themselves
-    // are HttpOnly — JS can't read them).
-    const oauthHeaders = new Headers({ 'Location': `${base}/chat.html?oauth=1` });
-    await issueSession(user, jwtSecret, oauthHeaders);
-    // M6: the login is complete — clear the single-use OAuth state cookie.
-    oauthHeaders.append('Set-Cookie', `oauth_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
-    return new Response(null, { status: 302, headers: oauthHeaders });
-  } catch (err) {
-    console.error('[auth] Google OAuth error:', err);
-    return redirect(`${base}/index.html?oauth_error=server_error`);
+    console.error(`[auth] ${p.label} OAuth error:`, err);
+    return fail('server_error');
   }
 }
 
