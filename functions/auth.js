@@ -19,7 +19,7 @@ import {
   makeSupabase,
   getToken,
   parseCookies,
-  getClientIP, resolveSupabaseKey, corsOrigin } from './middleware.js';
+  getClientIP, resolveSupabaseKey, corsOrigin, hashIP } from './middleware.js';
 
 // Rate limiting thresholds
 const RATE_LIMITS = {
@@ -37,6 +37,16 @@ const RATE_LIMITS = {
   resetAttemptsIP: { max: 5, window: 3600 },
 };
 
+
+// What goes into a rate-limit KEY in place of an IP or an email (audit SEC-08).
+// legal.html promises IPs are stored only as a SHA-256 hash; chat.js kept that
+// promise and these keys did not (rl:login:email:<email>:<ip> and friends), so
+// a dump of kv_store read as a list of who signed in from where. hashIP() is the
+// same SHA-256 chat.js uses; the name it has here says what it is for.
+// ponytail: unsalted — enough for the promise as written, not against someone
+// who brute-forces the IPv4 space. Upgrade path: an HMAC with a server-held
+// pepper (needs a new EdgeOne secret).
+const piiKey = (value) => hashIP(String(value));
 
 // Count THIS attempt and report whether it is over the limit (audit SEC-02).
 //
@@ -149,8 +159,8 @@ export async function onRequest(context) {
  * Returns: { userId: string, jwt: string, message: string }
  */
 async function handleSignup(request, env, jwtSecret, allowedOrigin) {
-  const clientIP = getClientIP(request);
-  const ipKey = `rl:signup:${clientIP}`;
+  // Hashed, never raw, in the key (SEC-08) — see piiKey().
+  const ipKey = `rl:signup:${await piiKey(getClientIP(request))}`;
 
   // IP-based signup rate limit: 3 new accounts per IP per hour.
   // Prevents mass account creation / spam without blocking legitimate users.
@@ -304,7 +314,8 @@ async function handleSignup(request, env, jwtSecret, allowedOrigin) {
  * Returns: { userId: string, jwt: string, username: string, email: string }
  */
 async function handleLogin(request, env, jwtSecret, allowedOrigin) {
-  const clientIP = getClientIP(request);
+  // clientIP is the HASH of the rate-limit bucket (SEC-08) — see piiKey().
+  const clientIP = await piiKey(getClientIP(request));
   const ipKey = `rl:login:ip:${clientIP}`;
 
   // Per-IP attempts, successful or not (20/hour). Counted atomically (SEC-02).
@@ -337,8 +348,9 @@ async function handleLogin(request, env, jwtSecret, allowedOrigin) {
   // Each ATTEMPT takes a slot before the password is compared (atomic, SEC-02),
   // so a parallel burst cannot reach comparePassword more than `max` times. A
   // successful login clears emailKey below, so a few typos do not linger.
-  const emailKey = `rl:login:email:${normalizedEmail}:${clientIP}`;
-  const accountKey = `rl:login:account:${normalizedEmail}`;
+  const emailHash = await piiKey(normalizedEmail);
+  const emailKey = `rl:login:email:${emailHash}:${clientIP}`;
+  const accountKey = `rl:login:account:${emailHash}`;
   const emailLimit = await hitRateLimit(TOKENS, emailKey, RATE_LIMITS.failedLogin.max, RATE_LIMITS.failedLogin.window);
   const accountLimit = await hitRateLimit(TOKENS, accountKey, RATE_LIMITS.failedLoginAccount.max, RATE_LIMITS.failedLoginAccount.window);
   if (emailLimit.limited || accountLimit.limited) {
@@ -676,8 +688,9 @@ async function handleDeleteAccount(request, env, jwtSecret, allowedOrigin) {
     // SECURITY (SEC-15): erase every kv_store row that still names this person.
     // The cascade only reaches chat_history; kv_store has no foreign key, so
     // their email sat on in rate-limit keys and their userId in chat counters
-    // and in every OTHER device's refresh/CSRF rows. Email patterns are anchored
-    // on ':' so 'a@x.com' cannot also match 'ba@x.com'. Best-effort: the account
+    // and in every OTHER device's refresh/CSRF rows. Rate-limit keys hold the
+    // HASH of the email (SEC-08), so that is what is matched; anchored on ':' so
+    // one hash can never match inside another key. Best-effort: the account
     // itself is already gone, so a failure here is logged, not returned.
     const like = (col, pattern) => `${col}=like.${encodeURIComponent(pattern)}`;
     const email = String(payload.email || '').toLowerCase();
@@ -685,7 +698,10 @@ async function handleDeleteAccount(request, env, jwtSecret, allowedOrigin) {
       like('key', `*${userId}*`),        // chat:rl:auth:{min,user}:<userId>:…
       like('value', `*${userId}*`),      // refresh:/csrf:/reset: rows owned by them
     ];
-    if (email) cleanups.push(like('key', `*:${email}`), like('key', `*:${email}:*`));
+    if (email) {
+      const emailHash = await piiKey(email);
+      cleanups.push(like('key', `*:${emailHash}`), like('key', `*:${emailHash}:*`));
+    }
     for (const filter of cleanups) {
       const { error } = await supabaseRest('kv_store', 'DELETE', filter);
       if (error) console.warn('[auth] kv_store cleanup after account delete failed:', error);
@@ -734,11 +750,11 @@ async function handleResetPasswordRequest(request, env, allowedOrigin) {
 
   // Counted atomically up front, whether or not the account exists (SEC-02):
   // per network first (SEC-12 — the email is attacker-chosen), then per email.
-  const ipLimit = await hitRateLimit(TOKENS, `rl:reset:ip:${getClientIP(request)}`, RATE_LIMITS.resetAttemptsIP.max, RATE_LIMITS.resetAttemptsIP.window);
+  const ipLimit = await hitRateLimit(TOKENS, `rl:reset:ip:${await piiKey(getClientIP(request))}`, RATE_LIMITS.resetAttemptsIP.max, RATE_LIMITS.resetAttemptsIP.window);
   if (ipLimit.limited) {
     return jsonResponse({ error: 'Too many reset attempts. Try again later.' }, 429, allowedOrigin, { 'Retry-After': String(ipLimit.retryAfter) });
   }
-  const emailKey = `rl:reset:${normalizedEmail}`;
+  const emailKey = `rl:reset:${await piiKey(normalizedEmail)}`;
   const resetLimit = await hitRateLimit(TOKENS, emailKey, RATE_LIMITS.resetAttempts.max, RATE_LIMITS.resetAttempts.window);
   if (resetLimit.limited) {
     return jsonResponse({ error: 'Too many reset attempts. Try again later.' }, 429, allowedOrigin, { 'Retry-After': String(resetLimit.retryAfter) });

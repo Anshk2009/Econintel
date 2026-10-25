@@ -9,6 +9,7 @@
 // Under the DPDP Act erasure means the data, not just the profile row.
 import assert from 'node:assert/strict';
 import { makeFakeBackend, TEST_ENV, req, setCookies } from './_fake-backend.mjs';
+import { hashIP } from '../functions/middleware.js';
 
 const { onRequest } = await import('../functions/auth.js');
 const hibp = async (url) => (url.hostname === 'api.pwnedpasswords.com' ? new Response('') : null);
@@ -39,7 +40,9 @@ const del = await call('/auth?action=delete-account', { method: 'POST',
 assert.equal(del.status, 200, `delete-account failed (${del.status})`);
 assert.equal(fb.tables.users.length, 0, 'users row survived');
 
-const left = fb.tables.kv_store.filter(r => r.key.includes(EMAIL) || r.key.includes(userId) || r.value.includes(userId));
+// Rate-limit keys hold the email's HASH since SEC-08, so look for both forms.
+const emailHash = await hashIP(EMAIL);
+const left = fb.tables.kv_store.filter(r => r.key.includes(EMAIL) || r.key.includes(emailHash) || r.key.includes(userId) || r.value.includes(userId));
 assert.deepEqual(left.map(r => r.key), [], 'kv_store still holds rows naming the deleted account');
 assert.ok(fb.tables.kv_store.some(r => r.key === 'rl:login:account:someone@else.com'), "another user's row was deleted");
 
