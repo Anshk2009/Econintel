@@ -79,7 +79,7 @@ const MAX_EMBED_REQUESTS_PER_RUN = EMBED_BUDGET;
 
 // Read one RSS/XML feed and pull out its items as {title, url, description, date}.
 // This is a lightweight regex parser — good enough for standard RSS, no library.
-function parseRss(xml) {
+export function parseRss(xml) {
   const items = [];
   // Each news entry sits inside <item>...</item> (RSS) or <entry>...</entry> (Atom).
   const blocks = xml.match(/<(item|entry)[\s\S]*?<\/(item|entry)>/g) || [];
@@ -102,9 +102,14 @@ function pick(block, tag) {
 }
 
 // Links differ between RSS (<link>url</link>) and Atom (<link href="url"/>).
+// The RSS form is unwrapped from CDATA exactly like pick() does. It was not,
+// and six feeds (both Fed feeds, LiveMint, The Hindu x2, BusinessLine) wrap
+// their links — so ~135 items a run were stored with
+// source_url = "<![CDATA[https://...]]>", a citation nothing could link.
 function pickLink(block) {
   const rss = block.match(/<link[^>]*>([\s\S]*?)<\/link>/i);
-  if (rss && rss[1].trim()) return rss[1].trim();
+  const inner = rss ? rss[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').trim() : '';
+  if (inner) return inner;
   const atom = block.match(/<link[^>]*href="([^"]+)"/i);
   return atom ? atom[1] : '';
 }
