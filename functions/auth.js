@@ -32,6 +32,9 @@ const RATE_LIMITS = {
   loginAttempts: { max: 20, window: 3600 },
   signupAttempts: { max: 3, window: 3600 },
   resetAttempts: { max: 3, window: 3600 },
+  // Per NETWORK (SEC-12): resetAttempts above is per email, and the email is
+  // whatever the caller types — one client could walk a list of addresses.
+  resetAttemptsIP: { max: 5, window: 3600 },
 };
 
 
@@ -711,8 +714,13 @@ async function handleResetPasswordRequest(request, env, allowedOrigin) {
     return jsonResponse({ error: 'Missing email' }, 400, allowedOrigin);
   }
 
+  // Counted atomically up front, whether or not the account exists (SEC-02):
+  // per network first (SEC-12 — the email is attacker-chosen), then per email.
+  const ipLimit = await hitRateLimit(TOKENS, `rl:reset:ip:${getClientIP(request)}`, RATE_LIMITS.resetAttemptsIP.max, RATE_LIMITS.resetAttemptsIP.window);
+  if (ipLimit.limited) {
+    return jsonResponse({ error: 'Too many reset attempts. Try again later.' }, 429, allowedOrigin, { 'Retry-After': String(ipLimit.retryAfter) });
+  }
   const emailKey = `rl:reset:${normalizedEmail}`;
-  // Counted atomically up front, whether or not the account exists (SEC-02).
   const resetLimit = await hitRateLimit(TOKENS, emailKey, RATE_LIMITS.resetAttempts.max, RATE_LIMITS.resetAttempts.window);
   if (resetLimit.limited) {
     return jsonResponse({ error: 'Too many reset attempts. Try again later.' }, 429, allowedOrigin, { 'Retry-After': String(resetLimit.retryAfter) });
@@ -822,8 +830,20 @@ async function handleVerifyReset(request, env, jwtSecret, allowedOrigin) {
     return jsonResponse({ error: 'Missing resetToken or newPassword' }, 400, allowedOrigin);
   }
 
-  if (newPassword.length < 12 || newPassword.length > 128) {
+  if (typeof newPassword !== 'string' || newPassword.length < 12 || newPassword.length > 128) {
     return jsonResponse({ error: 'Password must be 12-128 characters' }, 400, allowedOrigin);
+  }
+
+  // SECURITY (SEC-12): same breached-password check as signup. Without it the
+  // reset flow was a way to set a password signup would have refused. Checked
+  // before the token is touched, so a refused password does not burn the link.
+  // Fails open like signup (HIBP being down must not block a reset).
+  try {
+    if (await checkHaveIBeenPwned(newPassword)) {
+      return jsonResponse({ error: 'Password has been compromised in known breaches. Please choose a different password.' }, 400, allowedOrigin);
+    }
+  } catch (err) {
+    console.warn('[auth] HaveIBeenPwned check failed on reset:', err);
   }
 
   try {
