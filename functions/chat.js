@@ -50,6 +50,29 @@ export function stripUnlistedLinks(text, allowedUrls) {
   return text.replace(MD_LINK, (whole, label, url) => (allowedUrls.has(url) ? whole : label));
 }
 
+// VERBATIM MONITOR (audit RAG-07). Length of the longest run of consecutive
+// words an answer shares with any of `texts`, ignoring case and punctuation.
+// ponytail: O(answer x source) word DP — ~700 x 350 x 6 sources, trivial at
+// these sizes; switch to rolling hashes if answers or sources grow 10x.
+const VERBATIM_WORDS = 25;
+const wordsOf = (t) => String(t || '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+export function longestVerbatimRun(answer, texts) {
+  const a = wordsOf(answer);
+  let best = 0;
+  for (const t of texts) {
+    const b = wordsOf(t);
+    let prev = new Array(b.length + 1).fill(0);
+    for (let i = 1; i <= a.length; i++) {
+      const cur = new Array(b.length + 1).fill(0);
+      for (let j = 1; j <= b.length; j++) {
+        if (a[i - 1] === b[j - 1]) { cur[j] = prev[j - 1] + 1; if (cur[j] > best) best = cur[j]; }
+      }
+      prev = cur;
+    }
+  }
+  return best;
+}
+
 // NVIDIA's build.nvidia.com endpoint (OpenAI-compatible SSE). The models used
 // here are FREE endpoints, rate-limited to 40 requests/minute and 10,000
 // requests/day per key — measured from the model pages, not guessed. Those two
@@ -292,8 +315,8 @@ export async function onRequest(context) {
     // a miss and the answer looked identical either way. The caller now shows a
     // notice on `failed`, which is the only honest signal a product selling
     // source-grounding can give when its grounding is not actually there.
-    const EMPTY  = { sources: '', failed: false, urls: [] };
-    const FAILED = { sources: '', failed: true, urls: [] };
+    const EMPTY  = { sources: '', failed: false, urls: [], texts: [] };
+    const FAILED = { sources: '', failed: true, urls: [], texts: [] };
     // 1. Embed the question (text -> a list of 2048 numbers) via NVIDIA.
     let queryEmbedding;
     try {
@@ -410,7 +433,10 @@ ${clip(c.content)}`;
       .join('\n\n');
     // The URLs are the citation allowlist (SEC-03): the only links the answer may carry.
     const urls = [...new Set(chunks.map(c => c.source_url).filter(u => typeof u === 'string' && /^https?:\/\//.test(u)))];
-    return { sources, failed: false, urls };
+    // texts = what the model was actually shown, per source, for the verbatim
+    // check after the answer (RAG-07).
+    const texts = chunks.map(c => ({ name: c.source_name, text: clip(c.content) }));
+    return { sources, failed: false, urls, texts };
   }
 
   // CORS preflight
@@ -662,6 +688,8 @@ ${clip(c.content)}`;
   let retrievalFailed = false;
   // Every URL retrieved for this answer — the only links it may contain (SEC-03).
   let allowedUrls = [];
+  // The text of each retrieved source, for the verbatim check (RAG-07).
+  let retrievedTexts = [];
   let upstream;
   try {
     // RAG: fetch relevant sources for the latest question and prepend them to
@@ -680,7 +708,8 @@ ${clip(c.content)}`;
       const askedTurns = sanitizedMessages.filter(m => m.role === 'user' && !m.content.startsWith('[ARTICLE CONTEXT'));
       const previousQuestion = askedTurns.length > 1 ? askedTurns[askedTurns.length - 2].content.slice(0, 300) : '';
       const embedText = previousQuestion ? `${previousQuestion}\n${latestUserMsg.content}` : latestUserMsg.content;
-      const { sources, failed, urls } = await retrieveContext(embedText, latestUserMsg.content);
+      const { sources, failed, urls, texts } = await retrieveContext(embedText, latestUserMsg.content);
+      retrievedTexts = texts;
       mark('rag');   // embed + match_documents done
       retrievalFailed = failed;
       allowedUrls = urls;
@@ -834,13 +863,9 @@ RETRIEVAL UNAVAILABLE: the source library could not be reached for this question
   // shows as plain text. Sent even when empty — "no sources" means "no links".
   const streamBody = prependEvent(withNotice, { econintel_allowed_urls: allowedUrls });
 
-  // Guests: pipe the SSE stream straight through — no history to save
-  if (userId.startsWith('guest:')) {
-    return new Response(streamBody, { status: 200, headers: sseHeaders });
-  }
-
-  // Authenticated users: pipe SSE to client AND accumulate the full response
-  // text for saving to chat_history once the stream ends.
+  // Every stream (guests included) is piped to the client AND accumulated, so
+  // the verbatim check (RAG-07) sees every answer. Only signed-in users' text
+  // is saved to chat_history — guests have no history.
   // TransformStream passes every raw chunk through unchanged (client sees all
   // SSE events) while also parsing each chunk to extract the assistant delta.
   // flush() runs after the last chunk — saves both messages to the DB.
@@ -869,6 +894,13 @@ RETRIEVAL UNAVAILABLE: the source library could not be reached for this question
     },
 
     async flush() {
+      // RAG-07: report an answer that copies a source at length. The prompt
+      // forbids it; this is how we find out when the model did it anyway.
+      for (const { name, text } of retrievedTexts) {
+        const run = longestVerbatimRun(fullContent, [text]);
+        if (run > VERBATIM_WORDS) console.warn(`[chat] verbatim reproduction: ${run} words copied from "${name}"`);
+      }
+      if (userId.startsWith('guest:')) return;   // guests: nothing to save
       // Stream finished — persist to chat_history.
       try {
         // conversation_id groups the user+assistant rows into one thread so the
