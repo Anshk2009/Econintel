@@ -207,10 +207,12 @@ export async function verifyJWT(token, secret, options = {}) {
       return null; // Invalid algorithm or type
     }
 
-    // Check expiry
+    // Check expiry. SECURITY (SEC-18): exp is REQUIRED. This used to be
+    // `payload.exp && payload.exp < now`, so a signed token with no exp claim
+    // never expired. generateJWT always sets one; refuse anything that lacks it.
     const now = Math.floor(Date.now() / 1000);
-    if (payload.exp && payload.exp < now) {
-      return null; // Token expired
+    if (typeof payload.exp !== 'number' || payload.exp < now) {
+      return null; // Token expired, or carries no expiry at all
     }
 
     // Check token blacklist (for logged-out tokens)
