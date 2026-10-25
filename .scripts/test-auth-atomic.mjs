@@ -35,29 +35,32 @@ function backend() {
 // ── 1. Login: 20 parallel wrong guesses from one IP — only 5 get a real check ──
 {
   backend();
-  await call('/auth?action=signup', { method: 'POST', body: { email: 'v@example.com', password: 'a long enough password', username: 'v' }, ip: '192.0.2.1' });
+  await call('/auth?action=signup', { method: 'POST', body: { email: 'v@example.com', password: 'a long enough password', username: 'victim' }, ip: '192.0.2.1' });
   const rs = await Promise.all(Array.from({ length: 20 }, () =>
     call('/auth?action=login', { method: 'POST', body: { email: 'v@example.com', password: 'wrong guess here' }, ip: '192.0.2.66' })));
   const checked = rs.filter(r => r.status === 401).length;
   assert.ok(checked <= 5, `a parallel burst got ${checked} password checks past a 5-per-IP lockout`);
+  assert.ok(checked >= 1, 'no password check ran at all — the test is not exercising login');
 }
 
 // ── 2. Signup: 10 parallel signups from one IP — at most 3 accounts ────────
 {
   const fb = backend();
   await Promise.all(Array.from({ length: 10 }, (_, i) =>
-    call('/auth?action=signup', { method: 'POST', body: { email: `s${i}@example.com`, password: 'a long enough password', username: `s${i}` }, ip: '192.0.2.77' })));
+    call('/auth?action=signup', { method: 'POST', body: { email: `s${i}@example.com`, password: 'a long enough password', username: `signup${i}` }, ip: '192.0.2.77' })));
   assert.ok(fb.tables.users.length <= 3, `a parallel burst created ${fb.tables.users.length} accounts past a 3/hour/IP limit`);
+  assert.ok(fb.tables.users.length >= 1, 'no signup succeeded at all — the test is not exercising signup');
 }
 
 // ── 3. Reset requests: 10 parallel for one email — at most 3 tokens issued ──
 {
   const fb = backend();
-  await call('/auth?action=signup', { method: 'POST', body: { email: 'r@example.com', password: 'a long enough password', username: 'r' }, ip: '192.0.2.2' });
+  await call('/auth?action=signup', { method: 'POST', body: { email: 'r@example.com', password: 'a long enough password', username: 'resetter' }, ip: '192.0.2.2' });
   await Promise.all(Array.from({ length: 10 }, () =>
     call('/auth?action=reset-password', { method: 'POST', body: { email: 'r@example.com' }, ip: '192.0.2.88' })));
   const tokens = fb.tables.kv_store.filter(r => r.key.startsWith('reset:')).length;
   assert.ok(tokens <= 3, `a parallel burst issued ${tokens} reset tokens past a 3/hour limit`);
+  assert.ok(tokens >= 1, 'no reset token was issued at all — the account was probably never created');
 }
 
 console.log('auth atomic limits: OK');
