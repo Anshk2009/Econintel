@@ -1057,6 +1057,49 @@ async function handleRefreshToken(request, env, jwtSecret, allowedOrigin) {
 }
 
 // ============================================================================
+// OAUTH ONTO AN EXISTING ACCOUNT — claim it if its email was never verified
+// ============================================================================
+
+/**
+ * Called when an OAuth login matches an EXISTING users row by email.
+ *
+ * SECURITY (SEC-01, pre-account hijacking). Password signup never verifies the
+ * email, so anyone can create an account for victim@gmail.com with a password
+ * they choose. When the real owner later signs in with Google/Discord we used
+ * to log them straight into that row — leaving the squatter holding a working
+ * password to an account the victim now uses.
+ *
+ * The provider has verified the email, so the person signing in now is the
+ * owner. If the row was never verified, the owner CLAIMS it:
+ *   - password_hash -> an unguessable random hash (the squatter's password dies;
+ *                      the owner can set one later via reset-password)
+ *   - token_version -> +1 (every access + refresh token issued before now dies,
+ *                      see verifyJWT's dbCheck and handleRefreshToken)
+ *   - email_verified_at -> now (so the next OAuth login is an ordinary one)
+ * A row that is ALREADY verified is left alone apart from last_login_at.
+ *
+ * Mutates `user` so the caller mints the session with the NEW token_version.
+ */
+async function claimOrTouchExistingUser(user) {
+  const now = new Date().toISOString();
+  if (user.email_verified_at) {
+    await supabaseRest('users', 'PATCH', `id=eq.${encodeURIComponent(user.id)}`, { last_login_at: now });
+    return;
+  }
+  const claimed = {
+    password_hash: await hashPassword(generateId() + generateId()),
+    token_version: (user.token_version || 1) + 1,
+    email_verified_at: now,
+    last_login_at: now,
+  };
+  const { error } = await supabaseRest('users', 'PATCH', `id=eq.${encodeURIComponent(user.id)}`, claimed);
+  // If the claim did not save, the squatter's password is still live — refuse
+  // to log the owner into that account rather than hand them a trap.
+  if (error) throw new Error(`Failed to claim unverified account: ${error}`);
+  Object.assign(user, claimed);
+}
+
+// ============================================================================
 // DISCORD OAUTH — "Continue with Discord" button
 // ============================================================================
 
@@ -1207,8 +1250,9 @@ async function handleOAuthDiscord(request, env, jwtSecret, allowedOrigin) {
         return redirect(`${base}/index.html?oauth_error=signup_failed`);
       }
     } else {
-      // Existing account — just record the login time (best-effort)
-      await supabaseRest('users', 'PATCH', `id=eq.${encodeURIComponent(user.id)}`, { last_login_at: new Date().toISOString() });
+      // Existing account — claim it if its email was never verified (SEC-01),
+      // otherwise just record the login time.
+      await claimOrTouchExistingUser(user);
     }
 
     // Issue the exact same session as a password login:
@@ -1366,7 +1410,8 @@ async function handleOAuthGoogle(request, env, jwtSecret, allowedOrigin) {
         return redirect(`${base}/index.html?oauth_error=signup_failed`);
       }
     } else {
-      await supabaseRest('users', 'PATCH', `id=eq.${encodeURIComponent(user.id)}`, { last_login_at: new Date().toISOString() });
+      // Existing account — claim it if never verified (SEC-01, see the helper).
+      await claimOrTouchExistingUser(user);
     }
 
     // Same session contract as password login: JWT + refresh + CSRF cookies
