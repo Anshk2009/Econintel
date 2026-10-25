@@ -24,6 +24,11 @@ import {
 // Rate limiting thresholds
 const RATE_LIMITS = {
   failedLogin: { max: 5, window: 900 },
+  // Account-wide failures from ANY IP. Higher than the per-IP+email limit
+  // because anyone can push this counter for any account — set too low it
+  // becomes a cheap way to lock someone out. 30/hour still caps distributed
+  // guessing at ~720 tries a day, against a 12-char minimum + HIBP check.
+  failedLoginAccount: { max: 30, window: 3600 },
   loginAttempts: { max: 20, window: 3600 },
   signupAttempts: { max: 3, window: 3600 },
   resetAttempts: { max: 3, window: 3600 },
@@ -328,6 +333,22 @@ async function handleLogin(request, env, jwtSecret, allowedOrigin) {
     return jsonResponse({ error: 'Missing email or password' }, 400, allowedOrigin);
   }
 
+  // SECURITY (SEC-04): check the lockouts BEFORE comparing the password.
+  // These checks used to live only inside the wrong-password branch, so a locked
+  // account still logged in the moment the attacker guessed right: the lock
+  // changed the error message for wrong guesses and blocked nothing.
+  //   emailKey   — this email from THIS IP (5 per 15 min): stops one attacker.
+  //   accountKey — this email from ANY IP (30 per hour): stops an attacker who
+  //                rotates IPs (trivial on IPv6) to dodge the per-IP keys.
+  const emailKey = `rl:login:email:${normalizedEmail}:${clientIP}`;
+  const accountKey = `rl:login:account:${normalizedEmail}`;
+  const emailLimit = await checkRateLimit(TOKENS, emailKey, RATE_LIMITS.failedLogin.max, RATE_LIMITS.failedLogin.window);
+  const accountLimit = await checkRateLimit(TOKENS, accountKey, RATE_LIMITS.failedLoginAccount.max, RATE_LIMITS.failedLoginAccount.window);
+  if (emailLimit.limited || accountLimit.limited) {
+    const retryAfter = emailLimit.limited ? emailLimit.retryAfter : accountLimit.retryAfter;
+    return jsonResponse({ error: 'Account temporarily locked. Try again later.' }, 429, allowedOrigin, { 'Retry-After': String(retryAfter) });
+  }
+
   try {
     // Find user by email (REST API)
     const { data: users, error: fetchError } = await supabaseRest('users', 'GET', `email=eq.${encodeURIComponent(normalizedEmail)}`);
@@ -353,16 +374,11 @@ async function handleLogin(request, env, jwtSecret, allowedOrigin) {
       // per-IP counter (ipKey, 20/hr) still bounds a single attacker's total
       // guesses, while this IP+email key stops a remote attacker from locking out
       // a victim they aren't co-located with. clientIP is the trusted
-      // EO-Connecting-IP value (see getClientIP / H1).
-      const emailKey = `rl:login:email:${normalizedEmail}:${clientIP}`;
+      // EO-Connecting-IP value (see getClientIP / H1). The keys themselves are
+      // built above, where they are checked BEFORE the password (SEC-04).
       await incrementRateLimit(TOKENS, emailKey, RATE_LIMITS.failedLogin.window);
+      await incrementRateLimit(TOKENS, accountKey, RATE_LIMITS.failedLoginAccount.window);
       await incrementRateLimit(TOKENS, ipKey, RATE_LIMITS.loginAttempts.window);
-
-      // Check email rate limit
-      const emailLimit = await checkRateLimit(TOKENS, emailKey, RATE_LIMITS.failedLogin.max, RATE_LIMITS.failedLogin.window);
-      if (emailLimit.limited) {
-        return jsonResponse({ error: 'Account temporarily locked. Try again later.' }, 429, allowedOrigin, { 'Retry-After': String(emailLimit.retryAfter) });
-      }
 
       return jsonResponse({ error: 'Invalid email or password' }, 401, allowedOrigin);
     }
