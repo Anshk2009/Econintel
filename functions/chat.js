@@ -281,7 +281,9 @@ export async function onRequest(context) {
   //   failed  = true only when retrieval BROKE. A genuinely empty library
   //             returns failed:false, so the caller can tell "nothing to say"
   //             from "I could not look", and tell the reader which it was.
-  async function retrieveContext(query) {
+  // query       = what gets EMBEDDED (may include the previous question, RAG-03)
+  // keywordText = what the full-text leg searches (the latest message only)
+  async function retrieveContext(query, keywordText = query) {
     // THREE outcomes, and the difference matters more than the content.
     //   sources = '' + failed:false -> the library genuinely held nothing.
     //   sources = '' + failed:true  -> retrieval BROKE (key, timeout, RPC 404).
@@ -358,7 +360,7 @@ export async function onRequest(context) {
           // ten sources could never all be used: the extra four were paid for,
           // pushed into a context the model then compressed, and silently
           // dropped. Six is what an answer of this length can actually carry.
-          body: JSON.stringify({ query_embedding: queryEmbedding, match_count: 6, query_text: String(query).slice(0, 500) }),
+          body: JSON.stringify({ query_embedding: queryEmbedding, match_count: 6, query_text: String(keywordText).slice(0, 500) }),
           signal: matchCtl.signal,
         });
       } finally {
@@ -660,7 +662,15 @@ ${c.content}`;
     // The retrieved block, if any, travels in the USER turn (SEC-03, below).
     let sourcesBlock = '';
     if (latestUserMsg) {
-      const { sources, failed, urls } = await retrieveContext(latestUserMsg.content);
+      // RAG-03: a follow-up ("and what did the IMF demand?") has no subject of
+      // its own, so the EMBEDDING also sees the previous question (capped at 300
+      // chars). The keyword leg keeps only the latest message, because
+      // websearch_to_tsquery ANDs every word and extra words would starve it.
+      // The hidden article-context turn is a whole article, not a question.
+      const askedTurns = sanitizedMessages.filter(m => m.role === 'user' && !m.content.startsWith('[ARTICLE CONTEXT'));
+      const previousQuestion = askedTurns.length > 1 ? askedTurns[askedTurns.length - 2].content.slice(0, 300) : '';
+      const embedText = previousQuestion ? `${previousQuestion}\n${latestUserMsg.content}` : latestUserMsg.content;
+      const { sources, failed, urls } = await retrieveContext(embedText, latestUserMsg.content);
       mark('rag');   // embed + match_documents done
       retrievalFailed = failed;
       allowedUrls = urls;

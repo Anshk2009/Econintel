@@ -170,9 +170,11 @@ export function makeFakeBackend({ supabaseUrl = 'https://sb.test', external = nu
 // actually sent (system prompt, messages, sources...).
 export function nvidiaStub({ reply = 'Hello there.', status = 200, errorBody = null } = {}) {
   const seen = [];
+  const embedded = [];   // every text sent to the embeddings endpoint
   const handler = async (url, init) => {
     if (url.href === 'https://integrate.api.nvidia.com/v1/embeddings') {
       const { input } = JSON.parse(init.body);
+      embedded.push(...input);
       return Response.json({ data: input.map((_, index) => ({ index, embedding: new Array(2048).fill(0.01) })) });
     }
     if (url.href === 'https://integrate.api.nvidia.com/v1/chat/completions') {
@@ -184,7 +186,7 @@ export function nvidiaStub({ reply = 'Hello there.', status = 200, errorBody = n
     }
     return null;
   };
-  return { handler, seen };
+  return { handler, seen, embedded };
 }
 
 // Read a whole SSE response and return the concatenated delta text, plus any
