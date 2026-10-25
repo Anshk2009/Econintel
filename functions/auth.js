@@ -35,19 +35,18 @@ const RATE_LIMITS = {
 };
 
 
-// Check rate limit using KV
-async function checkRateLimit(kv, key, maxAttempts, windowSeconds) {
-  const current = parseInt(await kv.get(key) || '0', 10);
-  if (current >= maxAttempts) {
-    return { limited: true, remaining: 0, retryAfter: windowSeconds };
-  }
-  return { limited: false, remaining: maxAttempts - current - 1, retryAfter: null };
-}
-
-// Increment rate limit counter
-async function incrementRateLimit(kv, key, windowSeconds) {
-  const current = parseInt(await kv.get(key) || '0', 10);
-  await kv.put(key, String(current + 1), { expirationTtl: windowSeconds });
+// Count THIS attempt and report whether it is over the limit (audit SEC-02).
+//
+// There used to be two helpers: checkRateLimit() read the counter at the top of
+// a handler and incrementRateLimit() wrote count+1 further down. A burst fired
+// in parallel all read the same count and all passed — 20 simultaneous password
+// guesses all reached comparePassword past a "5 per IP" lockout. One atomic
+// TOKENS.incr() (kv_incr, migration 0013; read-then-write fallback until it is
+// applied) gives every request its own slot, so the check and the count can no
+// longer disagree.
+async function hitRateLimit(kv, key, maxAttempts, windowSeconds) {
+  const n = await kv.incr(key, windowSeconds);
+  return { limited: n > maxAttempts, retryAfter: windowSeconds };
 }
 
 // Hoisted to module scope so the top-level handler functions (handleSignup,
@@ -152,7 +151,8 @@ async function handleSignup(request, env, jwtSecret, allowedOrigin) {
 
   // IP-based signup rate limit: 3 new accounts per IP per hour.
   // Prevents mass account creation / spam without blocking legitimate users.
-  const ipLimit = await checkRateLimit(TOKENS, ipKey, RATE_LIMITS.signupAttempts.max, RATE_LIMITS.signupAttempts.window);
+  // Counted HERE, before the expensive HIBP + Argon2 work, atomically (SEC-02).
+  const ipLimit = await hitRateLimit(TOKENS, ipKey, RATE_LIMITS.signupAttempts.max, RATE_LIMITS.signupAttempts.window);
   if (ipLimit.limited) {
     return jsonResponse({ error: 'Too many signup attempts. Try again later.' }, 429, allowedOrigin, { 'Retry-After': String(ipLimit.retryAfter) });
   }
@@ -193,15 +193,6 @@ async function handleSignup(request, env, jwtSecret, allowedOrigin) {
   const userId = generateId();
 
   try {
-    // Count this attempt against the signup rate limit UP FRONT, before the
-    // expensive HIBP + Argon2 work below. The enforcing check ran at the top of
-    // handleSignup; incrementing here (rather than after the hash) keeps the gap
-    // between that check and this increment small, so a concurrent burst can't slip
-    // many extra hashes through before the counter catches up.
-    // ponytail: KV read-then-write still isn't atomic, so a few can race in under
-    // true simultaneity — bounded and fine at 3/hr/IP.
-    await incrementRateLimit(TOKENS, ipKey, RATE_LIMITS.signupAttempts.window);
-
     // SECURITY (M1 — no timing enumeration): run the expensive work (HIBP lookup +
     // Argon2 hash) BEFORE the "does this account already exist?" check, so signing
     // up with an ALREADY-REGISTERED email takes the same time as a brand-new one.
@@ -313,8 +304,8 @@ async function handleLogin(request, env, jwtSecret, allowedOrigin) {
   const clientIP = getClientIP(request);
   const ipKey = `rl:login:ip:${clientIP}`;
 
-  // Check IP rate limit
-  const ipLimit = await checkRateLimit(TOKENS, ipKey, RATE_LIMITS.loginAttempts.max, RATE_LIMITS.loginAttempts.window);
+  // Per-IP attempts, successful or not (20/hour). Counted atomically (SEC-02).
+  const ipLimit = await hitRateLimit(TOKENS, ipKey, RATE_LIMITS.loginAttempts.max, RATE_LIMITS.loginAttempts.window);
   if (ipLimit.limited) {
     return jsonResponse({ error: 'Too many login attempts' }, 429, allowedOrigin, { 'Retry-After': String(ipLimit.retryAfter) });
   }
@@ -340,10 +331,13 @@ async function handleLogin(request, env, jwtSecret, allowedOrigin) {
   //   emailKey   — this email from THIS IP (5 per 15 min): stops one attacker.
   //   accountKey — this email from ANY IP (30 per hour): stops an attacker who
   //                rotates IPs (trivial on IPv6) to dodge the per-IP keys.
+  // Each ATTEMPT takes a slot before the password is compared (atomic, SEC-02),
+  // so a parallel burst cannot reach comparePassword more than `max` times. A
+  // successful login clears emailKey below, so a few typos do not linger.
   const emailKey = `rl:login:email:${normalizedEmail}:${clientIP}`;
   const accountKey = `rl:login:account:${normalizedEmail}`;
-  const emailLimit = await checkRateLimit(TOKENS, emailKey, RATE_LIMITS.failedLogin.max, RATE_LIMITS.failedLogin.window);
-  const accountLimit = await checkRateLimit(TOKENS, accountKey, RATE_LIMITS.failedLoginAccount.max, RATE_LIMITS.failedLoginAccount.window);
+  const emailLimit = await hitRateLimit(TOKENS, emailKey, RATE_LIMITS.failedLogin.max, RATE_LIMITS.failedLogin.window);
+  const accountLimit = await hitRateLimit(TOKENS, accountKey, RATE_LIMITS.failedLoginAccount.max, RATE_LIMITS.failedLoginAccount.window);
   if (emailLimit.limited || accountLimit.limited) {
     const retryAfter = emailLimit.limited ? emailLimit.retryAfter : accountLimit.retryAfter;
     return jsonResponse({ error: 'Account temporarily locked. Try again later.' }, 429, allowedOrigin, { 'Retry-After': String(retryAfter) });
@@ -374,17 +368,14 @@ async function handleLogin(request, env, jwtSecret, allowedOrigin) {
       // per-IP counter (ipKey, 20/hr) still bounds a single attacker's total
       // guesses, while this IP+email key stops a remote attacker from locking out
       // a victim they aren't co-located with. clientIP is the trusted
-      // EO-Connecting-IP value (see getClientIP / H1). The keys themselves are
-      // built above, where they are checked BEFORE the password (SEC-04).
-      await incrementRateLimit(TOKENS, emailKey, RATE_LIMITS.failedLogin.window);
-      await incrementRateLimit(TOKENS, accountKey, RATE_LIMITS.failedLoginAccount.window);
-      await incrementRateLimit(TOKENS, ipKey, RATE_LIMITS.loginAttempts.window);
-
+      // EO-Connecting-IP value (see getClientIP / H1). This attempt was already
+      // counted against every key above, BEFORE the password (SEC-04, SEC-02).
       return jsonResponse({ error: 'Invalid email or password' }, 401, allowedOrigin);
     }
 
-    // Increment IP counter (for tracking, not limiting on success)
-    await incrementRateLimit(TOKENS, ipKey, RATE_LIMITS.loginAttempts.window);
+    // Right password: forget this IP's failed attempts for this email, so a
+    // user who typoed a few times is not one typo away from a lockout later.
+    await TOKENS.delete(emailKey);
 
     // Update last login time (REST API - PATCH)
     const { error: updateError } = await supabaseRest('users', 'PATCH', `id=eq.${encodeURIComponent(user.id)}`, { last_login_at: new Date().toISOString() });
@@ -721,7 +712,8 @@ async function handleResetPasswordRequest(request, env, allowedOrigin) {
   }
 
   const emailKey = `rl:reset:${normalizedEmail}`;
-  const resetLimit = await checkRateLimit(TOKENS, emailKey, RATE_LIMITS.resetAttempts.max, RATE_LIMITS.resetAttempts.window);
+  // Counted atomically up front, whether or not the account exists (SEC-02).
+  const resetLimit = await hitRateLimit(TOKENS, emailKey, RATE_LIMITS.resetAttempts.max, RATE_LIMITS.resetAttempts.window);
   if (resetLimit.limited) {
     return jsonResponse({ error: 'Too many reset attempts. Try again later.' }, 429, allowedOrigin, { 'Retry-After': String(resetLimit.retryAfter) });
   }
@@ -729,9 +721,6 @@ async function handleResetPasswordRequest(request, env, allowedOrigin) {
   try {
     const { data: _resetUsers } = await supabaseRest('users', 'GET', `email=eq.${encodeURIComponent(normalizedEmail)}&select=id,email`);
     const user = _resetUsers?.[0] || null;
-
-    // Increment counter regardless
-    await incrementRateLimit(TOKENS, emailKey, RATE_LIMITS.resetAttempts.window);
 
     // Generic response (no user enumeration)
     if (!user) {
