@@ -3398,15 +3398,19 @@ function openAccountModal(which) {
     title.textContent = 'Edit Profile';
     body.innerHTML = `
       <form onsubmit="handleEditProfile(event)" class="acct-form">
-        <label class="acct-label">Display name</label>
+        <!-- SEC-17: there is no update-profile endpoint, so only the display
+             name (a local nicety) is editable. Username and email are shown
+             read-only instead of pretending a change was saved. -->
+        <label class="acct-label">Display name <span style="opacity:.6;font-weight:400">(this device only)</span></label>
         <input class="acct-input" id="ep-name" required maxlength="25" value="${escapeHTML(u.name)}"/>
         <label class="acct-label">Username</label>
         <div class="acct-input-pre">
           <span class="acct-input-at">@</span>
-          <input class="acct-input pl" id="ep-username" value="${escapeHTML(u.username || u.email.split('@')[0])}" pattern="[a-zA-Z0-9_]{2,24}" required/>
+          <input class="acct-input pl" id="ep-username" readonly aria-readonly="true" value="${escapeHTML(u.username || u.email.split('@')[0])}"/>
         </div>
         <label class="acct-label">Email</label>
-        <input class="acct-input" id="ep-email" type="email" required value="${escapeHTML(u.email)}" pattern="[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}" title="Enter a valid email address (e.g. you@example.com)"/>
+        <input class="acct-input" id="ep-email" type="email" readonly aria-readonly="true" value="${escapeHTML(u.email)}"/>
+        <p class="acct-foot" style="margin:.25rem 0 0">To change your username or email, write to <a href="mailto:econintelai@gmail.com" style="color:var(--accent)">econintelai@gmail.com</a>.</p>
         <div class="acct-actions">
           <button type="button" class="acct-btn ghost" onclick="closeAccountModal()">Cancel</button>
           <button type="submit" class="acct-btn">Save changes</button>
@@ -3552,11 +3556,12 @@ async function handleSignIn(e) {
 function handleEditProfile(e) {
   e.preventDefault();
   const u = getUser() || {};
+  // Only the display name: it lives on this device by design. Username and
+  // email used to be "saved" here too, which changed nothing on the server and
+  // was quietly undone on the next refresh (audit SEC-17).
   setUser({
     ...u,
-    name:     document.getElementById('ep-name').value.trim(),
-    username: document.getElementById('ep-username').value.trim(),
-    email:    document.getElementById('ep-email').value.trim().toLowerCase()
+    name: document.getElementById('ep-name').value.trim(),
   });
   // Reflect the new name/initials in the top-right avatar immediately
   // (otherwise the change isn't visible until a page reload).
