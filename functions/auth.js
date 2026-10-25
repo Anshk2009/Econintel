@@ -62,6 +62,16 @@ async function hitRateLimit(kv, key, maxAttempts, windowSeconds) {
   return { limited: n > maxAttempts, retryAfter: windowSeconds };
 }
 
+// The three session cookies, expired — every path that ends a session sends
+// exactly these (logout, logout without CSRF, delete-account). One copy, so the
+// attributes cannot drift apart between them (audit QA-02).
+function appendClearedSessionCookies(headers) {
+  headers.append('Set-Cookie', 'access_token=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');
+  headers.append('Set-Cookie', 'refresh_token=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');
+  headers.append('Set-Cookie', 'csrf_token=; Path=/; Secure; SameSite=Strict; Max-Age=0');
+  return headers;
+}
+
 // Hoisted to module scope so the top-level handler functions (handleSignup,
 // handleLogin, …) can use them. They are (re)assigned at the top of onRequest,
 // closing over env-derived Supabase config which is constant per deployment.
@@ -478,9 +488,7 @@ async function handleLogout(request, env, jwtSecret, allowedOrigin) {
       'Access-Control-Allow-Origin': corsOrigin(allowedOrigin),
       'Access-Control-Allow-Credentials': 'true',
     });
-    h.append('Set-Cookie', 'access_token=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');
-    h.append('Set-Cookie', 'refresh_token=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');
-    h.append('Set-Cookie', 'csrf_token=; Path=/; Secure; SameSite=Strict; Max-Age=0');
+    appendClearedSessionCookies(h);
     return h;
   }
 
@@ -551,9 +559,7 @@ async function handleLogout(request, env, jwtSecret, allowedOrigin) {
     'Access-Control-Allow-Origin': corsOrigin(allowedOrigin),
     'Access-Control-Allow-Credentials': 'true',
   });
-  logoutHeaders.append('Set-Cookie', 'access_token=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');
-  logoutHeaders.append('Set-Cookie', 'refresh_token=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');
-  logoutHeaders.append('Set-Cookie', 'csrf_token=; Path=/; Secure; SameSite=Strict; Max-Age=0');
+  appendClearedSessionCookies(logoutHeaders);
   return new Response(responseBody, { status: 200, headers: logoutHeaders });
 }
 
@@ -721,9 +727,7 @@ async function handleDeleteAccount(request, env, jwtSecret, allowedOrigin) {
     'Access-Control-Allow-Origin': corsOrigin(allowedOrigin),
     'Access-Control-Allow-Credentials': 'true',
   });
-  headers.append('Set-Cookie', 'access_token=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');
-  headers.append('Set-Cookie', 'refresh_token=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');
-  headers.append('Set-Cookie', 'csrf_token=; Path=/; Secure; SameSite=Strict; Max-Age=0');
+  appendClearedSessionCookies(headers);
   return new Response(JSON.stringify({ message: 'Account deleted' }), { status: 200, headers });
 }
 
