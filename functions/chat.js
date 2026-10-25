@@ -142,6 +142,37 @@ function isBlocked(text) {
   return BLOCKED.some(pattern => pattern.test(text));
 }
 
+// ── MESSAGE SHAPE (audit SEC-10) ────────────────────────────────────────────
+// The client sends the whole conversation, so every field in it is attacker-
+// controlled. Only plain user/assistant text is ever legitimate:
+//   - role: 'system' is stripped further down (the server prompt is the only
+//     one); anything else ('developer', 'tool', …) is refused outright rather
+//     than forwarded for the provider to interpret however it likes.
+//   - content must be a string. An ARRAY (OpenAI's multimodal shape) used to be
+//     stringified to "[object Object]" by the keyword filter — so the filter
+//     never saw the real text — and was then passed upstream intact.
+//   - MAX_MESSAGE_CHARS = 16,000: a 12 KB attachment (chat.html MAX_DOC_BYTES)
+//     plus the question fits; a single message the size of the whole 256 KB
+//     enterprise body does not.
+//   - MAX_TOTAL_CHARS = 48,000 (~12k tokens): bounds what one request can make
+//     the model read, whatever the plan's body limit.
+const ALLOWED_ROLES = new Set(['user', 'assistant', 'system']);
+const MAX_MESSAGE_CHARS = 16000;
+const MAX_TOTAL_CHARS = 48000;
+// Returns an error string for the first bad message, or null if all are fine.
+export function invalidMessages(messages) {
+  let total = 0;
+  for (const m of messages) {
+    if (!m || typeof m !== 'object' || Array.isArray(m)) return 'Each message must be an object';
+    if (!ALLOWED_ROLES.has(m.role)) return 'Unsupported message role';
+    if (typeof m.content !== 'string') return 'Message content must be text';
+    if (m.content.length > MAX_MESSAGE_CHARS) return `Message too long (max ${MAX_MESSAGE_CHARS} characters)`;
+    total += m.content.length;
+  }
+  if (total > MAX_TOTAL_CHARS) return `Conversation too long (max ${MAX_TOTAL_CHARS} characters) — start a new chat`;
+  return null;
+}
+
 export async function onRequest(context) {
   const { request, env } = context;
 
@@ -559,6 +590,13 @@ ${c.content}`;
       400,
       ALLOWED_ORIGIN
     );
+  }
+
+  // SEC-10: refuse any message that is not plain user/assistant text, before
+  // anything below reads it or sends it to the model.
+  const shapeError = invalidMessages(body.messages);
+  if (shapeError) {
+    return jsonResponse({ error: shapeError }, 400, ALLOWED_ORIGIN);
   }
 
   // Phase 7: Strip system role from messages (server-side system prompt only)
