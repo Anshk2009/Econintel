@@ -1,13 +1,18 @@
 -- EconIntel RAG — Supabase setup. Paste into the Supabase SQL editor and run.
 -- It creates the vector "library" the chat searches + the search function it calls.
 --
--- SAFE TO RE-RUN, and this file is the ONLY copy of match_documents. Every
--- statement is `if not exists` / `drop … if exists`, so re-running an existing
--- database just reinstalls the current search function and touches no data.
--- That is how you ship a retrieval change: edit the function below, re-run this
--- whole file. Do NOT paste the older migration-*.sql files afterwards — they are
--- history, and migration-hybrid-retrieval.sql would silently revert the ranking
--- fixes below.
+-- SAFE TO RE-RUN. Every statement is `if not exists` / `drop … if exists`, so
+-- re-running an existing database just reinstalls the current search function
+-- and touches no data. That is how you ship a retrieval change: edit the
+-- function below, re-run this whole file. Do NOT paste the older migration-*.sql
+-- files afterwards — they are history, and migration-hybrid-retrieval.sql would
+-- silently revert the ranking fixes below.
+--
+-- The function body below is the one migration 0007 deployed (halfvec index
+-- scan, MATERIALIZED CTEs). .scripts/test-schema-sync.mjs fails CI if the two
+-- ever differ — until 2026-10-26 this file still held the pre-0007 version, and
+-- re-running it as instructed would have brought back the 7.4 s sequential scan
+-- (audit RAG-02).
 
 -- 1. Turn on pgvector (one time).
 create extension if not exists vector;
@@ -170,33 +175,38 @@ security definer
 set search_path = public, pg_temp
 as $$
   with
-  -- Vector leg: pull 2x match_count so fusion has real choices. (The relevance
-  -- floor lives AFTER fusion — see the WHERE clause below — so it covers
-  -- keyword-only hits too.)
-  vec as (
-    select d.id,
-           row_number() over (order by d.embedding <=> query_embedding) as rank
-    from documents d
-    order by d.embedding <=> query_embedding
-    limit match_count * 2
+  -- Vector leg. Limit FIRST (index scan), rank the survivors second.
+  vec as materialized (
+    select t.id, row_number() over (order by t.dist) as rank
+    from (
+      select d.id,
+             d.embedding::halfvec(2048) <=> query_embedding::halfvec(2048) as dist
+      from documents d
+      order by 2
+      limit match_count * 2
+    ) t
   ),
-  -- Keyword leg: websearch_to_tsquery is safe on arbitrary user input (it never
-  -- throws on odd syntax). Skipped entirely when query_text is null.
-  kw as (
-    select d.id,
-           row_number() over (
-             order by ts_rank(to_tsvector('english', coalesce(d.content,'')),
-                              websearch_to_tsquery('english', query_text)) desc
-           ) as rank
-    from documents d
-    where query_text is not null
-      and to_tsvector('english', coalesce(d.content,''))
-          @@ websearch_to_tsquery('english', query_text)
-    limit match_count * 2
+  -- Keyword leg: same limit-then-rank shape, for the same reason. GIN narrows
+  -- this first, but a common stem ("bank", "rate") still matches thousands.
+  -- websearch_to_tsquery is safe on arbitrary user input — it never throws on
+  -- odd syntax. Skipped entirely when query_text is null.
+  kw as materialized (
+    select t.id, row_number() over (order by t.score desc) as rank
+    from (
+      select d.id,
+             ts_rank(to_tsvector('english', coalesce(d.content,'')),
+                     websearch_to_tsquery('english', query_text)) as score
+      from documents d
+      where query_text is not null
+        and to_tsvector('english', coalesce(d.content,''))
+            @@ websearch_to_tsquery('english', query_text)
+      order by 2 desc
+      limit match_count * 2
+    ) t
   ),
-  -- RRF fusion: each doc scores 1/(60+rank) in each list it appears in (60 is
-  -- the standard damping constant).
-  fused as (
+  -- RRF fusion: each doc scores 1/(60+rank) in each list it appears in
+  -- (60 is the standard damping constant).
+  fused as materialized (
     select
       coalesce(vec.id, kw.id) as id,
       coalesce(1.0 / (60 + vec.rank), 0) + coalesce(1.0 / (60 + kw.rank), 0) as rrf
@@ -208,33 +218,26 @@ as $$
   from fused
   join documents d on d.id = fused.id
   -- ONE relevance floor, applied AFTER fusion so it covers the keyword leg too.
-  -- Before, the floor sat inside the vector leg only: a keyword-only hit came
-  -- through the `full outer join` with similarity 0 and landed in the prompt on
-  -- a single stemmed word ("bank" matching "banking"). Recomputing similarity
-  -- here costs nothing — it runs over the <= 2*match_count fused rows, not the
-  -- table — and it also makes `similarity` a real number for keyword-only hits.
+  -- Full-precision distance deliberately (see the precision note in the header):
+  -- this runs over <= 2*match_count fused rows, never the table, so exactness
+  -- here is free.
   --
   -- 0.20, MEASURED, not guessed. This model's cosine distribution is compressed.
   -- Sampling one row against the live corpus (2026-08-19, 10,704 rows) gave a
   -- true match at 0.5725 — a Hindi PIB release and the English Economic Times
-  -- story on the same policy, so the model itself is good — good matches at
-  -- 0.30-0.35, and merely-related at 0.26. At a 0.30 floor only FOUR rows in
-  -- 10,704 cleared it, and one of those was the query row itself. A live
-  -- question is also SHORT text scored against LONG articles, which pushes
-  -- cosine lower still, so 0.30 left no margin whatever — and the failure it
-  -- produces is the invisible kind: zero rows, retrieval fails open, every
-  -- answer ungrounded and looking completely normal. 0.20 keeps ~0.7% of the
-  -- corpus, still a hard filter, and RANKING decides what is used, not the floor.
+  -- story on the same policy — good matches at 0.30-0.35, merely-related at
+  -- 0.26. At a 0.30 floor only FOUR rows in 10,704 cleared it, one of which was
+  -- the query row itself. A live question is also SHORT text scored against LONG
+  -- articles, which pushes cosine lower still. 0.20 keeps ~0.7% of the corpus,
+  -- still a hard filter, and RANKING decides what is used, not the floor.
   -- Re-measure with .rag/audit-followup.sql section B if the model ever changes.
   where 1 - (d.embedding <=> query_embedding) > 0.20
   order by
     fused.rrf
     -- Freshness bonus for news, decaying over ~2 weeks. Sized against the RRF
-    -- scale it is added to: rank1 = 1/61 = 0.016393, one rank step (rank1->rank2)
-    -- = 0.000264, and the whole rank1..rank20 spread = 0.003893. So 0.0005 is
-    -- worth about TWO rank places — a tiebreak toward recent news, not a
-    -- reordering. (It was 0.008: 30x one rank step and 2.1x the entire ranking
-    -- signal, i.e. a fresh news row outranked a document ~59 places above it.)
+    -- scale it is added to: rank1 = 1/61 = 0.016393, one rank step = 0.000264,
+    -- and the whole rank1..rank20 spread = 0.003893. So 0.0005 is worth about
+    -- TWO rank places — a tiebreak toward recent news, not a reordering.
     + case
         when d.category = 'news' and d.published_at is not null
         then 0.0005 * exp(-extract(epoch from (now() - d.published_at)) / (86400.0 * 14))
