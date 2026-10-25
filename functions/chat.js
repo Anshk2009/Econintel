@@ -79,11 +79,14 @@ const FREE_IP_WINDOW = 129600; // 36 hours, in seconds
 // is legacy, rename when next in the file. queriesPerMinute = an anti-BURST guard
 // meant to catch scripts / runaway client loops, NOT humans (a real person rarely
 // tops ~5/min, a bot does hundreds) — tune per plan. Guests use a separate
-// 5-msg/2-hour bucket (GUEST_LIMIT below). Enterprise has no per-minute cap.
+// 5-msg/2-hour bucket (GUEST_LIMIT below).
+// Enterprise USED to be Infinity per minute (audit SEC-13): on a key shared by
+// every user at 40 rpm, one enterprise session could take the whole minute for
+// everyone. 30/min (same as pro) is still far above human typing speed.
 const RATE_LIMITS = {
-  free:       { dailyPerIP: 50,   queriesPerMinute: 10,       maxBodySize: 16384  },
-  pro:        { dailyPerIP: 250,  queriesPerMinute: 30,       maxBodySize: 65536  },
-  enterprise: { dailyPerIP: 1000, queriesPerMinute: Infinity, maxBodySize: 262144 },
+  free:       { dailyPerIP: 50,   queriesPerMinute: 10, maxBodySize: 16384  },
+  pro:        { dailyPerIP: 250,  queriesPerMinute: 30, maxBodySize: 65536  },
+  enterprise: { dailyPerIP: 1000, queriesPerMinute: 30, maxBodySize: 262144 },
 };
 
 // System prompt - concise, fast responses.
@@ -472,7 +475,8 @@ ${c.content}`;
     // guards a DIFFERENT failure than the daily cap or NVIDIA's 10,000/day ceiling:
     // without it a burst can fire an account's whole daily budget in seconds
     // (each message = an embedding call PLUS a completion call), spiking cost and
-    // concurrency and taking the app down for everyone. Enterprise = Infinity.
+    // concurrency and taking the app down for everyone. Every plan is finite now
+    // (SEC-13); the Infinity test below stays only as a guard for a future tier.
     // Fixed window: the key includes the current minute number, so it resets
     // cleanly on the minute boundary — no TTL that slides forward on every write.
     // ponytail: the get-then-put is not atomic, so a truly-simultaneous burst can
