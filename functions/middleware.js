@@ -438,7 +438,36 @@ export function makeSupabase(env) {
  * one home — auth.js and chat.js previously carried their own copies.
  */
 export function getClientIP(request) {
-  return request.headers.get('EO-Connecting-IP') || 'unknown';
+  const raw = (request.headers.get('EO-Connecting-IP') || '').trim();
+  if (!raw) return 'unknown';
+  return rateLimitBucket(raw);
+}
+
+/**
+ * SECURITY (SEC-02): collapse an IPv6 address to its /64 network.
+ *
+ * Every per-IP limit used to key on the FULL address. A single home IPv6
+ * connection is assigned a whole /64 (2^64 addresses), so rotating the last 64
+ * bits minted a fresh guest / free-tier / signup / login bucket per request —
+ * enough for one person to drain the NVIDIA key every user shares. One /64 is
+ * one customer, so that is the bucket.
+ *
+ * IPv4 is returned unchanged. IPv4-mapped IPv6 (::ffff:1.2.3.4) becomes the
+ * IPv4 address, so the same client cannot hold two buckets. Anything that does
+ * not parse is returned as-is (still a bucket, just a less clever one).
+ */
+function rateLimitBucket(ip) {
+  if (!ip.includes(':')) return ip;                        // IPv4
+  const lower = ip.toLowerCase().replace(/%.*$/, '');       // drop any zone id
+  const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (mapped) return mapped[1];
+  // Expand "::" so every address has exactly 8 groups, then keep the first 4.
+  const [head, tail = ''] = lower.split('::');
+  const h = head ? head.split(':') : [];
+  const t = lower.includes('::') && tail ? tail.split(':') : [];
+  const groups = lower.includes('::') ? [...h, ...Array(8 - h.length - t.length).fill('0'), ...t] : h;
+  if (groups.length !== 8) return lower;
+  return groups.slice(0, 4).map(g => (parseInt(g, 16) || 0).toString(16)).join(':') + '::/64';
 }
 
 /** Extract the Bearer token from the Authorization header, or null. */
