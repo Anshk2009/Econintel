@@ -62,6 +62,34 @@ async function hitRateLimit(kv, key, maxAttempts, windowSeconds) {
   return { limited: n > maxAttempts, retryAfter: windowSeconds };
 }
 
+// Issue a session for `user` ({ id, email, username, plan, token_version }):
+//   - a 15-minute access JWT
+//   - a 30-day opaque refresh token, stored with the user's token_version so a
+//     password reset or logout-all kills it (C1)
+//   - a 24-hour CSRF token, stored with the userId so it cannot authorise a
+//     request for anyone else (M3)
+// The three cookies are appended to `headers`; the CSRF token is returned
+// because the page also needs it in the response body (double-submit header).
+// Signup, login, password reset, refresh and both OAuth providers all come
+// through here, so a session is identical whatever created it (audit QA-02 —
+// these were six hand-written copies).
+async function issueSession(user, jwtSecret, headers) {
+  const jwt = await generateJWT(
+    { userId: user.id, email: user.email, username: user.username, plan: user.plan, tv: user.token_version },
+    jwtSecret,
+    900
+  );
+  const refreshToken = generateId();
+  await TOKENS.put(`refresh:${refreshToken}`, JSON.stringify({ userId: user.id, tv: user.token_version }), { expirationTtl: 2592000 });
+  const csrfToken = generateId();
+  await TOKENS.put(`csrf:${csrfToken}`, JSON.stringify({ userId: user.id }), { expirationTtl: 86400 });
+  // Set-Cookie must be separate headers — joining with commas breaks parsing.
+  headers.append('Set-Cookie', `access_token=${jwt}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=900`);
+  headers.append('Set-Cookie', `refresh_token=${refreshToken}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000`);
+  headers.append('Set-Cookie', `csrf_token=${csrfToken}; Path=/; Secure; SameSite=Strict; Max-Age=86400`);
+  return csrfToken;
+}
+
 // The three session cookies, expired — every path that ends a session sends
 // exactly these (logout, logout without CSRF, delete-account). One copy, so the
 // attributes cannot drift apart between them (audit QA-02).
@@ -269,30 +297,6 @@ async function handleSignup(request, env, jwtSecret, allowedOrigin) {
 
     // Phase 6: short-lived access JWT (15 min) + refresh token + CSRF — identical
     // contract to handleLogin so the frontend logs the user in straight after signup.
-    const jwt = await generateJWT(
-      { userId, email: normalizedEmail, username, plan: 'free', tv: 1 },
-      jwtSecret,
-      900
-    );
-    const refreshToken = generateId();
-    // SECURITY (C1): store the token_version alongside the refresh token so it can
-    // be invalidated later by a password reset / logout-all (both bump the version).
-    // New accounts start at token_version 1.
-    await TOKENS.put(`refresh:${refreshToken}`, JSON.stringify({ userId, tv: 1 }), { expirationTtl: 2592000 });
-    const csrfToken = generateId();
-    // SECURITY (M3): bind the CSRF token to this user (store the userId, not the
-    // token itself) so a token issued to one account can't authorise a
-    // state-changing request for another.
-    await TOKENS.put(`csrf:${csrfToken}`, JSON.stringify({ userId }), { expirationTtl: 86400 });
-
-    const responseBody = JSON.stringify({
-      userId,
-      username,
-      email: normalizedEmail,
-      plan: 'free',
-      csrfToken,
-    });
-
     // Fix: Set-Cookie must be separate headers — joining with commas breaks cookie parsing
     const signupHeaders = new Headers({
       'Content-Type': 'application/json; charset=utf-8',
@@ -303,9 +307,18 @@ async function handleSignup(request, env, jwtSecret, allowedOrigin) {
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
     });
-    signupHeaders.append('Set-Cookie', `access_token=${jwt}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=900`);
-    signupHeaders.append('Set-Cookie', `refresh_token=${refreshToken}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000`);
-    signupHeaders.append('Set-Cookie', `csrf_token=${csrfToken}; Path=/; Secure; SameSite=Strict; Max-Age=86400`);
+    // Same contract as login, so the frontend is signed in straight after
+    // signup. New accounts start at token_version 1 (the insert above).
+    const csrfToken = await issueSession(
+      { id: userId, email: normalizedEmail, username, plan: 'free', token_version: 1 }, jwtSecret, signupHeaders);
+
+    const responseBody = JSON.stringify({
+      userId,
+      username,
+      email: normalizedEmail,
+      plan: 'free',
+      csrfToken,
+    });
     return new Response(responseBody, { status: 201, headers: signupHeaders });
   } catch (err) {
     console.error('[auth] Signup error:', err);
@@ -421,32 +434,6 @@ async function handleLogin(request, env, jwtSecret, allowedOrigin) {
       }
     }
 
-    // Phase 6: Generate JWT with 15-minute expiry + refresh token
-    const jwt = await generateJWT(
-      { userId: user.id, email: user.email, username: user.username, plan: user.plan, tv: user.token_version },
-      jwtSecret,
-      900 // 15 minutes
-    );
-
-    // Phase 6: Generate long-lived refresh token (opaque, stored in KV)
-    const refreshToken = generateId();
-    // SECURITY (C1): persist the user's current token_version with the refresh
-    // token so a later password reset / logout-all invalidates it on next refresh.
-    await TOKENS.put(`refresh:${refreshToken}`, JSON.stringify({ userId: user.id, tv: user.token_version }), { expirationTtl: 2592000 }); // 30 days
-
-    // Phase 6: Generate CSRF token — bound to the user (M3)
-    const csrfToken = generateId();
-    await TOKENS.put(`csrf:${csrfToken}`, JSON.stringify({ userId: user.id }), { expirationTtl: 86400 }); // 24 hours
-
-    // Phase 6: Set secure cookies + return response
-    const responseBody = JSON.stringify({
-      userId: user.id,
-      username: user.username,
-      email: user.email,
-      plan: user.plan,
-      csrfToken, // Include CSRF token in response for client to verify
-    });
-
     // Fix: Set-Cookie must be separate headers — joining with commas breaks cookie parsing
     const loginHeaders = new Headers({
       'Content-Type': 'application/json; charset=utf-8',
@@ -457,9 +444,15 @@ async function handleLogin(request, env, jwtSecret, allowedOrigin) {
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
     });
-    loginHeaders.append('Set-Cookie', `access_token=${jwt}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=900`);
-    loginHeaders.append('Set-Cookie', `refresh_token=${refreshToken}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000`);
-    loginHeaders.append('Set-Cookie', `csrf_token=${csrfToken}; Path=/; Secure; SameSite=Strict; Max-Age=86400`);
+    const csrfToken = await issueSession(user, jwtSecret, loginHeaders);
+
+    const responseBody = JSON.stringify({
+      userId: user.id,
+      username: user.username,
+      email: user.email,
+      plan: user.plan,
+      csrfToken, // Include CSRF token in response for client to verify
+    });
     return new Response(responseBody, { status: 200, headers: loginHeaders });
   } catch (err) {
     console.error('[auth] Login error:', err);
@@ -923,19 +916,6 @@ async function handleVerifyReset(request, env, jwtSecret, allowedOrigin) {
     // Generate new access token (15 min), refresh token (30 days), and CSRF token (24h).
     // Matches the same auth contract as login/signup so the frontend can log the user
     // in automatically after a successful password reset.
-    const jwt = await generateJWT(
-      { userId: updatedUser.id, email: updatedUser.email, username: updatedUser.username, plan: updatedUser.plan, tv: updatedUser.token_version },
-      jwtSecret,
-      900
-    );
-    const refreshToken = generateId();
-    // SECURITY (C1): store the NEW token_version (we just bumped it above) so any
-    // refresh tokens issued before this reset are now stale and get rejected on
-    // their next refresh.
-    await TOKENS.put(`refresh:${refreshToken}`, JSON.stringify({ userId: updatedUser.id, tv: updatedUser.token_version }), { expirationTtl: 2592000 });
-    const csrfToken = generateId();
-    await TOKENS.put(`csrf:${csrfToken}`, JSON.stringify({ userId: updatedUser.id }), { expirationTtl: 86400 });
-
     // JWT goes in an HttpOnly cookie — NOT the response body — so it can't be
     // read by JavaScript even if there's an XSS. Previous code returned { jwt }
     // in the body which made it XSS-accessible.
@@ -946,9 +926,9 @@ async function handleVerifyReset(request, env, jwtSecret, allowedOrigin) {
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
     });
-    resetHeaders.append('Set-Cookie', `access_token=${jwt}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=900`);
-    resetHeaders.append('Set-Cookie', `refresh_token=${refreshToken}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000`);
-    resetHeaders.append('Set-Cookie', `csrf_token=${csrfToken}; Path=/; Secure; SameSite=Strict; Max-Age=86400`);
+    // Carries the NEW token_version (bumped above), so refresh tokens issued
+    // before this reset are stale and rejected on their next use (C1).
+    const csrfToken = await issueSession(updatedUser, jwtSecret, resetHeaders);
     return new Response(
       JSON.stringify({ userId: updatedUser.id, username: updatedUser.username, email: updatedUser.email, plan: updatedUser.plan, csrfToken, message: 'Password updated successfully' }),
       { status: 200, headers: resetHeaders }
@@ -1068,38 +1048,22 @@ async function handleRefreshToken(request, env, jwtSecret, allowedOrigin) {
     }
 
     // Generate new access token (15 minutes)
-    const newAccessToken = await generateJWT(
-      { userId: user.id, email: user.email, username: user.username, plan: user.plan, tv: user.token_version },
-      jwtSecret,
-      900
-    );
-
-    // SECURITY (L4 — refresh-token rotation): mint a fresh refresh token and revoke
-    // the one just used, so a captured token works at most once. Carries the
-    // current token_version (C1).
-    const newRefreshToken = generateId();
-    await TOKENS.put(`refresh:${newRefreshToken}`, JSON.stringify({ userId: user.id, tv: user.token_version }), { expirationTtl: 2592000 });
-    await TOKENS.delete(`refresh:${refreshToken}`);
-
-    // Generate new CSRF token — bound to the user (M3)
-    const csrfToken = generateId();
-    await TOKENS.put(`csrf:${csrfToken}`, JSON.stringify({ userId: user.id }), { expirationTtl: 86400 });
-
-    // Return new tokens + user data so the frontend can restore session state
-    const responseBody = JSON.stringify({
-      csrfToken,
-      user: { id: user.id, email: user.email, username: user.username, plan: user.plan, name: user.username }
-    });
-
     // Fix: Set-Cookie must be separate headers — joining with commas breaks cookie parsing
     const refreshHeaders = new Headers({
       'Content-Type': 'application/json; charset=utf-8',
       'Access-Control-Allow-Origin': corsOrigin(allowedOrigin),
       'Access-Control-Allow-Credentials': 'true',
     });
-    refreshHeaders.append('Set-Cookie', `access_token=${newAccessToken}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=900`);
-    refreshHeaders.append('Set-Cookie', `refresh_token=${newRefreshToken}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000`);
-    refreshHeaders.append('Set-Cookie', `csrf_token=${csrfToken}; Path=/; Secure; SameSite=Strict; Max-Age=86400`);
+    // SECURITY (L4 — refresh-token rotation): issue a fresh session, THEN revoke
+    // the refresh token just used, so a captured token works at most once.
+    const csrfToken = await issueSession(user, jwtSecret, refreshHeaders);
+    await TOKENS.delete(`refresh:${refreshToken}`);
+
+    // Return new tokens + user data so the frontend can restore session state
+    const responseBody = JSON.stringify({
+      csrfToken,
+      user: { id: user.id, email: user.email, username: user.username, plan: user.plan, name: user.username }
+    });
     return new Response(responseBody, { status: 200, headers: refreshHeaders });
   } catch (err) {
     console.error('[auth] Refresh token error:', err);
@@ -1306,27 +1270,12 @@ async function handleOAuthDiscord(request, env, jwtSecret, allowedOrigin) {
       await claimOrTouchExistingUser(user);
     }
 
-    // Issue the exact same session as a password login:
-    // 15-min access JWT + 30-day refresh token + 24h CSRF token
-    const jwt = await generateJWT(
-      { userId: user.id, email: user.email, username: user.username, plan: user.plan, tv: user.token_version },
-      jwtSecret,
-      900
-    );
-    const refreshToken = generateId();
-    // SECURITY (C1 + M3): version-bind the refresh token and user-bind the CSRF
-    // token, exactly like the password-login path (see handleLogin).
-    await TOKENS.put(`refresh:${refreshToken}`, JSON.stringify({ userId: user.id, tv: user.token_version }), { expirationTtl: 2592000 });
-    const csrfToken = generateId();
-    await TOKENS.put(`csrf:${csrfToken}`, JSON.stringify({ userId: user.id }), { expirationTtl: 86400 });
-
-    // 302 to chat with the cookies attached. ?oauth=1 tells chat.html to call
-    // the refresh endpoint on load, which returns the user data it needs for
-    // localStorage (the cookies themselves are HttpOnly — JS can't read them).
+    // Issue the exact same session as a password login, then 302 to chat.
+    // ?oauth=1 tells chat.html to call the refresh endpoint on load, which
+    // returns the user data it needs for localStorage (the cookies themselves
+    // are HttpOnly — JS can't read them).
     const oauthHeaders = new Headers({ 'Location': `${base}/chat.html?oauth=1` });
-    oauthHeaders.append('Set-Cookie', `access_token=${jwt}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=900`);
-    oauthHeaders.append('Set-Cookie', `refresh_token=${refreshToken}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000`);
-    oauthHeaders.append('Set-Cookie', `csrf_token=${csrfToken}; Path=/; Secure; SameSite=Strict; Max-Age=86400`);
+    await issueSession(user, jwtSecret, oauthHeaders);
     // M6: the login is complete — clear the single-use OAuth state cookie.
     oauthHeaders.append('Set-Cookie', `oauth_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
     return new Response(null, { status: 302, headers: oauthHeaders });
@@ -1465,23 +1414,12 @@ async function handleOAuthGoogle(request, env, jwtSecret, allowedOrigin) {
       await claimOrTouchExistingUser(user);
     }
 
-    // Same session contract as password login: JWT + refresh + CSRF cookies
-    const jwt = await generateJWT(
-      { userId: user.id, email: user.email, username: user.username, plan: user.plan, tv: user.token_version },
-      jwtSecret,
-      900
-    );
-    const refreshToken = generateId();
-    // SECURITY (C1 + M3): version-bind the refresh token and user-bind the CSRF
-    // token, exactly like the password-login path (see handleLogin).
-    await TOKENS.put(`refresh:${refreshToken}`, JSON.stringify({ userId: user.id, tv: user.token_version }), { expirationTtl: 2592000 });
-    const csrfToken = generateId();
-    await TOKENS.put(`csrf:${csrfToken}`, JSON.stringify({ userId: user.id }), { expirationTtl: 86400 });
-
+    // Issue the exact same session as a password login, then 302 to chat.
+    // ?oauth=1 tells chat.html to call the refresh endpoint on load, which
+    // returns the user data it needs for localStorage (the cookies themselves
+    // are HttpOnly — JS can't read them).
     const oauthHeaders = new Headers({ 'Location': `${base}/chat.html?oauth=1` });
-    oauthHeaders.append('Set-Cookie', `access_token=${jwt}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=900`);
-    oauthHeaders.append('Set-Cookie', `refresh_token=${refreshToken}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000`);
-    oauthHeaders.append('Set-Cookie', `csrf_token=${csrfToken}; Path=/; Secure; SameSite=Strict; Max-Age=86400`);
+    await issueSession(user, jwtSecret, oauthHeaders);
     // M6: the login is complete — clear the single-use OAuth state cookie.
     oauthHeaders.append('Set-Cookie', `oauth_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
     return new Response(null, { status: 302, headers: oauthHeaders });
