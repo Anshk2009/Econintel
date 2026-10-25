@@ -524,7 +524,11 @@ async function handleLogout(request, env, jwtSecret, allowedOrigin) {
   // Verify token — includes token_version DB check to catch revoked sessions immediately
   const payload = await verifyJWT(token, jwtSecret, { TOKENS, dbCheck });
   if (!payload) {
-    return jsonResponse({ error: 'Invalid or expired token' }, 401, allowedOrigin);
+    // An expired or revoked access token has nothing left to blacklist, and the
+    // refresh token was already revoked above. This used to answer 401 WITHOUT
+    // clearing cookies — after a password reset on another device, "Sign out"
+    // here left every session cookie in the browser. Logout is idempotent.
+    return new Response(JSON.stringify({ message: 'Logged out' }), { status: 200, headers: makeClearCookieHeaders() });
   }
 
   // Store token in blacklist (KV) until expiry (TTL in seconds, not minutes)
