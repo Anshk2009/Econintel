@@ -27,7 +27,10 @@ const PRIMARY_KEY = { users: 'id', kv_store: 'key', chat_history: 'id', document
 // Unique columns besides the primary key (a duplicate here is HTTP 409, like Postgres).
 const UNIQUE = { users: ['email', 'username'] };
 
-export function makeFakeBackend({ supabaseUrl = 'https://sb.test', external = null, rpc = {} } = {}) {
+// latencyMs: delay every Supabase response by this much. Without it the fake
+// answers in the same tick, parallel requests never interleave, and a race
+// condition test passes for the wrong reason (no race can happen).
+export function makeFakeBackend({ supabaseUrl = 'https://sb.test', external = null, rpc = {}, latencyMs = 0 } = {}) {
   // tables[name] = array of row objects
   const tables = { users: [], kv_store: [], chat_history: [], documents: [], security_events: [] };
   // Every request seen, so a test can assert "no call to NVIDIA happened".
@@ -142,6 +145,7 @@ export function makeFakeBackend({ supabaseUrl = 'https://sb.test', external = nu
     calls.push({ url: url.href, method, headers, body: bodyText });
 
     if (url.origin === new URL(supabaseUrl).origin) {
+      if (latencyMs) await new Promise(r => setTimeout(r, latencyMs));
       const path = url.pathname.replace(/^\/rest\/v1\//, '');
       if (path.startsWith('rpc/')) {
         const fn = rpc[path.slice(4)];
