@@ -875,6 +875,69 @@ RETRIEVAL UNAVAILABLE: the source library could not be reached for this question
   const sseDecoder = new TextDecoder();
   let sseBuf = ''; // incomplete line buffer across chunks
 
+  // Runs ONCE per answer, whichever way the stream ends: normally (flush) or
+  // because the reader left mid-answer (the pipe's catch, below). It used to
+  // live only in flush(), so a closed tab or a stalled connection lost the
+  // question AND the part of the answer the reader had already seen (QA-05).
+  let finished = false;
+  async function finishAnswer() {
+    if (finished) return;
+    finished = true;
+    // RAG-07: report an answer that copies a source at length. The prompt
+    // forbids it; this is how we find out when the model did it anyway.
+    for (const { name, text } of retrievedTexts) {
+      const run = longestVerbatimRun(fullContent, [text]);
+      if (run > VERBATIM_WORDS) console.warn(`[chat] verbatim reproduction: ${run} words copied from "${name}"`);
+    }
+    if (userId.startsWith('guest:')) return;   // guests: nothing to save
+    // Persist to chat_history.
+    try {
+      // conversation_id groups the user+assistant rows into one thread so the
+      // sidebar can reopen them together. The client generates it; we accept a
+      // plain string (≤64 chars) and otherwise store null (legacy/flat).
+      const cid = (typeof body.conversation_id === 'string' && body.conversation_id.length <= 64)
+        ? body.conversation_id
+        : null;
+      const userMessage = body.messages[body.messages.length - 1];
+      const base = Date.now();
+      const rows = [];
+      if (userMessage?.role === 'user') {
+        rows.push({
+          id: generateId(), user_id: userId, role: 'user',
+          content: userMessage.content,
+          model,
+          conversation_id: cid,
+          tokens_used: 0, created_at: new Date(base).toISOString(),
+        });
+      }
+      if (fullContent) {
+        rows.push({
+          id: generateId(), user_id: userId, role: 'assistant',
+          // Saved with unlisted links reduced to their text (SEC-03 / RAG-06),
+          // so a reopened thread never shows a link we did not retrieve.
+          content: stripUnlistedLinks(fullContent, new Set(allowedUrls)),
+          model,
+          conversation_id: cid,
+          // +1ms so the reply always sorts AFTER its question when a thread is
+          // reopened (otherwise both share an identical timestamp and the order
+          // is undefined).
+          tokens_used: 0, created_at: new Date(base + 1).toISOString(),
+        });
+      }
+      // ONE batch insert (PostgREST accepts an array) instead of two awaits:
+      // both rows save together or not at all, and it finishes in a single
+      // round-trip — important because the runtime can reclaim the function
+      // right after the stream ends. Previously the second (assistant) await
+      // was getting cut off, so a reopened thread showed the question but no
+      // answer. context.waitUntil below also keeps the isolate alive until here.
+      if (rows.length) {
+        await supabaseRest('chat_history', 'POST', '', rows);
+      }
+    } catch (err) {
+      console.warn('[chat] Failed to save streamed history:', err);
+    }
+  }
+
   const { readable, writable } = new TransformStream({
     transform(chunk, controller) {
       // Decode chunk and accumulate delta text for history saving
@@ -893,61 +956,8 @@ RETRIEVAL UNAVAILABLE: the source library could not be reached for this question
       controller.enqueue(chunk); // pass raw chunk to client unchanged
     },
 
-    async flush() {
-      // RAG-07: report an answer that copies a source at length. The prompt
-      // forbids it; this is how we find out when the model did it anyway.
-      for (const { name, text } of retrievedTexts) {
-        const run = longestVerbatimRun(fullContent, [text]);
-        if (run > VERBATIM_WORDS) console.warn(`[chat] verbatim reproduction: ${run} words copied from "${name}"`);
-      }
-      if (userId.startsWith('guest:')) return;   // guests: nothing to save
-      // Stream finished — persist to chat_history.
-      try {
-        // conversation_id groups the user+assistant rows into one thread so the
-        // sidebar can reopen them together. The client generates it; we accept a
-        // plain string (≤64 chars) and otherwise store null (legacy/flat).
-        const cid = (typeof body.conversation_id === 'string' && body.conversation_id.length <= 64)
-          ? body.conversation_id
-          : null;
-        const userMessage = body.messages[body.messages.length - 1];
-        const base = Date.now();
-        const rows = [];
-        if (userMessage?.role === 'user') {
-          rows.push({
-            id: generateId(), user_id: userId, role: 'user',
-            content: userMessage.content,
-            model,
-            conversation_id: cid,
-            tokens_used: 0, created_at: new Date(base).toISOString(),
-          });
-        }
-        if (fullContent) {
-          rows.push({
-            id: generateId(), user_id: userId, role: 'assistant',
-            // Saved with unlisted links reduced to their text (SEC-03 / RAG-06),
-            // so a reopened thread never shows a link we did not retrieve.
-            content: stripUnlistedLinks(fullContent, new Set(allowedUrls)),
-            model,
-            conversation_id: cid,
-            // +1ms so the reply always sorts AFTER its question when a thread is
-            // reopened (otherwise both share an identical timestamp and the order
-            // is undefined).
-            tokens_used: 0, created_at: new Date(base + 1).toISOString(),
-          });
-        }
-        // ONE batch insert (PostgREST accepts an array) instead of two awaits:
-        // both rows save together or not at all, and it finishes in a single
-        // round-trip — important because the runtime can reclaim the function
-        // right after the stream ends. Previously the second (assistant) await
-        // was getting cut off, so a reopened thread showed the question but no
-        // answer. context.waitUntil below also keeps the isolate alive until here.
-        if (rows.length) {
-          await supabaseRest('chat_history', 'POST', '', rows);
-        }
-      } catch (err) {
-        console.warn('[chat] Failed to save streamed history:', err);
-      }
-    },
+    // The stream finished normally.
+    async flush() { await finishAnswer(); },
   });
 
   // Keep the isolate alive until the stream is fully piped AND flush()'s DB write
@@ -955,8 +965,10 @@ RETRIEVAL UNAVAILABLE: the source library could not be reached for this question
   // the client finishes reading the response — dropping the history save.
   // .catch keeps a mid-stream client disconnect from becoming an unhandled
   // rejection (and gives waitUntil a promise that always resolves).
-  const pipePromise = streamBody.pipeTo(writable).catch(err => {
+  const pipePromise = streamBody.pipeTo(writable).catch(async err => {
     console.warn('[chat] stream pipe ended early:', err);
+    // The reader left mid-answer: save what they saw (QA-05).
+    await finishAnswer();
   });
   if (typeof context.waitUntil === 'function') {
     context.waitUntil(pipePromise);

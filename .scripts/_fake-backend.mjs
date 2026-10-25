@@ -168,7 +168,9 @@ export function makeFakeBackend({ supabaseUrl = 'https://sb.test', external = nu
 // `reply` is streamed back as OpenAI-shaped SSE in a few chunks; every chat
 // request body is recorded in `seen` so a test can inspect what the model was
 // actually sent (system prompt, messages, sources...).
-export function nvidiaStub({ reply = 'Hello there.', status = 200, errorBody = null } = {}) {
+// slowMs: stream the reply one piece per slowMs instead of all at once, so a
+// test can cancel mid-answer the way a closed tab does.
+export function nvidiaStub({ reply = 'Hello there.', status = 200, errorBody = null, slowMs = 0 } = {}) {
   const seen = [];
   const embedded = [];   // every text sent to the embeddings endpoint
   const handler = async (url, init) => {
@@ -181,8 +183,20 @@ export function nvidiaStub({ reply = 'Hello there.', status = 200, errorBody = n
       seen.push(JSON.parse(init.body));
       if (status !== 200) return Response.json(errorBody || { error: { message: 'upstream said no' } }, { status });
       const pieces = reply.match(/[\s\S]{1,7}/g) || [];
-      const sse = pieces.map(p => `data: ${JSON.stringify({ choices: [{ delta: { content: p } }] })}\n\n`).join('') + 'data: [DONE]\n\n';
-      return new Response(sse, { headers: { 'Content-Type': 'text/event-stream' } });
+      const events = pieces.map(p => `data: ${JSON.stringify({ choices: [{ delta: { content: p } }] })}\n\n`).concat('data: [DONE]\n\n');
+      if (slowMs) {
+        const enc = new TextEncoder();
+        let i = 0;
+        const body = new ReadableStream({
+          async pull(c) {
+            if (i >= events.length) return c.close();
+            await new Promise(r => setTimeout(r, slowMs));
+            c.enqueue(enc.encode(events[i++]));
+          },
+        });
+        return new Response(body, { headers: { 'Content-Type': 'text/event-stream' } });
+      }
+      return new Response(events.join(''), { headers: { 'Content-Type': 'text/event-stream' } });
     }
     return null;
   };
