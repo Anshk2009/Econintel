@@ -1002,27 +1002,25 @@ async function handleRefreshToken(request, env, jwtSecret, allowedOrigin) {
   }
 
   try {
-    // Look up refresh token in KV. New format = JSON { userId, tv }; legacy tokens
-    // stored a bare userId string (handled by the parse fallback below).
+    // Look up the refresh token in KV. Stored as JSON { userId, tv }.
     const storedRaw = await TOKENS.get(`refresh:${refreshToken}`);
 
     if (!storedRaw) {
       return jsonResponse({ error: 'Invalid or expired refresh token' }, 401, allowedOrigin);
     }
 
-    // Parse the stored value, tolerating the legacy bare-string format.
-    let storedUserId, storedTv = null;
-    try {
-      const parsed = JSON.parse(storedRaw);
-      if (parsed && typeof parsed === 'object' && parsed.userId) {
-        storedUserId = parsed.userId;
-        storedTv = typeof parsed.tv === 'number' ? parsed.tv : null;
-      } else {
-        storedUserId = storedRaw; // legacy: the value WAS the userId
-      }
-    } catch {
-      storedUserId = storedRaw; // legacy non-JSON value
+    // Anything else is the pre-C1 format (a bare userId, or no tv): it carries
+    // no token_version, so no logout-all or reset could ever revoke it. It was
+    // already refused further down; it is now refused here, without the
+    // half-parse that used to keep it alive until then (audit QA-03).
+    let stored = null;
+    try { stored = JSON.parse(storedRaw); } catch { /* not JSON */ }
+    if (!stored || typeof stored !== 'object' || !stored.userId || typeof stored.tv !== 'number') {
+      await TOKENS.delete(`refresh:${refreshToken}`);
+      return jsonResponse({ error: 'Session expired. Please sign in again.' }, 401, allowedOrigin);
     }
+    const storedUserId = stored.userId;
+    const storedTv = stored.tv;
 
     // Get user from Supabase to fetch token_version
     const { data: _refreshUsers, error: fetchError } = await supabaseRest('users', 'GET', `id=eq.${encodeURIComponent(storedUserId)}&select=id,email,username,plan,token_version`);
@@ -1035,16 +1033,13 @@ async function handleRefreshToken(request, env, jwtSecret, allowedOrigin) {
     // SECURITY (C1): reject refresh tokens minted before a password reset /
     // logout-all. Those bump users.token_version; if the version stored with this
     // refresh token no longer matches, the session was revoked and the token must
-    // die. Legacy tokens (storedTv === null) carry no version, so we revoke them
-    // too — the user just signs in again, after which every new token is
-    // version-bound. Without this, a stolen refresh token kept working for 30 days
-    // even after the victim reset their password.
-    if (storedTv === null || storedTv !== user.token_version) {
+    // die. Without this, a stolen refresh token kept working for 30 days even
+    // after the victim reset their password.
+    if (storedTv !== user.token_version) {
       await TOKENS.delete(`refresh:${refreshToken}`);
       return jsonResponse({ error: 'Session expired. Please sign in again.' }, 401, allowedOrigin);
     }
 
-    // Generate new access token (15 minutes)
     // Fix: Set-Cookie must be separate headers — joining with commas breaks cookie parsing
     const refreshHeaders = new Headers({
       'Content-Type': 'application/json; charset=utf-8',

@@ -61,4 +61,19 @@ const canRefresh = async (c) => (await call(auth, '/auth?action=refresh', { meth
   assert.equal(await canRefresh(c), false, 'logout: the refresh token still works');
 }
 
+// ── refresh tokens in the pre-C1 format are refused and deleted ────────────
+// They stored a bare userId with no token_version, so no logout-all or reset
+// could ever revoke them. (Characterisation: already refused — this pins it
+// while the parsing code is simplified, audit QA-03.)
+{
+  const { fb } = await fresh();
+  const uid = fb.tables.users[0].id;
+  for (const [key, value] of [['refresh:legacy-bare', uid], ['refresh:legacy-json-no-tv', JSON.stringify({ userId: uid })]]) {
+    fb.tables.kv_store.push({ key, value, expires_at: new Date(Date.now() + 3600e3).toISOString() });
+    const r = await call(auth, '/auth?action=refresh', { method: 'POST', cookies: { refresh_token: key.slice(8) } });
+    assert.equal(r.status, 401, `${key}: a version-less refresh token minted a session`);
+    assert.ok(!fb.tables.kv_store.some(row => row.key === key), `${key}: the refused token was left in kv_store`);
+  }
+}
+
 console.log('session revocation: OK');
