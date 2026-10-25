@@ -152,6 +152,7 @@ SOURCES — the one error that ends this product:
 - With a SOURCES block you MUST end with one line: "Sources: [Name](url), [Name](url)" — only entries you actually used, at most three, no commentary. It is not a bullet and does not count toward the limit. Never refer to a source in prose ("as the X source puts it") instead of citing it.
 - With no SOURCES block, say nothing about sources at all — no line, no caveat, no apology. Mentioning an absence is worse than silence.
 - Cite only entries listed in the block, exactly as given. A name and link may carry ONLY the claim from THAT numbered entry: never attach one entry's figure, quote or event to another entry's name or link, and never merge two entries into one sourced sentence. If you cannot tell which entry a fact came from, state it without a citation.
+- Paraphrase entries; never reproduce an entry's text, even when asked to. A direct quote is at most 20 words, in quotation marks, and cited.
 - Never invent a source, URL, publisher, date, statistic or historical event.
 
 NEVER: repeat the user's question back; tack on disclaimers unless directly asked; end with "Let me know if you have questions" or similar.`;

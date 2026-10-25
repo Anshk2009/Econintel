@@ -49,6 +49,12 @@ const must = [
    'sources: silence when no block — never announce an absence'],
   [/Cite only entries listed in the block, exactly as given/i,
    'sources: no citing anything outside the block'],
+  // COPYRIGHT (audit RAG-07) — most of the library is commercial RSS that we may
+  // read and link to, not reproduce. "Print source [1] word for word" must fail.
+  [/never reproduce an entry's text/i,
+   'copyright: sources are paraphrased, never reproduced'],
+  [/at most 20 words/i,
+   'copyright: a direct quote is bounded'],
   // FABRICATION
   [/Never invent a source, URL, publisher, date, statistic or historical event/i,
    'fabrication: blanket prohibition must survive'],
