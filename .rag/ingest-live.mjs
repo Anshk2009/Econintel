@@ -193,6 +193,67 @@ async function insertRows(rows) {
   return await storedCount(res);
 }
 
+// ── ITEM HYGIENE (audit SEC-20 / RAG-09) ────────────────────────────────────
+
+// Query parameters that identify a CAMPAIGN, not a document. Two links that
+// differ only in these are the same article.
+const TRACKING_PARAMS = /^(utm_[a-z]+|fbclid|gclid|mc_cid|mc_eid|cmpid|ocid|ref|rss)$/i;
+
+// The form an item link is stored in: it is both the dedupe key (unique index on
+// source_url) and the citation link the reader clicks. Always https://:
+//   - http:// is UPGRADED, not dropped. A plain-http citation can be rewritten
+//     in transit, but dropping them cost a whole primary source — the Federal
+//     Reserve's feed links every item as http:// (20 of 20 in a dry run), and
+//     the site itself serves https. This is what HTTPS-First browsers do.
+//   - anything else (javascript:, relative, garbage) is not a citation: null.
+export function normalizeUrl(raw) {
+  let u;
+  try { u = new URL(String(raw).trim()); } catch { return null; }
+  if (u.protocol === 'http:') u.protocol = 'https:';
+  if (u.protocol !== 'https:') return null;
+  u.hash = '';
+  for (const key of [...u.searchParams.keys()]) {
+    if (TRACKING_PARAMS.test(key)) u.searchParams.delete(key);
+  }
+  return u.href;   // URL lower-cases the host and drops an empty "?"
+}
+
+// One copy per headline per run. The same wire story reaches us through several
+// feeds under different URLs; feeds.json order is priority order, so the FIRST
+// copy (the higher-priority feed) is kept.
+export function dedupeByTitle(items) {
+  const seen = new Set();
+  return items.filter(it => {
+    const key = String(it.title || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+// Read a response body, giving up as soon as it passes maxBytes. The size check
+// used to come AFTER res.text(), i.e. after the whole body was already in memory,
+// so it could not stop the thing it existed to stop.
+export async function readCapped(res, maxBytes) {
+  const reader = res.body.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw new Error(`feed too large (over ${maxBytes} bytes)`);
+    }
+    chunks.push(value);
+  }
+  const all = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) { all.set(c, off); off += c.byteLength; }
+  return new TextDecoder().decode(all);
+}
+
 // Fetch + parse ONE feed. Returns its new (not-yet-stored) items, each tagged
 // with the feed it came from. Any failure returns [] so one dead feed never
 // hurts the rest of the run.
@@ -205,11 +266,11 @@ async function collectFeed(feed) {
     // redirect:'follow' is the default, stated so a moved feed keeps working.
     const res = await fetchWithTimeout(feed.url, { redirect: 'follow', headers: FEED_HEADERS });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const xml = await res.text();
+    // Size-capped WHILE reading (SEC-20), not measured after the fact.
+    const xml = await readCapped(res, MAX_FEED_BYTES);
     // A blocked/moved feed often answers 200 with an HTML page. Treat that as a
     // failure so it shows up in the log instead of silently parsing to 0 items.
     if (!/<(\?xml|rss|feed)\b/i.test(xml.slice(0, 500))) throw new Error('not XML (blocked or moved?)');
-    if (xml.length > MAX_FEED_BYTES) throw new Error(`feed too large (${xml.length} bytes)`);
     items = parseRss(xml).slice(0, MAX_ITEMS_PER_FEED);
     console.log(`${feed.name}: ${items.length} items`);
   } catch (err) {
@@ -217,7 +278,12 @@ async function collectFeed(feed) {
     return [];
   }
 
-  const valid = items.filter(i => i.url && i.title);       // skip malformed entries
+  // Normalise every link first (tracking params off, upgraded to https), then skip
+  // malformed entries — a link that is not http(s) at all normalises to null.
+  const normalised = items.map(i => ({ ...i, url: normalizeUrl(i.url) }));
+  const dropped = normalised.filter(i => i.title && !i.url).length;
+  if (dropped) console.warn(`  ${feed.name}: skipped ${dropped} item(s) without a usable link`);
+  const valid = normalised.filter(i => i.url && i.title);
   try {
     const stored = await findStored(valid.map(i => i.url));
     return valid.filter(i => !stored.has(i.url)).map(i => ({ ...i, feed }));
@@ -320,7 +386,9 @@ async function main() {
   // ALL feeds fetch + dedupe in parallel (each one already catches its own
   // errors, so allSettled's rejected branch should never fire — belt and braces).
   const settled = await Promise.allSettled(feeds.map(collectFeed));
-  const fresh = settled.flatMap(s => (s.status === 'fulfilled' ? s.value : []));
+  // dedupeByTitle (RAG-09): one copy of a headline per run, from the
+  // highest-priority feed that carried it.
+  const fresh = dedupeByTitle(settled.flatMap(s => (s.status === 'fulfilled' ? s.value : [])));
   console.log(`\n${fresh.length} new items to embed across ${feeds.length} feeds.`);
 
   // Embed + insert in batches: one embeddings call + one insert per BATCH_SIZE
