@@ -41,11 +41,8 @@ export async function onRequest(context) {
   if (!env.JWT_SECRET || env.JWT_SECRET.length < 32) throw new Error('JWT_SECRET missing or too short (need >= 32 chars)');
   if (!env.ALLOWED_ORIGIN) throw new Error('ALLOWED_ORIGIN not configured');
   if (!env.SUPABASE_URL) throw new Error('SUPABASE_URL not configured');
-  // Any usable key will do — SUPABASE_SECRET_KEY (preferred), the legacy
-  // base64 wrapper, or anon. Checked through resolveSupabaseKey so this guard
-  // can never disagree with what makeSupabase actually uses: hardcoding
-  // SUPABASE_ANON_KEY here meant the anon key stayed MANDATORY even once it
-  // was unused, so removing it after the switch would throw on every request.
+  // The secret key only (QA-03) — see resolveSupabaseKey() for why there is
+  // no anon fallback any more.
   if (!resolveSupabaseKey(env)) throw new Error('No Supabase key configured — set SUPABASE_SECRET_KEY');
 
   const JWT_SECRET = env.JWT_SECRET;

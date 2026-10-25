@@ -301,54 +301,29 @@ export async function hashIP(ip) {
 // UTILITY: Resolve which Supabase key the backend should use
 // ============================================================================
 /**
- * Pick the Supabase API key for server-side REST calls.
+ * The Supabase key every server-side REST call uses: SUPABASE_SECRET_KEY
+ * (`sb_secret_…`), which bypasses RLS. Nothing else.
  *
- * BACKGROUND: Row Level Security (RLS) is the thing that makes a Supabase key
- * safe to expose. Today RLS is OFF and the functions use the ANON key, so the
- * anon key is the ONLY guard on the whole database — if it ever leaks, every
- * table is readable. The fix is to turn RLS ON and have the backend use the
- * SERVICE-ROLE key (which bypasses RLS), so a leaked anon key becomes useless.
+ * HISTORY, because the reason matters: EdgeOne refuses to store the legacy
+ * service_role key (a JWT starting `eyJ…` trips its "unsecurity string"
+ * filter), so for months the functions ran on the ANON key and RLS stayed off.
+ * A base64-wrapped copy of the legacy key was the first workaround; Supabase's
+ * new non-JWT secret key removed the problem, and RLS has been ON for every
+ * table, with no policies, since 2026-08-22.
  *
- * EdgeOne refuses to store the raw service_role JWT ("value contains unsecurity
- * string"), so we store it base64-WRAPPED in SUPABASE_SERVICE_KEY_B64 and decode
- * it here at runtime.
- *
- * BACKWARD-COMPATIBLE BY DESIGN: if SUPABASE_SERVICE_KEY_B64 is not set (or can't
- * be decoded) we fall back to the anon key — so deploying this code changes
- * NOTHING until you both (a) set the env var and (b) enable RLS. That lets you
- * roll the change out in safe, separately-reversible steps.
+ * So the anon key can no longer do anything here, and falling back to it
+ * (as this used to, after the base64 wrapper) only turned "the secret is
+ * missing" into confusing denials and silently empty reads (audit QA-03).
+ * Without the secret key this returns undefined, and each function's startup
+ * check throws a named error instead.
  *
  * @param {object} env - EdgeOne environment bindings
- * @returns {string} the Supabase key to use
+ * @returns {string|undefined} the secret key, trimmed
  */
 export function resolveSupabaseKey(env) {
-  // PREFERRED: Supabase's new-format secret key (`sb_secret_...`).
-  //
-  // Why this exists now and did not before: EdgeOne refuses to store the LEGACY
-  // service_role key, because that key is a JWT beginning `eyJ...` and trips a
-  // content filter ("value contains unsecurity string") — which is the entire
-  // reason this project ran on the anon key server-side, and therefore the
-  // reason RLS is off on all seven public tables. `sb_secret_...` is not a JWT
-  // and is a completely different string shape, so it saves normally. That
-  // removes the constraint the whole design was bent around.
-  //
-  // No base64 wrapper needed, so no decode step that can fail silently.
-  if (env.SUPABASE_SECRET_KEY) return env.SUPABASE_SECRET_KEY.trim();
-
-  // LEGACY workaround, kept so an existing deployment does not regress: the old
-  // service_role JWT, base64-wrapped by hand to get past that same filter.
-  if (env.SUPABASE_SERVICE_KEY_B64) {
-    try {
-      // .trim() guards against a trailing newline accidentally pasted into the
-      // dashboard; atob() turns the base64 wrapper back into the real JWT.
-      return atob(env.SUPABASE_SERVICE_KEY_B64.trim());
-    } catch (err) {
-      // Misconfigured wrapper — log and fall back so we fail in an obvious way
-      // during testing (anon key + RLS-on = denied), not silently.
-      console.warn('[middleware] SUPABASE_SERVICE_KEY_B64 set but could not be decoded; falling back to anon key:', err);
-    }
-  }
-  return env.SUPABASE_ANON_KEY;
+  // .trim(): a trailing space or newline pasted into the dashboard otherwise
+  // breaks every request in a way that looks like a dead key.
+  return env.SUPABASE_SECRET_KEY ? env.SUPABASE_SECRET_KEY.trim() : undefined;
 }
 
 // ============================================================================
@@ -373,8 +348,7 @@ let kvIncrMissing = false;
 
 export function makeSupabase(env) {
   const supabaseUrl = env.SUPABASE_URL;
-  // Service-role key (base64-wrapped) if configured, else anon key — see
-  // resolveSupabaseKey(). This is the only guard on the DB until RLS is on.
+  // The secret key (bypasses RLS) — see resolveSupabaseKey().
   const supabaseKey = resolveSupabaseKey(env);
 
   async function supabaseRest(table, method = 'GET', filters = '', body = null) {

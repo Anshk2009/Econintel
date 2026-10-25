@@ -90,7 +90,7 @@ jobs:
           MISSING=()
           for VAR in JWT_SECRET ALLOWED_ORIGIN SUPABASE_URL SUPABASE_ANON_KEY \
                      NVIDIA_API_KEY \
-                     SUPABASE_SERVICE_KEY_B64 \
+                     SUPABASE_SECRET_KEY SUPABASE_SERVICE_ROLE_KEY \
                      DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET \
                      GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET \
                      RESEND_API_KEY FRED_API_KEY DATA_GOV_IN_KEY INGEST_CONTACT; do
@@ -122,7 +122,7 @@ jobs:
           LAST=$(ls .migrations/*.sql 2>/dev/null | sort | tail -1)
           if echo "$LAST" | grep -q "rollback_disable_rls\|disable_rls"; then
             echo "⚠️  WARNING: latest migration appears to DISABLE RLS ($LAST)."
-            echo "   Run .migrations/0003_enable_rls.sql after setting SUPABASE_SERVICE_KEY_B64."
+            echo "   Run .migrations/0003_enable_rls.sql — the functions use SUPABASE_SECRET_KEY, which bypasses RLS."
           else
             echo "  ℹ️  Latest migration: $LAST"
           fi
