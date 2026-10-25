@@ -160,6 +160,46 @@ export function makeFakeBackend({ supabaseUrl = 'https://sb.test', external = nu
   return { fetch, tables, calls };
 }
 
+// Stand-in for NVIDIA's two endpoints (embeddings + streaming chat completions).
+// `reply` is streamed back as OpenAI-shaped SSE in a few chunks; every chat
+// request body is recorded in `seen` so a test can inspect what the model was
+// actually sent (system prompt, messages, sources...).
+export function nvidiaStub({ reply = 'Hello there.', status = 200, errorBody = null } = {}) {
+  const seen = [];
+  const handler = async (url, init) => {
+    if (url.href === 'https://integrate.api.nvidia.com/v1/embeddings') {
+      const { input } = JSON.parse(init.body);
+      return Response.json({ data: input.map((_, index) => ({ index, embedding: new Array(2048).fill(0.01) })) });
+    }
+    if (url.href === 'https://integrate.api.nvidia.com/v1/chat/completions') {
+      seen.push(JSON.parse(init.body));
+      if (status !== 200) return Response.json(errorBody || { error: { message: 'upstream said no' } }, { status });
+      const pieces = reply.match(/[\s\S]{1,7}/g) || [];
+      const sse = pieces.map(p => `data: ${JSON.stringify({ choices: [{ delta: { content: p } }] })}\n\n`).join('') + 'data: [DONE]\n\n';
+      return new Response(sse, { headers: { 'Content-Type': 'text/event-stream' } });
+    }
+    return null;
+  };
+  return { handler, seen };
+}
+
+// Read a whole SSE response and return the concatenated delta text, plus any
+// non-delta JSON events (e.g. the citation allowlist) in `events`.
+export async function readSSE(res) {
+  const text = await res.text();
+  let content = '';
+  const events = [];
+  for (const line of text.split('\n')) {
+    if (!line.startsWith('data: ')) continue;
+    const payload = line.slice(6).trim();
+    if (payload === '[DONE]') continue;
+    const obj = JSON.parse(payload);
+    const d = obj?.choices?.[0]?.delta?.content;
+    if (typeof d === 'string') content += d; else events.push(obj);
+  }
+  return { content, events, raw: text };
+}
+
 // Shared env for every handler test. JWT_SECRET is >= 32 chars because the
 // functions refuse to start with a shorter one.
 export const TEST_ENV = {
@@ -169,6 +209,15 @@ export const TEST_ENV = {
   SUPABASE_SECRET_KEY: 'sb_secret_test',
   NVIDIA_API_KEY: 'nvapi-test',
 };
+
+// Put a user row in the fake DB and mint a real access token for it, so a test
+// can call the signed-in paths without going through signup + login.
+export async function signIn(fb, { id = 'user-1', plan = 'free', email = `${id}@example.com` } = {}) {
+  const { generateJWT } = await import('../functions/middleware.js');
+  fb.tables.users.push({ id, email, username: id, plan, token_version: 1, password_hash: 'x', email_verified_at: null });
+  const token = await generateJWT({ userId: id, email, username: id, plan, tv: 1 }, TEST_ENV.JWT_SECRET, 900);
+  return { access_token: token };
+}
 
 // Build a Request the way a browser on the real site would send it.
 export function req(path, { method = 'GET', body, cookies = {}, headers = {}, ip = '203.0.113.7' } = {}) {
