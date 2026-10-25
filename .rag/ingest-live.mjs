@@ -202,9 +202,10 @@ const TRACKING_PARAMS = /^(utm_[a-z]+|fbclid|gclid|mc_cid|mc_eid|cmpid|ocid|ref|
 // The form an item link is stored in: it is both the dedupe key (unique index on
 // source_url) and the citation link the reader clicks. Always https://:
 //   - http:// is UPGRADED, not dropped. A plain-http citation can be rewritten
-//     in transit, but dropping them cost a whole primary source — the Federal
-//     Reserve's feed links every item as http:// (20 of 20 in a dry run), and
-//     the site itself serves https. This is what HTTPS-First browsers do.
+//     in transit, but dropping them costs a whole primary source: the Bank of
+//     Japan's feed links all of its items as http:// (51 of 51, 2026-10-26)
+//     while boj.or.jp serves the same pages over https (checked: 200). This is
+//     what HTTPS-First browsers do.
 //   - anything else (javascript:, relative, garbage) is not a citation: null.
 export function normalizeUrl(raw) {
   let u;

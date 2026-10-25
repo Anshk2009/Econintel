@@ -20,11 +20,11 @@ assert.equal(normalizeUrl('https://example.com/a?utm_source=rss&utm_medium=feed&
   'tracking params and the fragment must go, real params must stay');
 assert.equal(normalizeUrl('https://example.com/a?fbclid=x&gclid=y'), 'https://example.com/a');
 assert.equal(normalizeUrl('  https://EXAMPLE.com/a  '), 'https://example.com/a', 'host case and whitespace');
-// Plain http is UPGRADED, not dropped: the Federal Reserve's own feed links
-// every item as http://www.federalreserve.gov/…, and dropping them lost a whole
-// primary source (measured in a dry run: 20 of 20 items). Every publisher we
-// ingest serves https; upgrading is what a browser's HTTPS-First mode does.
-assert.equal(normalizeUrl('http://www.federalreserve.gov/newsevents/x.htm'), 'https://www.federalreserve.gov/newsevents/x.htm',
+// Plain http is UPGRADED, not dropped: the Bank of Japan's feed links all of
+// its items as http://www.boj.or.jp/… (51 of 51, 2026-10-26) and dropping them
+// would lose a central bank. The same pages serve over https (checked: 200);
+// upgrading is what a browser's HTTPS-First mode does.
+assert.equal(normalizeUrl('http://www.boj.or.jp/en/research/brp/fsr/fsr261023.htm'), 'https://www.boj.or.jp/en/research/brp/fsr/fsr261023.htm',
   'http links must be upgraded to https');
 assert.equal(normalizeUrl('javascript:alert(1)'), null);
 assert.equal(normalizeUrl('/relative/path'), null);
