@@ -314,9 +314,9 @@ async function handleSignup(request, env, jwtSecret, allowedOrigin) {
  * Returns: { userId: string, jwt: string, username: string, email: string }
  */
 async function handleLogin(request, env, jwtSecret, allowedOrigin) {
-  // clientIP is the HASH of the rate-limit bucket (SEC-08) — see piiKey().
-  const clientIP = await piiKey(getClientIP(request));
-  const ipKey = `rl:login:ip:${clientIP}`;
+  // The HASH of the rate-limit bucket, never the raw IP (SEC-08) — see piiKey().
+  const ipHash = await piiKey(getClientIP(request));
+  const ipKey = `rl:login:ip:${ipHash}`;
 
   // Per-IP attempts, successful or not (20/hour). Counted atomically (SEC-02).
   const ipLimit = await hitRateLimit(TOKENS, ipKey, RATE_LIMITS.loginAttempts.max, RATE_LIMITS.loginAttempts.window);
@@ -349,7 +349,7 @@ async function handleLogin(request, env, jwtSecret, allowedOrigin) {
   // so a parallel burst cannot reach comparePassword more than `max` times. A
   // successful login clears emailKey below, so a few typos do not linger.
   const emailHash = await piiKey(normalizedEmail);
-  const emailKey = `rl:login:email:${emailHash}:${clientIP}`;
+  const emailKey = `rl:login:email:${emailHash}:${ipHash}`;
   const accountKey = `rl:login:account:${emailHash}`;
   const emailLimit = await hitRateLimit(TOKENS, emailKey, RATE_LIMITS.failedLogin.max, RATE_LIMITS.failedLogin.window);
   const accountLimit = await hitRateLimit(TOKENS, accountKey, RATE_LIMITS.failedLoginAccount.max, RATE_LIMITS.failedLoginAccount.window);
@@ -382,7 +382,7 @@ async function handleLogin(request, env, jwtSecret, allowedOrigin) {
       // 15 min just by sending 5 bad passwords for that email (targeted DoS). The
       // per-IP counter (ipKey, 20/hr) still bounds a single attacker's total
       // guesses, while this IP+email key stops a remote attacker from locking out
-      // a victim they aren't co-located with. clientIP is the trusted
+      // a victim they aren't co-located with. ipHash is the trusted
       // EO-Connecting-IP value (see getClientIP / H1). This attempt was already
       // counted against every key above, BEFORE the password (SEC-04, SEC-02).
       return jsonResponse({ error: 'Invalid email or password' }, 401, allowedOrigin);
