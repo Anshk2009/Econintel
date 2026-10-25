@@ -1,7 +1,8 @@
 // probe-embeddings.mjs — PRE-FLIGHT GATE for the NVIDIA embedding switch.
 // Run: node .rag/probe-embeddings.mjs
 //
-// Needs: NVIDIA_API_KEY, SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY.
+// Needs: NVIDIA_API_KEY, SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY (it reads
+// `documents` directly, which RLS denies to anon).
 //
 // WHY THIS EXISTS
 // The provider switch asserts three things, and NOT ONE of them can be proved by
@@ -108,7 +109,7 @@ console.log('\n=== 3. Are the stored vectors still valid? ===');
 if (!probe) {
   console.log('  SKIP    section 2 failed; nothing to compare against.');
 } else if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.log('  SKIP    SUPABASE_URL / SUPABASE_*_KEY not set in this shell.');
+  console.log('  SKIP    SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set in this shell.');
 } else {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/documents?select=id,content,embedding,embedding_model` +
                         `&content=not.is.null&embedding=not.is.null&order=id.desc&limit=1`,

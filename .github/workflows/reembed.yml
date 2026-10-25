@@ -65,7 +65,7 @@ jobs:
         env:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          # probe-embeddings reads `documents` directly: service role (RLS is on).
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node probe-embeddings.mjs
 
@@ -76,9 +76,7 @@ jobs:
         env:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          # Used in preference to the anon key when set — a write-heavy job is
-          # exactly where RLS bites, and this one PATCHes every row it touches.
+          # REQUIRED: this PATCHes every row it touches, and RLS is on.
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           REEMBED_BUDGET: ${{ inputs.budget }}
         run: node reembed.mjs ${{ inputs.scope == 'all' && '--all' || '' }}

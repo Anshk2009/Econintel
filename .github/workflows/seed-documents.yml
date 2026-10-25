@@ -41,9 +41,8 @@ jobs:
         env:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          # Optional: when set, the ingesters authenticate as service_role and
-          # RLS on `documents` can stay ON (see .rag/harden-rls.sql). Unset is
-          # fine — sources/_lib.mjs falls back to the anon key.
+          # REQUIRED: this job writes to `documents`, and RLS is on, so it needs
+          # the service-role key (sources/_lib.mjs no longer falls back to anon,
+          # whose writes can only fail). The anon key is not passed at all.
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node ingest-files.mjs

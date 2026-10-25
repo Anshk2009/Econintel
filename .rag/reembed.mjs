@@ -1,6 +1,6 @@
 // reembed.mjs — repair rows whose vectors are in a dead embedding space.
 // Run: node reembed.mjs            (needs NVIDIA_API_KEY, SUPABASE_URL,
-//                                    and SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY)
+//                                    and SUPABASE_SERVICE_ROLE_KEY)
 //      node reembed.mjs --all      (include churn categories too — normally you DELETE those)
 //      REEMBED_BUDGET=10 node reembed.mjs   (smaller bite; safe to run repeatedly)
 //
@@ -32,7 +32,7 @@ import { embedBatch, fetchWithTimeout, requireEnv, EMBED_MODEL, EMBED_SPACE_CHAN
          setEmbedBudget, SUPABASE_URL, SUPABASE_KEY } from './sources/_lib.mjs';
 
 requireEnv(['NVIDIA_API_KEY', 'SUPABASE_URL']);
-if (!SUPABASE_KEY) throw new Error('Missing env var(s): SUPABASE_ANON_KEY or SUPABASE_SERVICE_ROLE_KEY');
+if (!SUPABASE_KEY) throw new Error('Missing env var(s): SUPABASE_SERVICE_ROLE_KEY');
 const KEY = SUPABASE_KEY;
 const AUTH = { 'Authorization': `Bearer ${KEY}`, 'apikey': KEY };
 

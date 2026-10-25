@@ -30,7 +30,7 @@ globalThis.fetch = async (url, opts) => {
 
 process.env.NVIDIA_API_KEY = 'nvapi-test';
 process.env.SUPABASE_URL = 'http://db';
-process.env.SUPABASE_ANON_KEY = 'k';
+process.env.SUPABASE_SERVICE_ROLE_KEY = 'k';
 const lib = await import('../.rag/sources/_lib.mjs');
 
 // ── 1. The space-change date exists and is a real, parseable instant ────────

@@ -19,7 +19,7 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 // embedBatch() + fetchWithTimeout() are shared with the data-source ingesters.
 import { embedBatch, fetchWithTimeout, FEED_HEADERS, EMBED_MODEL, EMBED_BUDGET,
-         SUPABASE_URL, SUPABASE_KEY, USING_SERVICE_ROLE } from './sources/_lib.mjs';
+         SUPABASE_URL, SUPABASE_KEY } from './sources/_lib.mjs';
 
 // --- Config: set these as environment variables before running ---
 // Credentials come from sources/_lib.mjs, which prefers a service-role key when
@@ -403,7 +403,7 @@ async function main() {
   const missing = [];
   if (!process.env.NVIDIA_API_KEY) missing.push('NVIDIA_API_KEY');
   if (!SUPABASE_URL)         missing.push('SUPABASE_URL');
-  if (!SUPABASE_KEY)         missing.push('SUPABASE_ANON_KEY or SUPABASE_SERVICE_ROLE_KEY');
+  if (!SUPABASE_KEY)         missing.push('SUPABASE_SERVICE_ROLE_KEY');
   if (missing.length) {
     // A dry run touches neither API, so missing secrets are expected — say so
     // and carry on, instead of refusing to do the part that needs no keys.
@@ -415,10 +415,6 @@ async function main() {
     }
   }
 
-  // Say which role we authenticated as. harden-rls.sql tells you to confirm this
-  // line reads service_role BEFORE enabling RLS — get the order wrong and every
-  // insert fails 42501, which is exactly how ingestion broke on 2026-08-21.
-  console.log(`Supabase role: ${USING_SERVICE_ROLE ? 'service_role (RLS bypassed)' : 'anon (requires RLS off, or an insert policy)'}`);
 
   // Resolved relative to THIS FILE, not the working directory — the workflow
   // sets `working-directory: .rag`, but a human running
