@@ -2252,10 +2252,18 @@ async function sendMessage() {
       try { errData = await res.clone().json(); } catch {}
 
       if (errData.code === 'GUEST_QUOTA_EXCEEDED') {
-        // Guest ran out of free messages — show sign-up CTA
-        addMessage('assistant',
-          `You've used all 15 free messages. **[Sign up free](index.html)** for 100 queries/month — no credit card needed.`,
-          { error: false });
+        // Guest ran out of free messages — show the SERVER's message (it knows
+        // the real limits; this used to hard-code its own count and a monthly
+        // quota that does not exist — audit QA-06) plus a sign-up link.
+        // The link is a real <a>: addMessage() writes textContent, so the
+        // markdown link this used to carry was shown as literal **[…](…)** text.
+        const cta = addMessage('assistant', errData.error || 'You have used all your guest messages for now.', { error: false });
+        cta.textContent = errData.error || 'You have used all your guest messages for now.';
+        const signUp = document.createElement('a');
+        signUp.href = 'index.html';
+        signUp.textContent = 'Sign up free →';
+        signUp.style.cssText = 'display:block;margin-top:.6rem;font-weight:600;color:var(--accent)';
+        cta.appendChild(signUp);
       } else {
         // Expired session
         addMessage('assistant',

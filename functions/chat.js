@@ -503,7 +503,10 @@ ${clip(c.content)}`;
 
     if (used > GUEST_LIMIT) {
       return jsonResponse({
-        error: `You've used all ${GUEST_LIMIT} free messages for this 2-hour window. Sign up for 100 free queries/month — no credit card needed.`,
+        // QA-06: the only copy of this sentence — chat.html shows it as-is. No
+        // monthly figure: there is no monthly quota, and a free account's real cap
+        // is daily (RATE_LIMITS.free), so the number comes from the constant.
+        error: `You've used all ${GUEST_LIMIT} guest messages for this 2-hour window. Sign up free for up to ${RATE_LIMITS.free.dailyPerIP} messages a day — no credit card needed.`,
         code: 'GUEST_QUOTA_EXCEEDED'
       }, 401, ALLOWED_ORIGIN);
     }
