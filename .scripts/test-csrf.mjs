@@ -47,6 +47,17 @@ for (const [name, call] of endpoints) {
 }
 assert.equal(fb.tables.users.length, 2, 'an account was deleted by a request that should have been refused');
 
+// 4. LEGACY format (audit QA-03): tokens issued before the M3 fix stored a bare
+// string with no owner, and both validators accepted those on existence alone
+// — an unbound token. CSRF tokens live 24 hours and the user-bound format has
+// been issued since July, so no legitimate legacy token can still exist.
+fb.tables.kv_store.push({ key: 'csrf:legacytok', value: 'legacytok', expires_at: new Date(Date.now() + 3600e3).toISOString() });
+for (const [name, call] of endpoints) {
+  const r = await call({ access_token: bob.access_token, csrf_token: 'legacytok' }, { 'X-CSRF-Token': 'legacytok' });
+  assert.equal(r.status, 403, `${name}: accepted an unbound legacy CSRF token`);
+}
+assert.equal(fb.tables.users.length, 2, 'an account was deleted with a legacy token');
+
 // Control: Bob's own token works.
 const ok = await endpoints[0][1]({ access_token: bob.access_token, csrf_token: bob.csrf_token }, { 'X-CSRF-Token': bob.csrf_token });
 assert.equal(ok.status, 200, 'a correct CSRF token was refused');

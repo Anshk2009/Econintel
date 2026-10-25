@@ -295,19 +295,16 @@ async function handleDeleteHistory(request, env, jwtSecret, allowedOrigin) {
   const userId = auth.userId;
 
   // SECURITY (M3): the CSRF token must have been issued by this server AND belong
-  // to THIS user. New tokens store { userId } as JSON; legacy tokens stored the
-  // bare token string, for which we accept mere existence (back-compat until they
-  // expire). This stops one user's CSRF token authorising another user's delete.
+  // to THIS user — tokens store { userId } as JSON. This stops one user's CSRF
+  // token authorising another user's delete. The pre-M3 bare-string format used
+  // to pass on existence alone; none can still be live (24 h TTL, bound format
+  // since July), so it is refused like any other unbound token (QA-03).
   const csrfStored = await TOKENS.get(`csrf:${csrfHeader}`);
-  if (!csrfStored) {
+  let owner = null;
+  try { owner = JSON.parse(csrfStored)?.userId ?? null; } catch { /* not the bound format */ }
+  if (!csrfStored || owner !== userId) {
     return jsonResponse({ error: 'Invalid or missing CSRF token' }, 403, allowedOrigin);
   }
-  try {
-    const parsed = JSON.parse(csrfStored);
-    if (parsed && typeof parsed === 'object' && 'userId' in parsed && parsed.userId !== userId) {
-      return jsonResponse({ error: 'Invalid or missing CSRF token' }, 403, allowedOrigin);
-    }
-  } catch { /* legacy non-JSON value — existence check above is sufficient */ }
 
   try {
     const { error: deleteError } = await supabaseRest(

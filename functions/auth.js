@@ -1392,18 +1392,17 @@ async function validateCSRFToken(request, tokens, expectedUserId = null) {
   const stored = await tokens.get(`csrf:${csrfHeader}`);
   if (!stored) return false;
 
-  // SECURITY (M3): when the caller knows who is authenticated, require the CSRF
-  // token to have been issued to THAT user. New tokens store { userId } as JSON;
-  // legacy tokens stored the bare token string — for those we fall back to the
-  // existence check above so sessions created before this change keep working
-  // until they expire.
-  if (expectedUserId !== null) {
-    try {
-      const parsed = JSON.parse(stored);
-      if (parsed && typeof parsed === 'object' && 'userId' in parsed) {
-        return parsed.userId === expectedUserId;
-      }
-    } catch { /* legacy non-JSON value — fall through to existence-only */ }
+  // SECURITY (M3): when the caller knows who is authenticated, the CSRF token
+  // must have been issued to THAT user. Tokens store { userId } as JSON. The
+  // pre-M3 format (a bare string, no owner) used to be accepted on existence
+  // alone; CSRF tokens live 24 hours and the bound format has been issued since
+  // July, so that fallback could only ever accept an unbound token (QA-03).
+  // (expectedUserId is null only for logout, which is harmless to allow.)
+  if (expectedUserId === null) return true;
+  try {
+    const parsed = JSON.parse(stored);
+    return !!parsed && typeof parsed === 'object' && parsed.userId === expectedUserId;
+  } catch {
+    return false;   // not the bound format: refuse
   }
-  return true;
 }
