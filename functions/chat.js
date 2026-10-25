@@ -390,12 +390,21 @@ export async function onRequest(context) {
     //    is a different act and keeps its stricter test.
     if (!Array.isArray(chunks) || chunks.length === 0) return EMPTY;
     const dateOf = (c) => (typeof c.published_at === 'string' ? c.published_at.slice(0, 10) : '');
+    // RAG-04: older rows can be whole articles (tens of thousands of chars). One
+    // of them used to carry its full text into every prompt it matched. Each
+    // source now contributes at most MAX_SOURCE_CHARS, marked with … when cut.
+    // New rows are chunked at ingest to this size, so for them it is a no-op.
+    const MAX_SOURCE_CHARS = 2000;
+    const clip = (t) => {
+      const s = String(t || '');
+      return s.length > MAX_SOURCE_CHARS ? `${s.slice(0, MAX_SOURCE_CHARS)}…` : s;
+    };
     const sources = chunks
       .map((c, i) => {
         const d = dateOf(c);
         // An undated row says so out loud instead of passing as current.
         return `[${i + 1}] ${c.source_name} (${d ? `published ${d}` : 'date unknown'}) — ${c.source_url}
-${c.content}`;
+${clip(c.content)}`;
       })
       .join('\n\n');
     // The URLs are the citation allowlist (SEC-03): the only links the answer may carry.
