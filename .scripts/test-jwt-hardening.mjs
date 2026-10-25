@@ -7,6 +7,7 @@
 // future signing bug (or a leaked secret used once) would then mint immortal
 // sessions. A token must carry an expiry to be accepted at all.
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { generateJWT, verifyJWT } from '../functions/middleware.js';
 
 const SECRET = 'test-secret-test-secret-test-secret-0123';
@@ -41,5 +42,25 @@ assert.equal(await verifyJWT(await sign({ alg: 'HS256', typ: 'JWT' }, base), SEC
 assert.equal(await verifyJWT(await sign({ alg: 'HS256', typ: 'JWT' }, { ...base, iss: 'econintel', aud: 'something-else' }), SECRET), null,
   'a token minted for another audience was accepted');
 assert.ok((await verifyJWT(good, SECRET)).iss === 'econintel', 'generateJWT must stamp iss');
+
+// ── jti: every token is unique, and the blacklist keys on it ───────────────
+// Two tokens minted in the same second with the same claims used to be
+// byte-identical, so logging out on one device blacklisted the other device's
+// token too. And the blacklist key WAS the whole bearer token, stored in
+// kv_store. Every token now carries a random jti; the blacklist stores that.
+const t1 = await generateJWT({ userId: 'u1', plan: 'free', tv: 1 }, SECRET, 900);
+const t2 = await generateJWT({ userId: 'u1', plan: 'free', tv: 1 }, SECRET, 900);
+assert.notEqual(t1, t2, 'two tokens minted together for one user must differ');
+const p1 = await verifyJWT(t1, SECRET);
+assert.match(String(p1.jti), /^[A-Za-z0-9_-]{20,}$/, 'tokens must carry a random jti');
+
+const kv = new Map();
+const TOKENS = { get: async (k) => kv.get(k) ?? null, put: async (k, v) => { kv.set(k, v); } };
+await TOKENS.put(`blacklist:${p1.jti}`, '1');
+assert.equal(await verifyJWT(t1, SECRET, { TOKENS }), null, 'a token whose jti is blacklisted must be refused');
+assert.ok(await verifyJWT(t2, SECRET, { TOKENS }), "blacklisting one token must not touch another's");
+
+const auth = readFileSync(new URL('../functions/auth.js', import.meta.url), 'utf8');
+assert.ok(!/`blacklist:\$\{token\}`/.test(auth), 'auth.js still stores the whole bearer token as a blacklist key');
 
 console.log('jwt hardening: OK');

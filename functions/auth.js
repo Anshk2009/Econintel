@@ -531,7 +531,7 @@ async function handleLogout(request, env, jwtSecret, allowedOrigin) {
   const ttl = Math.ceil(payload.exp - Math.floor(Date.now() / 1000));
   if (ttl > 0) {
     try {
-      await TOKENS.put(`blacklist:${token}`, '1', { expirationTtl: ttl });
+      await TOKENS.put(`blacklist:${payload.jti}`, '1', { expirationTtl: ttl });
     } catch (err) {
       console.warn('[auth] Failed to blacklist token:', err);
       // Still return success—blacklist is nice-to-have
@@ -602,7 +602,7 @@ async function handleLogoutAll(request, env, jwtSecret, allowedOrigin) {
     const ttl = Math.ceil(payload.exp - Math.floor(Date.now() / 1000));
     if (ttl > 0) {
       try {
-        await TOKENS.put(`blacklist:${token}`, '1', { expirationTtl: ttl });
+        await TOKENS.put(`blacklist:${payload.jti}`, '1', { expirationTtl: ttl });
       } catch (err) {
         console.warn('[auth] Failed to blacklist token during logout-all:', err);
       }

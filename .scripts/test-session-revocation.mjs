@@ -30,10 +30,8 @@ const canRefresh = async (c) => (await call(auth, '/auth?action=refresh', { meth
 // ── logout-all kills every older session (here: a second device) ───────────
 {
   const { c: device1 } = await fresh();
-  // Wait past the second boundary: tokens minted in the same second with the
-  // same claims are byte-identical, so the blacklist of device1's token would
-  // also kill device2's and this case would never exercise token_version.
-  await new Promise(r => setTimeout(r, 1100));
+  // No wait needed: every token has its own jti, so device1's blacklist entry
+  // cannot also cover device2 — only token_version can end device2's session.
   const device2 = setCookies(await call(auth, '/auth?action=login', { method: 'POST', body: { email: 's@example.com', password: PW }, ip: '198.51.100.2' }));
   assert.ok(await canRead(device2) && await canRead(device1), 'precondition: both sessions work');
   const out = await call(auth, '/auth?action=logout-all', { method: 'POST',

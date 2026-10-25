@@ -149,7 +149,11 @@ export async function generateJWT(payload, secret, expiresInSeconds = 900) {
 
   // Payload: { ...data, iss, aud, iat: issue time, exp: expiry time }.
   // iss/aud (SEC-18) bind the token to THIS app; verifyJWT requires both.
-  const payloadObj = { ...payload, iss: JWT_ISSUER, aud: JWT_AUDIENCE, iat: now, exp: expiresAt };
+  // jti: a random id per token (QA-01 finding). Without it two tokens minted in
+  // the same second for the same user were byte-identical, so logging out on one
+  // device blacklisted the other's — and the blacklist had to store the whole
+  // bearer token as its key. Now it stores this id.
+  const payloadObj = { ...payload, jti: generateId(), iss: JWT_ISSUER, aud: JWT_AUDIENCE, iat: now, exp: expiresAt };
   const payloadBase64 = btoa(JSON.stringify(payloadObj))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 
@@ -229,8 +233,10 @@ export async function verifyJWT(token, secret, options = {}) {
     }
 
     // Check token blacklist (for logged-out tokens)
+    // Every token we mint carries a jti; one without it was not minted here.
+    if (typeof payload.jti !== 'string' || !payload.jti) return null;
     if (options.TOKENS) {
-      const blacklisted = await options.TOKENS.get(`blacklist:${token}`);
+      const blacklisted = await options.TOKENS.get(`blacklist:${payload.jti}`);
       if (blacklisted) {
         return null; // Token is blacklisted
       }
