@@ -1928,7 +1928,13 @@
 // hoisted, so the definition order doesn't matter) instead of a second
 // escaper: it was a near-duplicate that skipped quotes, which is harmless to
 // also escape in text content.
-function renderMarkdown(raw) {
+// allowedUrls (optional Set): the URLs the server retrieved for THIS answer,
+// from the stream's first event. When given, only those render as links — any
+// other link the model wrote shows as plain text (audit SEC-03 / RAG-06: a
+// poisoned source or a hallucination must not become a clickable link). null =
+// no allowlist known (old server, or a reopened thread the server already
+// cleaned), and https links render as before.
+function renderMarkdown(raw, allowedUrls = null) {
   let t = raw;
   // Step 1: Extract fenced code blocks (```lang\ncode\n```) so inner content
   // isn't touched by bold/italic/link replacements
@@ -1960,6 +1966,13 @@ function renderMarkdown(raw) {
   // can only ever be a URL, never new markup, even if Step 1b's escaping rules
   // change later. The link TEXT was already escaped in Step 1b.
   t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, (_, text, url) => {
+    // The URL here is already HTML-escaped (Step 1b); undo that to compare it
+    // with the raw URLs the server sent. Not on the list -> just the text.
+    if (allowedUrls) {
+      const rawUrl = url.replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+                        .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+      if (!allowedUrls.has(rawUrl)) return text;
+    }
     const safeUrl = url.replace(/"/g, '%22').replace(/'/g, '%27')
                        .replace(/</g, '%3C').replace(/>/g, '%3E');
     return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${text}</a>`;
@@ -2339,8 +2352,13 @@ async function sendMessage() {
     let drainRAF = 0;
     let revealRate = 0;   // chars per frame, eased rather than jumped — see drain()
 
+    // Filled from the stream's first event (chat.js prependEvent): the URLs the
+    // server retrieved, i.e. the only ones this reply may link to. Stays null
+    // against an older server, which keeps the old rendering.
+    let allowedUrls = null;
+
     const paint = () => {
-      msgEl.innerHTML = renderMarkdown(fullReply.slice(0, shownLen));
+      msgEl.innerHTML = renderMarkdown(fullReply.slice(0, shownLen), allowedUrls);
       scrollChatToBottom();
     };
 
@@ -2394,7 +2412,13 @@ async function sendMessage() {
           const payload = line.slice(6).trim();
           if (payload === '[DONE]') { partial = ''; break; }
           try {
-            const delta = JSON.parse(payload)?.choices?.[0]?.delta?.content;
+            const evt = JSON.parse(payload);
+            // The citation allowlist, sent once before any token (SEC-03).
+            if (Array.isArray(evt?.econintel_allowed_urls)) {
+              allowedUrls = new Set(evt.econintel_allowed_urls);
+              continue;
+            }
+            const delta = evt?.choices?.[0]?.delta?.content;
             if (delta) {
               if (!started) beginReply(); // first token: clear the dots, keep the bubble
               fullReply += delta;
@@ -2438,7 +2462,7 @@ async function sendMessage() {
     if (drainRAF) { cancelAnimationFrame(drainRAF); drainRAF = 0; }
     shownLen = fullReply.length;
     if (fullReply) {
-      msgEl.innerHTML = renderMarkdown(fullReply);
+      msgEl.innerHTML = renderMarkdown(fullReply, allowedUrls);
       // AFTER the last innerHTML swap, never before — every paint during the
       // stream replaces the bubble's children, so anything appended earlier is
       // destroyed on the next frame.
