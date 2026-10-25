@@ -194,14 +194,23 @@ const checks = [
     }
     if (r.status !== 200) return `expected 200, got ${r.status} ${(await r.text().catch(() => '')).slice(0, 160)}`;
 
-    // Read the first chunk to confirm a real stream, not an empty 200.
+    // Read until the MODEL's first token arrives, to confirm a real stream.
+    // The first event is no longer model output: chat.js now sends the citation
+    // allowlist ({ econintel_allowed_urls }) ahead of it, so "got a non-empty
+    // first chunk" would pass even if NVIDIA never answered. A `"delta"` is the
+    // proof that it did.
     const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let seen = '';
     try {
-      const { value } = await reader.read();
-      const chunk = new TextDecoder().decode(value || new Uint8Array());
-      if (!chunk.trim()) return 'streamed an empty response';
-      if (/"error"/.test(chunk)) return `error inside stream: ${chunk.slice(0, 160)}`;
-      return null;
+      for (let i = 0; i < 50; i++) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        seen += dec.decode(value, { stream: true });
+        if (/"error"/.test(seen)) return `error inside stream: ${seen.slice(0, 160)}`;
+        if (/"delta"/.test(seen)) return null;
+      }
+      return seen.trim() ? `stream ended without a model token: ${seen.slice(0, 160)}` : 'streamed an empty response';
     } finally {
       await reader.cancel().catch(() => {});
     }

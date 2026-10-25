@@ -20,9 +20,15 @@ import { verifyJWT, jsonResponse, corsPreflightResponse, hashIP, makeSupabase, g
 // both chat.html and the history accumulator read choices[0].delta.content, so a
 // synthetic chunk in that shape is indistinguishable from an upstream one.
 export function prependNotice(body, text) {
-  const head = new TextEncoder().encode(
-    `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`,
-  );
+  return prependEvent(body, { choices: [{ delta: { content: text } }] });
+}
+
+// Emit ONE arbitrary JSON object as an SSE event, then pipe `body` unchanged.
+// prependNotice is the delta-shaped special case; the citation allowlist
+// ({ econintel_allowed_urls }) is the other user. Clients that do not know an
+// event's shape ignore it — chat.html only reads choices[0].delta.content.
+export function prependEvent(body, obj) {
+  const head = new TextEncoder().encode(`data: ${JSON.stringify(obj)}\n\n`);
   const reader = body.getReader();
   return new ReadableStream({
     start(controller) { controller.enqueue(head); },
@@ -32,6 +38,16 @@ export function prependNotice(body, text) {
     },
     cancel(reason) { return reader.cancel(reason); },
   });
+}
+
+// CITATION ALLOWLIST (audit SEC-03 / RAG-06). Turn every markdown link whose URL
+// was NOT retrieved for this answer into its plain text. The model can be talked
+// into a link by a poisoned chunk, or can simply invent one; either way a link
+// the server did not retrieve is not a citation. Used on what chat_history
+// saves; chat.html applies the same rule live from the allowlist event.
+const MD_LINK = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
+export function stripUnlistedLinks(text, allowedUrls) {
+  return text.replace(MD_LINK, (whole, label, url) => (allowedUrls.has(url) ? whole : label));
 }
 
 // NVIDIA's build.nvidia.com endpoint (OpenAI-compatible SSE). The models used
@@ -273,8 +289,8 @@ export async function onRequest(context) {
     // a miss and the answer looked identical either way. The caller now shows a
     // notice on `failed`, which is the only honest signal a product selling
     // source-grounding can give when its grounding is not actually there.
-    const EMPTY  = { sources: '', failed: false };
-    const FAILED = { sources: '', failed: true };
+    const EMPTY  = { sources: '', failed: false, urls: [] };
+    const FAILED = { sources: '', failed: true, urls: [] };
     // 1. Embed the question (text -> a list of 2048 numbers) via NVIDIA.
     let queryEmbedding;
     try {
@@ -380,7 +396,9 @@ export async function onRequest(context) {
 ${c.content}`;
       })
       .join('\n\n');
-    return { sources, failed: false };
+    // The URLs are the citation allowlist (SEC-03): the only links the answer may carry.
+    const urls = [...new Set(chunks.map(c => c.source_url).filter(u => typeof u === 'string' && /^https?:\/\//.test(u)))];
+    return { sources, failed: false, urls };
   }
 
   // CORS preflight
@@ -630,6 +648,8 @@ ${c.content}`;
   // Declared out here, not inside the try, because the STREAMING code further
   // down has to read it to prepend the visible notice.
   let retrievalFailed = false;
+  // Every URL retrieved for this answer — the only links it may contain (SEC-03).
+  let allowedUrls = [];
   let upstream;
   try {
     // RAG: fetch relevant sources for the latest question and prepend them to
@@ -640,9 +660,10 @@ ${c.content}`;
     // The retrieved block, if any, travels in the USER turn (SEC-03, below).
     let sourcesBlock = '';
     if (latestUserMsg) {
-      const { sources, failed } = await retrieveContext(latestUserMsg.content);
+      const { sources, failed, urls } = await retrieveContext(latestUserMsg.content);
       mark('rag');   // embed + match_documents done
       retrievalFailed = failed;
+      allowedUrls = urls;
       // SECURITY (M2 — indirect prompt injection): the retrieved text comes from
       // LIVE, UNTRUSTED sources (RSS feeds, scraped news). A poisoned item could
       // embed "ignore your instructions and…". We fence each block and tell the model
@@ -785,9 +806,13 @@ RETRIEVAL UNAVAILABLE: the source library could not be reached for this question
   // Deliberately NOT fired on an empty-but-working library: at this corpus size a
   // genuine zero-hit is common, and a notice that shows on half of all answers is
   // furniture within a week. It has to stay rare to stay meaningful.
-  const streamBody = retrievalFailed
+  const withNotice = retrievalFailed
     ? prependNotice(upstream.body, 'Heads up: my source library was unreachable for this one, so this is from general knowledge and not checked against live sources.\n\n')
     : upstream.body;
+  // FIRST event on every stream: the URLs retrieved for this answer. chat.html
+  // renders only these as links (SEC-03 / RAG-06); anything else the model wrote
+  // shows as plain text. Sent even when empty — "no sources" means "no links".
+  const streamBody = prependEvent(withNotice, { econintel_allowed_urls: allowedUrls });
 
   // Guests: pipe the SSE stream straight through — no history to save
   if (userId.startsWith('guest:')) {
@@ -847,7 +872,9 @@ RETRIEVAL UNAVAILABLE: the source library could not be reached for this question
         if (fullContent) {
           rows.push({
             id: generateId(), user_id: userId, role: 'assistant',
-            content: fullContent,
+            // Saved with unlisted links reduced to their text (SEC-03 / RAG-06),
+            // so a reopened thread never shows a link we did not retrieve.
+            content: stripUnlistedLinks(fullContent, new Set(allowedUrls)),
             model,
             conversation_id: cid,
             // +1ms so the reply always sorts AFTER its question when a thread is
