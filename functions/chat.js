@@ -74,6 +74,17 @@ const MODEL_BUCKETS = {
 const FREE_IP_LIMIT  = 30;
 const FREE_IP_WINDOW = 129600; // 36 hours, in seconds
 
+// SITE-WIDE caps in front of the provider (audit SEC-02). Every limit above is
+// per user or per network, and they can all be perfectly correct while the
+// product still goes down: the NVIDIA key is SHARED at 40 requests/minute, so
+// 41 different people in one minute — or one person with 41 accounts — tip it
+// over and EVERY user gets errors. 36 keeps the key itself from ever 429ing;
+// guests get at most a third of it, so anonymous traffic cannot take the minute
+// from signed-in users. Embedding calls are a different model with their own
+// limit and are not counted here.
+const GLOBAL_PER_MINUTE       = 36;
+const GUEST_GLOBAL_PER_MINUTE = 12;
+
 // Per-account message limits, enforced server-side (see the authenticated block
 // in onRequest). dailyPerIP = messages/day — now keyed by userId, not IP; the name
 // is legacy, rename when next in the file. queriesPerMinute = an anti-BURST guard
@@ -595,6 +606,24 @@ ${c.content}`;
   const latestUserMsg = sanitizedMessages.filter(m => m.role === 'user').pop();
   if (latestUserMsg && isBlocked(latestUserMsg.content)) {
     return jsonResponse({ error: 'Message contains prohibited content.' }, 400, ALLOWED_ORIGIN);
+  }
+
+  // SITE-WIDE CAPACITY (SEC-02) — checked last, so only requests that are
+  // otherwise going to reach NVIDIA spend a slot. Guests are counted in their
+  // own sub-bucket first, then everyone in the shared one.
+  {
+    const minute = Math.floor(Date.now() / 60000);
+    const atCapacity = () => jsonResponse(
+      { error: 'EconIntel is at capacity right now — please try again in a minute.', code: 'AT_CAPACITY' },
+      429, ALLOWED_ORIGIN, { 'Retry-After': '60' }
+    );
+    if (userId.startsWith('guest:') &&
+        await TOKENS.incr(`chat:rl:global:guest:${minute}`, 120) > GUEST_GLOBAL_PER_MINUTE) {
+      return atCapacity();
+    }
+    if (await TOKENS.incr(`chat:rl:global:${minute}`, 120) > GLOBAL_PER_MINUTE) {
+      return atCapacity();
+    }
   }
 
   // Step 4: Forward request to NVIDIA (system prompt + validated model + sanitized messages)

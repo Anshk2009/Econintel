@@ -204,6 +204,14 @@ export async function readSSE(res) {
   return { content, events, raw: text };
 }
 
+// Per-minute limits key on the clock minute. A burst test that starts at :59.9
+// would straddle two windows and pass or fail by luck, so wait out the last few
+// seconds of a minute before starting one.
+export async function awaitFreshMinute(marginMs = 8000) {
+  const left = 60000 - (Date.now() % 60000);
+  if (left < marginMs) await new Promise(r => setTimeout(r, left + 50));
+}
+
 // Shared env for every handler test. JWT_SECRET is >= 32 chars because the
 // functions refuse to start with a shorter one.
 export const TEST_ENV = {
