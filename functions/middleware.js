@@ -560,6 +560,19 @@ export function getToken(request) {
 // ============================================================================
 
 /**
+ * The ONE origin to put in Access-Control-Allow-Origin (audit SEC-18).
+ * ALLOWED_ORIGIN may be a comma-separated list, and the raw list is not a valid
+ * header value — a browser treats "https://a, https://b" as a mismatch. Every
+ * function already rejects requests whose Origin is not on the list, so the
+ * first (canonical) entry is the right answer for everything that gets this far.
+ * ponytail: echo the matched request Origin instead if a second origin ever
+ * needs cross-origin access in its own right.
+ */
+export function corsOrigin(allowedOrigin) {
+  return String(allowedOrigin || '').split(',')[0].trim() || '*';
+}
+
+/**
  * Helper to return JSON responses with CORS + security headers.
  * @param {object} obj - Data to return
  * @param {number} status - HTTP status code
@@ -572,7 +585,7 @@ export function jsonResponse(obj, status = 200, allowedOrigin = '*', extraHeader
     status,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
-      'Access-Control-Allow-Origin': allowedOrigin,
+      'Access-Control-Allow-Origin': corsOrigin(allowedOrigin),
       'Access-Control-Allow-Methods': 'POST, OPTIONS, GET, DELETE, PUT',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-CSRF-Token',
       'X-Content-Type-Options': 'nosniff',
@@ -594,7 +607,7 @@ export function corsPreflightResponse(allowedOrigin = '*') {
   return new Response(null, {
     status: 204,
     headers: {
-      'Access-Control-Allow-Origin': allowedOrigin,
+      'Access-Control-Allow-Origin': corsOrigin(allowedOrigin),
       'Access-Control-Allow-Methods': 'POST, OPTIONS, GET, DELETE, PUT',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-CSRF-Token',
       'X-Content-Type-Options': 'nosniff',

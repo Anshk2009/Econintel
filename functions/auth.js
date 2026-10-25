@@ -19,7 +19,7 @@ import {
   makeSupabase,
   getToken,
   parseCookies,
-  getClientIP, resolveSupabaseKey } from './middleware.js';
+  getClientIP, resolveSupabaseKey, corsOrigin } from './middleware.js';
 
 // Rate limiting thresholds
 const RATE_LIMITS = {
@@ -276,7 +276,7 @@ async function handleSignup(request, env, jwtSecret, allowedOrigin) {
     // Fix: Set-Cookie must be separate headers — joining with commas breaks cookie parsing
     const signupHeaders = new Headers({
       'Content-Type': 'application/json; charset=utf-8',
-      'Access-Control-Allow-Origin': allowedOrigin,
+      'Access-Control-Allow-Origin': corsOrigin(allowedOrigin),
       'Access-Control-Allow-Methods': 'POST, OPTIONS, GET, DELETE, PUT',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-CSRF-Token',
       'Access-Control-Allow-Credentials': 'true',
@@ -428,7 +428,7 @@ async function handleLogin(request, env, jwtSecret, allowedOrigin) {
     // Fix: Set-Cookie must be separate headers — joining with commas breaks cookie parsing
     const loginHeaders = new Headers({
       'Content-Type': 'application/json; charset=utf-8',
-      'Access-Control-Allow-Origin': allowedOrigin,
+      'Access-Control-Allow-Origin': corsOrigin(allowedOrigin),
       'Access-Control-Allow-Methods': 'POST, OPTIONS, GET, DELETE, PUT',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-CSRF-Token',
       'Access-Control-Allow-Credentials': 'true',
@@ -463,7 +463,7 @@ async function handleLogout(request, env, jwtSecret, allowedOrigin) {
   function makeClearCookieHeaders() {
     const h = new Headers({
       'Content-Type': 'application/json; charset=utf-8',
-      'Access-Control-Allow-Origin': allowedOrigin,
+      'Access-Control-Allow-Origin': corsOrigin(allowedOrigin),
       'Access-Control-Allow-Credentials': 'true',
     });
     h.append('Set-Cookie', 'access_token=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');
@@ -532,7 +532,7 @@ async function handleLogout(request, env, jwtSecret, allowedOrigin) {
   // Fix: Set-Cookie must be separate headers — joining with commas breaks cookie parsing
   const logoutHeaders = new Headers({
     'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Origin': corsOrigin(allowedOrigin),
     'Access-Control-Allow-Credentials': 'true',
   });
   logoutHeaders.append('Set-Cookie', 'access_token=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');
@@ -698,7 +698,7 @@ async function handleDeleteAccount(request, env, jwtSecret, allowedOrigin) {
   // Clear all three cookies — the session they belong to no longer has an owner.
   const headers = new Headers({
     'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Origin': corsOrigin(allowedOrigin),
     'Access-Control-Allow-Credentials': 'true',
   });
   headers.append('Set-Cookie', 'access_token=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');
@@ -917,7 +917,7 @@ async function handleVerifyReset(request, env, jwtSecret, allowedOrigin) {
     // in the body which made it XSS-accessible.
     const resetHeaders = new Headers({
       'Content-Type': 'application/json; charset=utf-8',
-      'Access-Control-Allow-Origin': allowedOrigin,
+      'Access-Control-Allow-Origin': corsOrigin(allowedOrigin),
       'Access-Control-Allow-Credentials': 'true',
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
@@ -1070,7 +1070,7 @@ async function handleRefreshToken(request, env, jwtSecret, allowedOrigin) {
     // Fix: Set-Cookie must be separate headers — joining with commas breaks cookie parsing
     const refreshHeaders = new Headers({
       'Content-Type': 'application/json; charset=utf-8',
-      'Access-Control-Allow-Origin': allowedOrigin,
+      'Access-Control-Allow-Origin': corsOrigin(allowedOrigin),
       'Access-Control-Allow-Credentials': 'true',
     });
     refreshHeaders.append('Set-Cookie', `access_token=${newAccessToken}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=900`);

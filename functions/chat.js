@@ -12,7 +12,7 @@
 //   - Supabase PostgreSQL database for chat history and API usage
 //   - Functions: middleware.js with crypto utilities
 
-import { verifyJWT, jsonResponse, corsPreflightResponse, hashIP, makeSupabase, getToken, generateId, getClientIP, resolveSupabaseKey } from './middleware.js';
+import { verifyJWT, jsonResponse, corsPreflightResponse, hashIP, makeSupabase, getToken, generateId, getClientIP, resolveSupabaseKey, corsOrigin } from './middleware.js';
 
 
 // Emit `text` as one OpenAI-shaped SSE delta, then pipe `body` through unchanged.
@@ -787,7 +787,7 @@ RETRIEVAL UNAVAILABLE: the source library could not be reached for this question
   const sseHeaders = {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
-    'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+    'Access-Control-Allow-Origin': corsOrigin(ALLOWED_ORIGIN),
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'X-Content-Type-Options': 'nosniff',
