@@ -36,7 +36,9 @@ export async function ingestFred() {
       const series = obs.map(o => `${o.date}: ${o.value}`).join(', ');
       const content = `${s.label} — FRED series ${s.id}. Recent values: ${series}.`;
       const source_url = `https://fred.stlouisfed.org/series/${s.id}`;
-      await upsertDoc({ content, source_name: 'FRED (St. Louis Fed)', source_url, category: 'data' });
+      // publishable: kept as before. FRED's terms note that SOME series carry
+      // third-party copyright — review the curated list before republishing.
+      await upsertDoc({ content, source_name: 'FRED (St. Louis Fed)', source_url, category: 'data', publishable: true });
       added++;
     } catch (e) {
       failed++;

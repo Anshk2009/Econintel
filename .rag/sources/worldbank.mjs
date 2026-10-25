@@ -58,7 +58,8 @@ export async function ingestWorldBank() {
         const content = `${country} — ${ind.label} (World Bank, indicator ${ind.id}). Recent values: ${series}.`;
         const iso2 = rows[0].country?.id || c;
         const source_url = `https://data.worldbank.org/indicator/${ind.id}?locations=${iso2}`;
-        await upsertDoc({ content, source_name: 'World Bank Open Data', source_url, category: 'data' });
+        // publishable: World Bank Open Data is CC BY 4.0 (reuse with attribution).
+        await upsertDoc({ content, source_name: 'World Bank Open Data', source_url, category: 'data', publishable: true });
         added++;
       } catch (e) {
         failed++;

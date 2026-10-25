@@ -41,7 +41,8 @@ export async function ingestOgdIndia() {
         .join('\n');
       const content = `${res.label || d.title || 'India open data'} (data.gov.in). Latest records:\n${sample}`;
       const source_url = `https://www.data.gov.in/resource/${res.id}`;
-      await upsertDoc({ content, source_name: 'Open Government Data (India)', source_url, category: 'data' });
+      // publishable: Government Open Data License – India permits reuse with attribution.
+      await upsertDoc({ content, source_name: 'Open Government Data (India)', source_url, category: 'data', publishable: true });
       added++;
     } catch (e) {
       failed++;

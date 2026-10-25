@@ -194,7 +194,9 @@ export async function embedBatch(texts, inputType = 'passage') {
 // Embed + upsert one citeable document. Dedupes/updates on source_url (the unique
 // index). Retries WITHOUT `publishable` if that column doesn't exist yet, so a
 // pre-migration run still ingests (the migration backfill flags it later).
-export async function upsertDoc({ content, source_name, source_url, category, published_at = null, publishable = true }) {
+// publishable defaults to FALSE (audit RAG-07): "may we republish this on our own
+// pages" is a licence decision, so every caller has to make it out loud.
+export async function upsertDoc({ content, source_name, source_url, category, published_at = null, publishable = false }) {
   // QUOTA GUARD — check BEFORE embedding, not after.
   // The open-data ingesters re-run daily over stable source_urls (World Bank
   // country x indicator, FRED series...), but the underlying data changes

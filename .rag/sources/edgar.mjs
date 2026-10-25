@@ -38,7 +38,8 @@ export async function ingestEdgar() {
         // Title looks like: "8-K - Apollo Infrastructure Co LLC (0001971381) (Filer)"
         const content = `SEC EDGAR filing: ${en.title}.`;
         const published_at = en.updated ? new Date(en.updated).toISOString() : null;
-        await upsertDoc({ content, source_name: 'SEC EDGAR', source_url: en.href, category: 'filing', published_at });
+        // publishable: SEC filings are US federal government records (public domain).
+        await upsertDoc({ content, source_name: 'SEC EDGAR', source_url: en.href, category: 'filing', published_at, publishable: true });
         added++;
       } catch (e) {
         failed++;

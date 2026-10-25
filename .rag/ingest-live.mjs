@@ -482,7 +482,12 @@ async function main() {
         // what turned a latent bug into every-run breakage.
         // true = we may REPUBLISH it (gov / central bank / open research);
         // false = retrieval and attribution only. Both are cited to the reader.
-        publishable:  it.feed.citeable === true,
+        // RAG-07: only a feed that says "publishable": true in feeds.json (after a
+        // licence review — none do yet) is republishable. `citeable` used to set
+        // this, which made ECB / BoJ / RBI / SEBI / BIS / WTO text republishable
+        // by default; each has its own reuse terms. Attribution is unaffected:
+        // chat.js names and links every source either way.
+        publishable:  it.feed.publishable === true,
         embedding:    embeddings[j],
         // Stamp the space this vector lives in, so a future model change is a
         // detectable, repairable event instead of a silent third of the library
