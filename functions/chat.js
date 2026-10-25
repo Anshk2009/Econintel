@@ -711,14 +711,21 @@ RETRIEVAL UNAVAILABLE: the source library could not be reached for this question
     );
   }
 
-  // If NVIDIA returned an error (4xx/5xx), its body is JSON not SSE —
-  // read it and forward a structured error so the frontend can display it.
+  // If NVIDIA returned an error (4xx/5xx), its body is JSON not SSE.
+  // SECURITY (SEC-14): log the provider's message, never forward it. It names
+  // the provider, the model and the state of our key ("Authorization failed",
+  // "model not found") — reconnaissance for a prober, noise for a reader.
+  // A provider 429 stays a 429 WITHOUT a `code`: chat.html shows its neutral
+  // "the AI provider is busy" text for exactly that shape. Everything else is a
+  // generic 502.
   if (!upstream.ok) {
     let errData;
     try { errData = await upstream.json(); } catch {}
+    console.error('[chat] NVIDIA error', upstream.status, errData?.error?.message || '');
+    const busy = upstream.status === 429;
     return jsonResponse(
-      { error: errData?.error?.message || 'AI service error' },
-      upstream.status >= 500 ? 502 : upstream.status,
+      { error: busy ? 'The AI provider is busy right now.' : 'AI service error' },
+      busy ? 429 : 502,
       ALLOWED_ORIGIN
     );
   }
