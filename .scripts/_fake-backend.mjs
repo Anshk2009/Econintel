@@ -129,7 +129,7 @@ export function makeFakeBackend({ supabaseUrl = 'https://sb.test', external = nu
       const keep = rows.filter(r => !match(r));
       const removed = rows.length - keep.length;
       rows.length = 0; rows.push(...keep);
-      return new Response('', { status: 204, headers: { 'Content-Range': `*/${removed}` } });
+      return new Response(null, { status: 204, headers: { 'Content-Range': `*/${removed}` } });
     }
     throw new Error(`fake PostgREST: unsupported method ${method}`);
   }
