@@ -672,6 +672,24 @@ async function handleDeleteAccount(request, env, jwtSecret, allowedOrigin) {
 
     const { error: deleteError } = await supabaseRest('users', 'DELETE', `id=eq.${encodeURIComponent(userId)}`);
     if (deleteError) throw new Error(deleteError);
+
+    // SECURITY (SEC-15): erase every kv_store row that still names this person.
+    // The cascade only reaches chat_history; kv_store has no foreign key, so
+    // their email sat on in rate-limit keys and their userId in chat counters
+    // and in every OTHER device's refresh/CSRF rows. Email patterns are anchored
+    // on ':' so 'a@x.com' cannot also match 'ba@x.com'. Best-effort: the account
+    // itself is already gone, so a failure here is logged, not returned.
+    const like = (col, pattern) => `${col}=like.${encodeURIComponent(pattern)}`;
+    const email = String(payload.email || '').toLowerCase();
+    const cleanups = [
+      like('key', `*${userId}*`),        // chat:rl:auth:{min,user}:<userId>:…
+      like('value', `*${userId}*`),      // refresh:/csrf:/reset: rows owned by them
+    ];
+    if (email) cleanups.push(like('key', `*:${email}`), like('key', `*:${email}:*`));
+    for (const filter of cleanups) {
+      const { error } = await supabaseRest('kv_store', 'DELETE', filter);
+      if (error) console.warn('[auth] kv_store cleanup after account delete failed:', error);
+    }
   } catch (err) {
     console.error('[auth] Delete account error:', err);
     return jsonResponse({ error: 'Failed to delete account' }, 500, allowedOrigin);
