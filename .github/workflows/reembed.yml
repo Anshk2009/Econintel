@@ -39,6 +39,11 @@ on:
         type: string
         default: "600"
 
+# Least privilege for the job token (audit SEC-16): nothing here writes to the
+# repo, and the jobs that hold secrets must not also hold a write token.
+permissions:
+  contents: read
+
 jobs:
   reembed:
     runs-on: ubuntu-latest
@@ -46,11 +51,11 @@ jobs:
     # the point is to fail rather than hang if the provider starts stalling.
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: "20"
+          node-version: "22"
 
       # Always runs, including before a sweep — 3 requests is a trivial price for
       # knowing whether the next 460 are needed, and the answer is printed above

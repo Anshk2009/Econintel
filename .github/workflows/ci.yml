@@ -11,6 +11,11 @@ on:
     branches: [main]
   workflow_dispatch: {}
 
+# Least privilege for the job token (audit SEC-16): nothing here writes to the
+# repo, and the jobs that hold secrets must not also hold a write token.
+permissions:
+  contents: read
+
 jobs:
   debug:
     name: Lint · Secret-scan · Config check
@@ -19,18 +24,18 @@ jobs:
 
     steps:
       - name: Check out repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # ── 1. Syntax check: every .js/.mjs file must parse without errors ──────
-      - name: Set up Node 20
-        uses: actions/setup-node@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Syntax-check edge functions
         run: |
           echo "=== Syntax check: functions/ ==="
-          # These are .js files containing ESM `import`. On Node 20, `node --check`
+          # These are .js files containing ESM `import`. On Node 22, `node --check`
           # treats .js as CommonJS unless a package.json says "type":"module" — and
           # that manifest is deliberately NOT in the repo root any more (it was
           # being served publicly). Copying to .mjs makes the check depend only on
@@ -131,7 +136,7 @@ jobs:
       # ── 5. Workflow file validation (yamllint) ───────────────────────────────
       - name: Validate GitHub Actions YAML
         run: |
-          pip install yamllint --quiet
+          pip install yamllint==1.35.1 --quiet
           yamllint -d relaxed .github/workflows/ && echo "  ✅ Workflow YAML valid"
 
       # ── 6. RLS reminder ──────────────────────────────────────────────────────

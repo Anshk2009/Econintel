@@ -14,6 +14,11 @@ on:
   workflow_dispatch: {}      # also adds a "Run workflow" button in the Actions tab
                             # so you can trigger it manually to test.
 
+# Least privilege for the job token (audit SEC-16): nothing here writes to the
+# repo, and the jobs that hold secrets must not also hold a write token.
+permissions:
+  contents: read
+
 jobs:
   ingest:
     runs-on: ubuntu-latest
@@ -24,12 +29,12 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - name: Set up Node 20
-        uses: actions/setup-node@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: "20"   # Node 20 has fetch() built in — no npm install needed
+          node-version: "22"   # Node 22 has fetch() built in — no npm install needed
 
       - name: Run live ingester
         working-directory: .rag    # ingest-live.mjs reads ./feeds.json from this folder
