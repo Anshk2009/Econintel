@@ -189,24 +189,14 @@ export async function onRequest(context) {
   const serverTiming = () =>
     Object.entries(marks).map(([k, v]) => `${k};dur=${v}`).join(', ');
 
-  // Fire-and-forget a write whose RESULT NOBODY READS.
-  //
-  // Every TOKENS.put below is a counter increment, and awaiting it puts a full
-  // HTTPS round trip to Supabase (ap-northeast-1) in front of the user's answer
-  // for no information gained.
-  //
-  // The fallback is not optional. EdgeOne does not guarantee waitUntil — this
-  // file already tests for it before using it on the stream pipe — and without
-  // it an un-awaited put can die with the isolate. A counter that never
-  // increments is not a slow rate limit, it is NO rate limit, on a key shared
-  // with live chat. So: hand it to waitUntil when that exists, otherwise await.
-  const fireAndForget = (promise) => {
-    if (typeof context.waitUntil === 'function') {
-      context.waitUntil(promise.catch(() => {}));
-      return Promise.resolve();
-    }
-    return promise;
-  };
+  // QUOTA COUNTERS (audit SEC-02). Every quota below is ONE awaited
+  // TOKENS.incr(): increment first, then compare the value it returns. The old
+  // shape was GET -> check -> fire-and-forget PUT, and a burst of parallel
+  // requests all read the same count and all got through. incr() is atomic once
+  // migration 0013 (kv_incr) is applied; until then it falls back to the old
+  // read-then-write, so nothing breaks in between. Awaiting it costs the same
+  // single round trip the GET used to, and a counter write can no longer be
+  // dropped with the isolate.
 
   // Read secrets from environment variables (fail loud if missing).
   //
@@ -441,17 +431,16 @@ ${c.content}`;
     const clientIP = getClientIP(request);
     const ipHash = await hashIP(clientIP);
     const guestKey = `guest:quota:${ipHash}`;
-    const used = parseInt(await TOKENS.get(guestKey) || '0', 10);
+    // Increment-then-check (resets 2 hours after the first message).
+    const used = await TOKENS.incr(guestKey, 7200);
 
-    if (used >= GUEST_LIMIT) {
+    if (used > GUEST_LIMIT) {
       return jsonResponse({
         error: `You've used all ${GUEST_LIMIT} free messages for this 2-hour window. Sign up for 100 free queries/month — no credit card needed.`,
         code: 'GUEST_QUOTA_EXCEEDED'
       }, 401, ALLOWED_ORIGIN);
     }
 
-    // Increment counter (resets after 2 hours)
-    await fireAndForget(TOKENS.put(guestKey, String(used + 1), { expirationTtl: 7200 }));
     userId = `guest:${ipHash.slice(0, 12)}`;
     userPlan = 'free';
   } else {
@@ -479,21 +468,17 @@ ${c.content}`;
     // (SEC-13); the Infinity test below stays only as a guard for a future tier.
     // Fixed window: the key includes the current minute number, so it resets
     // cleanly on the minute boundary — no TTL that slides forward on every write.
-    // ponytail: the get-then-put is not atomic, so a truly-simultaneous burst can
-    // sneak a few extra through; NVIDIA's own 40 rpm limit is the hard backstop,
-    // so that slippage is benign. Upgrade path only if abuse is measured:
-    // an atomic Postgres INSERT .. ON CONFLICT .. RETURNING counter (RPC).
+    // Atomic via TOKENS.incr (SEC-02) — see QUOTA COUNTERS at the top.
     if (plan.queriesPerMinute !== Infinity) {
       const thisMinute = Math.floor(Date.now() / 60000);
       const minuteKey = `chat:rl:auth:min:${userId}:${thisMinute}`;
-      const usedThisMinute = parseInt(await TOKENS.get(minuteKey) || '0', 10);
-      if (usedThisMinute >= plan.queriesPerMinute) {
+      const usedThisMinute = await TOKENS.incr(minuteKey, 120);
+      if (usedThisMinute > plan.queriesPerMinute) {
         return jsonResponse(
           { error: `Slow down — max ${plan.queriesPerMinute} messages per minute. Try again in a few seconds.`, code: 'RATE_LIMIT_PER_MINUTE' },
           429, ALLOWED_ORIGIN, { 'Retry-After': '60' }
         );
       }
-      await fireAndForget(TOKENS.put(minuteKey, String(usedThisMinute + 1), { expirationTtl: 120 }));
     }
 
     // SECURITY (H2): daily cap keyed on the ACCOUNT (userId), NOT the client IP.
@@ -504,8 +489,10 @@ ${c.content}`;
     // verified JWT, so a caller cannot spoof it.
     const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
     const dailyKey = `chat:rl:auth:user:${userId}:${today}`;
-    const usedToday = parseInt(await TOKENS.get(dailyKey) || '0', 10);
-    if (usedToday >= plan.dailyPerIP) {
+    // TTL 24h just garbage-collects the row; the date in the key is what
+    // actually rolls the window over at midnight.
+    const usedToday = await TOKENS.incr(dailyKey, 86400);
+    if (usedToday > plan.dailyPerIP) {
       // Retry-After = seconds until the next UTC midnight (when the counter resets).
       const secsToMidnightUTC = 86400 - Math.floor((Date.now() / 1000) % 86400);
       return jsonResponse(
@@ -513,9 +500,6 @@ ${c.content}`;
         429, ALLOWED_ORIGIN, { 'Retry-After': String(secsToMidnightUTC) }
       );
     }
-    // Increment the daily counter. TTL 24h just garbage-collects the row; the date
-    // in the key is what actually rolls the window over at midnight.
-    await fireAndForget(TOKENS.put(dailyKey, String(usedToday + 1), { expirationTtl: 86400 }));
   }
 
   // Pick this tier's bucket (see MODEL_BUCKETS at the top — guests count as
@@ -536,14 +520,13 @@ ${c.content}`;
     const freeIPHash = await hashIP(freeIP);
     const freeBucket = Math.floor(Date.now() / (FREE_IP_WINDOW * 1000));
     const freeKey = `free:ip:${freeIPHash}:${freeBucket}`;
-    const usedFree = parseInt(await TOKENS.get(freeKey) || '0', 10);
-    if (usedFree >= FREE_IP_LIMIT) {
+    const usedFree = await TOKENS.incr(freeKey, FREE_IP_WINDOW);
+    if (usedFree > FREE_IP_LIMIT) {
       return jsonResponse(
         { error: `Free-tier limit reached (${FREE_IP_LIMIT} messages per 36h for this network). Try again later, or sign in to a paid plan.`, code: 'FREE_IP_LIMIT_EXCEEDED' },
         429, ALLOWED_ORIGIN, { 'Retry-After': String(FREE_IP_WINDOW) }
       );
     }
-    await fireAndForget(TOKENS.put(freeKey, String(usedFree + 1), { expirationTtl: FREE_IP_WINDOW }));
   }
 
   // Step 2: Parse request body with size limit

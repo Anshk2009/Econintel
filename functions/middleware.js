@@ -345,6 +345,11 @@ export function resolveSupabaseKey(env) {
  * that hit a REST endpoint directly.
  * @param {object} env - EdgeOne environment bindings
  */
+// Set once kv_incr() has answered 404 (migration 0013 not applied), so every
+// later counter in this isolate skips straight to the fallback instead of paying
+// a wasted round trip per increment.
+let kvIncrMissing = false;
+
 export function makeSupabase(env) {
   const supabaseUrl = env.SUPABASE_URL;
   // Service-role key (base64-wrapped) if configured, else anon key — see
@@ -405,6 +410,44 @@ export function makeSupabase(env) {
     },
     async delete(key) {
       await supabaseRest('kv_store', 'DELETE', `key=eq.${encodeURIComponent(key)}`);
+    },
+    /**
+     * Add 1 to a counter and return the NEW value (audit SEC-02).
+     *
+     * Quotas used to be get-then-put, so a burst of parallel requests all read
+     * the same count and all got through. kv_incr() (migration 0013) does the
+     * increment in ONE statement, so every caller sees a distinct number and the
+     * caller compares `n > limit` — no window for a race.
+     *
+     * Until 0013 is applied the RPC answers 404; we remember that for the life of
+     * the isolate and fall back to the old read-then-write, so deploying this code
+     * before the migration changes nothing. Any other RPC failure also falls back
+     * (a rate limiter that throws would take chat down with it).
+     */
+    async incr(key, ttlSeconds) {
+      if (!kvIncrMissing) {
+        try {
+          const res = await fetch(`${supabaseUrl}/rest/v1/rpc/kv_incr`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseKey}`,
+              'apikey': supabaseKey,
+            },
+            body: JSON.stringify({ p_key: key, p_ttl_seconds: ttlSeconds }),
+          });
+          if (res.ok) return Number(await res.json());
+          if (res.status === 404) kvIncrMissing = true;
+          else console.warn('[middleware] kv_incr failed, using fallback:', res.status);
+        } catch (err) {
+          console.warn('[middleware] kv_incr error, using fallback:', err);
+        }
+      }
+      // ponytail: fallback is the old racy read-then-write — the race is only
+      // closed once migration 0013 is applied.
+      const n = parseInt(await this.get(key) || '0', 10) + 1;
+      await this.put(key, String(n), { expirationTtl: ttlSeconds });
+      return n;
     },
   };
 
