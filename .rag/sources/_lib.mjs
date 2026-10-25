@@ -200,9 +200,9 @@ export async function upsertDoc({ content, source_name, source_url, category, pu
   // The open-data ingesters re-run daily over stable source_urls (World Bank
   // country x indicator, FRED series...), but the underlying data changes
   // annually or monthly. Embedding first meant ~70 requests a day spent
-  // rewriting byte-identical rows. The embeddings key is a FREE OpenRouter
-  // model with a hard daily request cap that the CHAT also draws on, so wasted
-  // ingest requests translate directly into failed retrieval for real users.
+  // rewriting byte-identical rows. The NVIDIA key is shared with live CHAT
+  // (40 requests/minute, 10,000/day), so wasted ingest requests come straight
+  // out of the allowance real users' retrieval needs.
   // One cheap Supabase GET (effectively unmetered) buys back one embed call.
   if (await unchanged(source_url, content)) return { skipped: true };
 

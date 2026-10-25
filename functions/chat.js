@@ -570,7 +570,8 @@ ${clip(c.content)}`;
   }
 
   // Pick this tier's bucket (see MODEL_BUCKETS at the top — guests count as
-  // 'free'). If the bucket wants NVIDIA but the key isn't configured, fall back
+  // 'free'). There is no fallback provider: a missing NVIDIA key fails loudly at
+  // the top of this handler instead.
   const tier = (userPlan === 'pro' || userPlan === 'enterprise') ? userPlan : 'free';
   const isPaidPlan = tier !== 'free';
   const model = MODEL_BUCKETS[tier];

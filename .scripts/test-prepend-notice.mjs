@@ -26,7 +26,7 @@ async function drain(stream) {
   }
 }
 
-// The two real upstream chunks, as OpenRouter/NVIDIA send them.
+// The two real upstream chunks, as NVIDIA sends them.
 const a = `data: ${JSON.stringify({ choices: [{ delta: { content: 'Rupee ' } }] })}\n\n`;
 const b = `data: ${JSON.stringify({ choices: [{ delta: { content: 'weakened.' } }] })}\n\ndata: [DONE]\n\n`;
 

@@ -2027,11 +2027,9 @@ function handleKey(e) {
 }
 
 // ── CHAT: BACKEND CALL ──
-// Calls /functions/chat (EdgeOne edge function) which proxies OpenRouter.
-// CONFIG is provided globally by config.js (window.CONFIG)
-// Works on EdgeOne deployment and local development
-// - Local: calls localhost:3000/functions/chat
-// - Production: calls /functions/chat (EdgeOne)
+// Calls /chat (functions/chat.js, an EdgeOne edge function), which proxies
+// NVIDIA. CONFIG is provided globally by config.js (window.CONFIG); every path
+// is same-origin and relative — there is no local backend (see config.js).
 const CHAT_ENDPOINT = CONFIG.chat;
 // The AI's personality, length rules and sources policy are enforced
 // SERVER-SIDE in functions/chat.js, which strips any client-supplied system
@@ -2320,7 +2318,7 @@ async function sendMessage() {
     // actually arrives. Previously we removed the dots and dropped an EMPTY
     // assistant bubble immediately — so during the wait (RAG lookup + first byte)
     // a blank pill flashed on screen, which looked broken.
-    // OpenRouter sends tokens as SSE (text/event-stream) events; we append each
+    // NVIDIA sends tokens as SSE (text/event-stream) events; we append each
     // delta in real time so text appears token-by-token.
     const msgEl = thinkingEl;        // reuse the dots bubble instead of a new empty one
     let fullReply = '';

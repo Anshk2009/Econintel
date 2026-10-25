@@ -12,7 +12,7 @@
 //   <the real text>
 //
 // This reads every doc, splits the body into overlapping chunks, embeds each
-// chunk via OpenRouter (same model as the live ingester + chat), and upserts
+// chunk via NVIDIA (same model as the live ingester + chat), and upserts
 // them into Supabase. Re-running updates existing rows instead of duplicating.
 
 import { readFile, readdir } from 'node:fs/promises';

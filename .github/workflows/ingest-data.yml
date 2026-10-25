@@ -1,7 +1,7 @@
 name: RAG open-data ingest
 
 # Pulls CITEABLE open-data sources (World Bank, SEC EDGAR, FRED, OGD India) into
-# the knowledge base. Calls OpenRouter (embeddings) + Supabase via repo secrets —
+# the knowledge base. Calls NVIDIA (embeddings) + Supabase via repo secrets —
 # no website files are touched, so this never affects the live site.
 #
 # World Bank + SEC EDGAR run with NO key. FRED and OGD India only run if their

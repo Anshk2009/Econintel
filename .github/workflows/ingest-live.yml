@@ -1,7 +1,7 @@
 name: RAG live news ingest
 
 # Keeps the EconIntel knowledge base current by running the live RSS ingester
-# on a schedule. It calls OpenRouter (embeddings) + Supabase using repo secrets —
+# on a schedule. It calls NVIDIA (embeddings) + Supabase using repo secrets —
 # no website files are touched, so this never affects the live site.
 
 on:

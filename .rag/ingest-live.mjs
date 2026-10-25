@@ -62,9 +62,9 @@ const MAX_ITEM_CHARS = 2000;
 // without warning. Raising this trades that safety margin for fewer requests.
 const MAX_BATCH_CHARS = 12000;
 
-// Hard ceiling on embedding requests per run. The embeddings key is a free
-// OpenRouter model with a daily REQUEST cap, and functions/chat.js draws on the
-// SAME key to embed every user question. Ingestion must therefore never be able
+// Hard ceiling on embedding requests per run. The NVIDIA key is shared — 40
+// requests/minute, 10,000/day — and functions/chat.js draws on the SAME key to
+// embed every user question. Ingestion must therefore never be able
 // to eat the whole day's allowance — a starved chat fails open and answers with
 // no sources at all, which is the exact failure this pipeline exists to prevent.
 //
@@ -303,9 +303,9 @@ export async function readCapped(res, maxBytes) {
 async function collectFeed(feed) {
   let items;
   try {
-    // FEED_HEADERS sends a real browser User-Agent — Node's default (`node`) gets
-    // 403'd by many outlets' CDNs, so the feed looks dead while the URL is fine.
-    // See _lib.mjs for why the UA must not announce itself as a bot.
+    // FEED_HEADERS sends an HONEST bot User-Agent with a contact address. A feed
+    // that refuses a self-identifying bot is removed from feeds.json rather than
+    // fooled with a browser disguise — see _lib.mjs for why.
     // redirect:'follow' is the default, stated so a moved feed keeps working.
     const res = await fetchWithTimeout(feed.url, { redirect: 'follow', headers: FEED_HEADERS });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -398,7 +398,7 @@ const DRY_RUN = process.argv.includes('--dry-run');
 
 async function main() {
   // Fail loud if a required secret is missing. Without this, a blank key sends
-  // "Bearer undefined" to OpenRouter/Supabase, every request 401s, and the run
+  // "Bearer undefined" to NVIDIA/Supabase, every request 401s, and the run
   // still finishes "successfully" having added nothing — a silent green failure.
   const missing = [];
   if (!process.env.NVIDIA_API_KEY) missing.push('NVIDIA_API_KEY');
