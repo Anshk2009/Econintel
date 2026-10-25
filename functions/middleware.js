@@ -130,6 +130,12 @@ export function isLegacyHash(hash) {
  * @param {number} expiresInSeconds - Token lifetime (default 900 = 15 minutes for access token)
  * @returns {Promise<string>} Signed JWT
  */
+// SECURITY (SEC-18): who issued a token and who it is for. Without these, any
+// other token ever signed with JWT_SECRET (a debug script, a future service, an
+// email-link token) would be accepted as a login session.
+const JWT_ISSUER = 'econintel';
+const JWT_AUDIENCE = 'econintel-web';
+
 export async function generateJWT(payload, secret, expiresInSeconds = 900) {
   // JWT structure: header.payload.signature
   // All parts are base64url encoded
@@ -141,8 +147,9 @@ export async function generateJWT(payload, secret, expiresInSeconds = 900) {
   const headerBase64 = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 
-  // Payload: { ...data, iat: issue time, exp: expiry time }
-  const payloadObj = { ...payload, iat: now, exp: expiresAt };
+  // Payload: { ...data, iss, aud, iat: issue time, exp: expiry time }.
+  // iss/aud (SEC-18) bind the token to THIS app; verifyJWT requires both.
+  const payloadObj = { ...payload, iss: JWT_ISSUER, aud: JWT_AUDIENCE, iat: now, exp: expiresAt };
   const payloadBase64 = btoa(JSON.stringify(payloadObj))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 
@@ -213,6 +220,12 @@ export async function verifyJWT(token, secret, options = {}) {
     const now = Math.floor(Date.now() / 1000);
     if (typeof payload.exp !== 'number' || payload.exp < now) {
       return null; // Token expired, or carries no expiry at all
+    }
+    // Issued by us, for us (SEC-18). Tokens minted before this check existed
+    // carry neither claim and are refused once — the client renews through its
+    // refresh cookie (opaque, unaffected) and carries on.
+    if (payload.iss !== JWT_ISSUER || payload.aud !== JWT_AUDIENCE) {
+      return null;
     }
 
     // Check token blacklist (for logged-out tokens)

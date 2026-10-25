@@ -30,4 +30,16 @@ assert.equal(await verifyJWT(immortal, SECRET), null, 'a signed token without ex
 const expired = await generateJWT({ userId: 'u1', tv: 1 }, SECRET, -10);
 assert.equal(await verifyJWT(expired, SECRET), null, 'an expired token was accepted');
 
+// ── iss / aud (SEC-18, part 2) ─────────────────────────────────────────────
+// A token must say it was issued BY this app FOR this app. Without that, any
+// other token ever signed with the same secret (a debug script, a future
+// service, an email-link token) would be accepted as a session.
+const exp = Math.floor(Date.now() / 1000) + 600;
+const base = { userId: 'u1', plan: 'free', tv: 1, iat: exp - 600, exp };
+assert.equal(await verifyJWT(await sign({ alg: 'HS256', typ: 'JWT' }, base), SECRET), null,
+  'a token with no iss/aud was accepted');
+assert.equal(await verifyJWT(await sign({ alg: 'HS256', typ: 'JWT' }, { ...base, iss: 'econintel', aud: 'something-else' }), SECRET), null,
+  'a token minted for another audience was accepted');
+assert.ok((await verifyJWT(good, SECRET)).iss === 'econintel', 'generateJWT must stamp iss');
+
 console.log('jwt hardening: OK');
