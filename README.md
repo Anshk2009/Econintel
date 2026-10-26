@@ -125,9 +125,13 @@ Full policy and disclosure process: **[SECURITY.md](SECURITY.md)**
 | CSRF | double-submit **+** server-issuance check **+** bound to the user |
 | Revocation | `token_version` checked on every verify, **fails closed** on DB error |
 | Database | RLS on all four tables with **no policies** — the publishable key can do nothing |
-| Rate limits | per-IP guest quota, per-account daily, per-minute burst, per-IP free tier |
-| Prompt injection | per-request nonce fence around all retrieved content |
-| Privacy | account deletion cascades; full data export as JSON |
+| Rate limits | atomic counters; per-network guest + free quotas (IPv6 per /64), per-account daily + per-minute, and a site-wide cap in front of the shared NVIDIA key |
+| Login | per-IP and per-account lockouts checked **before** the password; breached-password check on signup and reset |
+| OAuth | signing in with Google/Discord claims an unverified account instead of joining the squatter's |
+| Prompt injection | retrieved text travels in the user turn inside a per-request nonce fence — never in the system prompt |
+| Citations | only URLs the server actually retrieved render as links; everything else is plain text |
+| Copyright | sources are paraphrased (quotes ≤ 20 words); any answer copying > 25 words from a source is logged |
+| Privacy | IPs and emails are hashed in rate-limit keys; account deletion also erases them; full data export as JSON |
 
 Known-open items are listed in SECURITY.md rather than hidden — including the
 response headers EdgeOne will not let this repo set, and why the landing page
@@ -169,10 +173,16 @@ answer when no backend is running. `.env.example` lists every variable the
 deployed functions expect; none of them are needed to read or style the site.
 
 ```bash
-node .scripts/test-*.mjs                 # self-checks, no network, no secrets
+for t in .scripts/test-*.mjs; do node "$t" || break; done   # self-checks, no network, no secrets
 node .rag/ingest-live.mjs --dry-run      # exercise the whole pipeline, spend nothing
 BASE_URL=http://localhost:5601 node .scripts/smoke.mjs --cheap
 ```
+
+The self-checks drive the real edge functions against an in-memory Supabase
+fake (`.scripts/_fake-backend.mjs`), so auth, chat and history are tested end to
+end without a backend. Against a deployed site, `.rag/check-answers.mjs` scores
+30 real answers (citations, refusals, injection, copyright) — it sends one chat
+message per case, so run it by hand with a test account's cookie.
 
 ---
 
@@ -196,6 +206,9 @@ Two things the repo cannot do for you:
 Honest list, roughly by value:
 
 - [ ] Response headers via the EdgeOne dashboard
+- [ ] Apply `.migrations/0013_kv_incr_atomic_counter.sql` — until then counters fall back to read-then-write
+- [ ] Purge expired `kv_store` rows on a schedule (nothing deletes them yet)
+- [ ] One-off fix for rows stored with a `<![CDATA[…]]>` source URL before the parser fix
 - [ ] Password-reset email — token works; Resend is still on the test sender
 - [ ] Email verification — endpoint exists, no mail is ever sent
 - [ ] Payments — Stripe is unavailable in India; Razorpay/Paddle unexplored
