@@ -218,7 +218,7 @@ const checks = [
 ];
 
 // Advisories are things that ARE wrong but that this script cannot make anyone
-// fix, because the fix lives in the EdgeOne dashboard rather than in the repo.
+// fix from here — e.g. EdgeOne not applying a config file the repo ships.
 // They print, and they deliberately do NOT affect the exit code: a build that is
 // red every single day for a known, already-filed reason teaches you to ignore
 // red, which costs more than the thing it was warning about.
@@ -228,8 +228,9 @@ const advisories = [
     const missing = ['x-frame-options', 'strict-transport-security', 'x-content-type-options']
       .filter(h => !r.headers.get(h));
     return missing.length
-      ? `${missing.join(', ')} absent — add an EdgeOne response-header rule (README > Security headers). `
-        + `The <meta> CSP and the framebuster cover part of this from the repo; these three are header-only.`
+      ? `${missing.join(', ')} absent — edgeone.json sets these; if a deploy has landed and they are still `
+        + `missing, EdgeOne is not applying the file (README > Deploying). The <meta> CSP and the framebuster `
+        + `cover part of this meanwhile.`
       : null;
   }],
 ];

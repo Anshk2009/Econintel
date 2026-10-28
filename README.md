@@ -133,9 +133,11 @@ Full policy and disclosure process: **[SECURITY.md](SECURITY.md)**
 | Copyright | sources are paraphrased (quotes ≤ 20 words); any answer copying > 25 words from a source is logged |
 | Privacy | IPs and emails are hashed in rate-limit keys; account deletion also erases them; full data export as JSON |
 
-Known-open items are listed in SECURITY.md rather than hidden — including the
-response headers EdgeOne will not let this repo set, and why the landing page
-needs `'unsafe-eval'` that the authenticated page does not get.
+Known-open items are listed in SECURITY.md rather than hidden — including why
+the landing page needs `'unsafe-eval'` that the authenticated page does not get.
+HSTS, `X-Frame-Options`, `nosniff`, `Referrer-Policy`, `Permissions-Policy` and
+`frame-ancestors` come from [`edgeone.json`](edgeone.json), which EdgeOne Pages
+applies to every static response.
 
 ---
 
@@ -191,11 +193,11 @@ message per case, so run it by hand with a test account's cookie.
 EdgeOne Pages is linked to `main` and auto-deploys on push — **a push is the
 deploy.** Environment variables live in the EdgeOne dashboard, never in the repo.
 
-Two things the repo cannot do for you:
+Two things to know:
 
-1. **Response headers.** HSTS, `nosniff` and `X-Frame-Options` need a dashboard
-   rule on `/*`; a `<meta>` CSP cannot set them. The daily smoke test prints a
-   non-failing advisory until they land.
+1. **Response headers** live in `edgeone.json` (a `<meta>` CSP cannot set them).
+   After a deploy, `curl -I https://econintel.edgeone.app/chat.html` should show
+   them; the smoke test prints an advisory if they are missing.
 2. **Backups.** Nothing here backs up `users` or `chat_history`. Check what your
    Supabase plan retains before any migration that touches them.
 
@@ -205,7 +207,7 @@ Two things the repo cannot do for you:
 
 Honest list, roughly by value:
 
-- [ ] Response headers via the EdgeOne dashboard
+- [ ] Confirm the `edgeone.json` headers are live after the next deploy (`curl -I`)
 - [ ] Apply `.migrations/0013_kv_incr_atomic_counter.sql` — until then counters fall back to read-then-write
 - [ ] Purge expired `kv_store` rows on a schedule (nothing deletes them yet)
 - [ ] One-off fix for rows stored with a `<![CDATA[…]]>` source URL before the parser fix

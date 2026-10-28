@@ -40,10 +40,12 @@ The code in this repository, and the deployed instance:
 
 These are documented rather than hidden, so please don't report them as new:
 
-- **No HSTS, `nosniff` or `X-Frame-Options` on HTML responses.** EdgeOne serves
-  static HTML from CDN cache without invoking Pages middleware. A `<meta>` CSP
-  and a JS framebuster cover part of it; the rest needs a dashboard rule. See
-  README → *Security headers*.
+- **Security headers on HTML come from `edgeone.json`** (added 2026-10-28).
+  EdgeOne serves static HTML from CDN cache without invoking Pages middleware,
+  so the file is the only repo-side way to set them. If `curl -I` on a page
+  does not show HSTS / `X-Frame-Options` / `nosniff`, that is a known gap,
+  not a new finding — the `<meta>` CSP and a JS framebuster still cover part
+  of it.
 - **`script-src` allows `'unsafe-inline'`** on all pages, and `'unsafe-eval'` on
   the landing page only. The pages are single files built on inline handlers,
   and the hero 3D viewer deserialises its scene with `new Function()`. The
